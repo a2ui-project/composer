@@ -35,13 +35,19 @@ import {renderBlockKit} from '@copilotkit/channels-slack/render';
 import {type ActionDispatchEntry} from './action-dispatch';
 import {collectActionIds, filterActionsForBlocks, registerAction} from './action-registry';
 import {collectText} from './channel-nodes';
-import {type MarketSnapshotProps} from './market-snapshot';
+import {
+  SOURCE_NAME_PATTERN,
+  SOURCE_URL_PATTERN,
+  type MarketRow,
+  type MarketSnapshotProps,
+} from './market-snapshot';
 import {
   InputComponentType,
   createInputDispatchEntry,
   lowerFormInput,
   type InputDispatchEntry,
 } from './form-input';
+import {parseHttpUrl} from './http-url';
 import {lowerImage} from './lower-image';
 import {lowerTable} from './lower-table';
 import {type LowerComponentContext, type LoweringState} from './lowering-context';
@@ -214,11 +220,11 @@ function lowerComponent(
   state: LoweringState,
 ): ChannelNode[] {
   if (ancestors.has(componentId)) {
-    throw new LoweringError(
-      DiagnosticCode.A2UI_COMPONENT_CYCLE,
-      `Cyclic A2UI component reference at "${componentId}"`,
+    throw new LoweringError({
+      code: DiagnosticCode.A2UI_COMPONENT_CYCLE,
+      message: `Cyclic A2UI component reference at "${componentId}"`,
       componentId,
-    );
+    });
   }
 
   const model = surface.componentsModel.get(componentId);
@@ -228,11 +234,11 @@ function lowerComponent(
 
   const api = surface.catalog.components.get(model.type);
   if (!api) {
-    throw new LoweringError(
-      DiagnosticCode.A2UI_UNSUPPORTED_COMPONENT,
-      `Unsupported A2UI component "${model.type}"`,
+    throw new LoweringError({
+      code: DiagnosticCode.A2UI_UNSUPPORTED_COMPONENT,
+      message: `Unsupported A2UI component "${model.type}"`,
       componentId,
-    );
+    });
   }
 
   // The message processor checked the props against this schema when the component
@@ -288,11 +294,11 @@ function throwBindingError(errors: readonly SurfaceError[], componentId: string)
   }
 
   const expression = error.expression ? ` (${error.expression})` : '';
-  throw new LoweringError(
-    error.code,
-    `Failed to bind A2UI component "${componentId}"${expression}: ${error.message}`,
+  throw new LoweringError({
+    code: error.code,
+    message: `Failed to bind A2UI component "${componentId}"${expression}: ${error.message}`,
     componentId,
-  );
+  });
 }
 
 function lowerSupportedComponent(
@@ -330,11 +336,11 @@ function lowerSupportedComponent(
       // `lowerComponent` validated these props against MarketSnapshotSchema.
       return lowerMarketSnapshot(props as MarketSnapshotProps, context);
     default:
-      throw new LoweringError(
-        DiagnosticCode.A2UI_UNSUPPORTED_COMPONENT,
-        `Unsupported A2UI component "${type}"`,
-        context.componentId,
-      );
+      throw new LoweringError({
+        code: DiagnosticCode.A2UI_UNSUPPORTED_COMPONENT,
+        message: `Unsupported A2UI component "${type}"`,
+        componentId: context.componentId,
+      });
   }
 }
 
@@ -438,7 +444,7 @@ function lowerMarketSnapshot(
             Cell({children: market.name}),
             Cell({children: market.price}),
             Cell({children: market.change}),
-            Cell({children: `[${market.sourceName}](${market.sourceUrl})`}),
+            Cell({children: sourceLink(market, context.componentId)}),
           ],
         }),
       ),
@@ -467,6 +473,56 @@ function lowerMarketSnapshot(
       ],
     }),
   ];
+}
+
+/**
+ * The characters `sourceLink` percent-encodes in a source URL's user name,
+ * password, path, query and fragment. `|` ends the URL of a Slack `<url|text>`
+ * link; `[` and `]` could start a Markdown link, which the table cell is written
+ * in; and pairs of `_` or `~` mark bold or strikethrough there. RFC 3986 allows
+ * `|`, `[` and `]` in those parts only percent-encoded, and makes an encoded `_`
+ * or `~` the same URL as the character itself (section 2.3), so the link still
+ * goes to the source.
+ */
+const SOURCE_URL_MARKUP = /[|[\]_~]/g;
+
+/**
+ * A MarketSnapshot table cell that links to a market's source: a Slack
+ * `<url|text>` link to `sourceUrl` that reads `sourceName`.
+ *
+ * `&`, `<` and `>` are not escaped as `&amp;`, `&lt;` and `&gt;`, as they would be
+ * in Slack's `mrkdwn` text. Slack gets a table cell's link as a rich text link
+ * element, with the URL and the text in separate fields, where an escape would
+ * show literally and break a URL's query string. `SOURCE_NAME_PATTERN` and
+ * `SOURCE_URL_PATTERN` keep out the characters that can't be written into the
+ * link, and URL parsing percent-encodes `<` and `>` in a URL.
+ *
+ * @throws LoweringError If the name or URL breaks those patterns, or the URL isn't
+ *     an absolute HTTP(S) URL with a host.
+ */
+function sourceLink(market: MarketRow, componentId: string): string {
+  if (!new RegExp(SOURCE_NAME_PATTERN).test(market.sourceName)) {
+    throw new LoweringError({
+      code: DiagnosticCode.A2UI_INVALID_MARKET_SOURCE_NAME,
+      message: 'MarketSnapshot sourceName must be one line, without <, >, [ or ].',
+      componentId,
+    });
+  }
+  const url = parseHttpUrl(market.sourceUrl);
+  if (!url || !new RegExp(SOURCE_URL_PATTERN).test(market.sourceUrl)) {
+    throw new LoweringError({
+      code: DiagnosticCode.A2UI_INVALID_MARKET_SOURCE_URL,
+      message: 'MarketSnapshot sourceUrl must be an absolute HTTP(S) URL with a host, without *.',
+      componentId,
+    });
+  }
+  for (const part of ['username', 'password', 'pathname', 'search', 'hash'] as const) {
+    url[part] = url[part].replace(
+      SOURCE_URL_MARKUP,
+      character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+    );
+  }
+  return `<${url.href}|${market.sourceName}>`;
 }
 
 function renderChildren(

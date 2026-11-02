@@ -20,6 +20,7 @@ import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {ThemePreference, a2uiBridge, type RendererConfig} from 'a2ui-bridge';
 import {
+  ComponentContext,
   MessageProcessor,
   type A2uiMessage,
   type ComponentApi,
@@ -579,6 +580,129 @@ describe('createSlackPreviewSession', () => {
     });
     expect(session.getSnapshot().diagnostics[0].message).toContain('missingFunction');
     expect(actionIds(session)).toEqual(['a2ui-1-1']);
+  });
+
+  it('reports a local function failure once however often its button is clicked', async () => {
+    const listener = vi.fn();
+    const session = createSlackPreviewSession();
+    session.subscribe(listener);
+    session.processMessages([
+      createSurface(),
+      updateComponents('test-surface', [
+        {
+          id: 'root',
+          component: 'Button',
+          child: 'button-label',
+          action: {functionCall: {call: 'missingFunction', args: {}}},
+        },
+        {id: 'button-label', component: 'Text', text: 'Compute'},
+      ]),
+    ]);
+    listener.mockClear();
+
+    await session.dispatch('a2ui-1-1');
+    await session.dispatch('a2ui-1-1');
+    await session.dispatch('a2ui-1-1');
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(session.getSnapshot().diagnostics).toEqual([
+      expect.objectContaining({code: 'EXPRESSION_ERROR', componentId: 'root'}),
+    ]);
+  });
+
+  describe('a click whose action fails', () => {
+    const eventButtonMessages = (): A2uiMessage[] => [
+      createSurface(),
+      updateComponents('test-surface', [
+        {
+          id: 'root',
+          component: 'Button',
+          child: 'button-label',
+          action: {event: {name: 'acknowledge'}},
+        },
+        {id: 'button-label', component: 'Text', text: 'Acknowledge'},
+      ]),
+    ];
+
+    const dispatchFailures = (session: PreviewSession) =>
+      session
+        .getSnapshot()
+        .diagnostics.filter(({code}) => code === DiagnosticCode.SLACK_ACTION_DISPATCH_FAILED);
+
+    it('is reported in the snapshot, and cleared by the next click that runs', async () => {
+      vi.spyOn(ComponentContext.prototype, 'dispatchAction').mockRejectedValueOnce(
+        new Error('workspace action failed'),
+      );
+      const actions: string[] = [];
+      const session = createSlackPreviewSession(action => {
+        actions.push(action.name);
+      });
+      session.processMessages(eventButtonMessages());
+
+      await expect(session.dispatch('a2ui-1-1')).resolves.toBeUndefined();
+
+      expect(session.getSnapshot()).toMatchObject({
+        status: PreviewStatus.READY,
+        diagnostics: [
+          {
+            level: DiagnosticLevel.ERROR,
+            code: DiagnosticCode.SLACK_ACTION_DISPATCH_FAILED,
+            componentId: 'root',
+            message: 'workspace action failed',
+          },
+        ],
+      });
+
+      await session.dispatch('a2ui-1-1');
+
+      expect(actions).toEqual(['acknowledge']);
+      expect(session.getSnapshot().diagnostics).toEqual([]);
+    });
+
+    it('is reported when the action throws synchronously', async () => {
+      vi.spyOn(ComponentContext.prototype, 'dispatchAction').mockImplementationOnce(() => {
+        throw new Error('workspace dispatch exploded');
+      });
+      const session = createSlackPreviewSession();
+      session.processMessages(eventButtonMessages());
+
+      await expect(session.dispatch('a2ui-1-1')).resolves.toBeUndefined();
+
+      expect(dispatchFailures(session)).toEqual([
+        expect.objectContaining({componentId: 'root', message: 'workspace dispatch exploded'}),
+      ]);
+    });
+
+    it('is reported once however often it fails', async () => {
+      vi.spyOn(ComponentContext.prototype, 'dispatchAction').mockRejectedValue(
+        new Error('workspace action failed'),
+      );
+      const session = createSlackPreviewSession();
+      session.processMessages(eventButtonMessages());
+
+      await session.dispatch('a2ui-1-1');
+      await session.dispatch('a2ui-1-1');
+
+      expect(dispatchFailures(session)).toHaveLength(1);
+    });
+
+    it('is dropped when a new render replaced the clicked one while it ran', async () => {
+      let rejectAction: (error: Error) => void = () => {};
+      vi.spyOn(ComponentContext.prototype, 'dispatchAction').mockReturnValueOnce(
+        new Promise<void>((_, reject) => {
+          rejectAction = reject;
+        }),
+      );
+      const session = createSlackPreviewSession();
+      session.processMessages(eventButtonMessages());
+
+      const click = session.dispatch('a2ui-1-1');
+      session.processMessages(eventButtonMessages());
+      rejectAction(new Error('workspace action failed'));
+      await click;
+
+      expect(session.getSnapshot()).toMatchObject({revision: 2, diagnostics: []});
+    });
   });
 
   it('keeps stale session action IDs inert after update, delete, recreate, and failure', async () => {

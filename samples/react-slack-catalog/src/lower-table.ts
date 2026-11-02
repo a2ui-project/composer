@@ -38,30 +38,30 @@ export function lowerTable(
       typeof header !== 'string' ||
       (align !== undefined && align !== 'left' && align !== 'center' && align !== 'right')
     ) {
-      throw new LoweringError(
-        DiagnosticCode.A2UI_INVALID_TABLE_HEADER,
-        'Table headers must resolve to text with a supported alignment.',
-        context.componentId,
-      );
+      throw new LoweringError({
+        code: DiagnosticCode.A2UI_INVALID_TABLE_HEADER,
+        message: 'Table headers must resolve to text with a supported alignment.',
+        componentId: context.componentId,
+      });
     }
     return {header, align};
   });
   const rows = arrayField(props, 'rows').map((row, index) => {
     if (!Array.isArray(row) || row.length !== columns.length) {
-      throw new LoweringError(
-        DiagnosticCode.A2UI_INVALID_TABLE_ROW,
-        `Table row ${index + 1} must have exactly ${columns.length} cells, one per column.`,
-        context.componentId,
-      );
+      throw new LoweringError({
+        code: DiagnosticCode.A2UI_INVALID_TABLE_ROW,
+        message: `Table row ${index + 1} must have exactly ${columns.length} cells, one per column.`,
+        componentId: context.componentId,
+      });
     }
     return ChannelRow({
       children: row.map(value => {
         if (typeof value !== 'string') {
-          throw new LoweringError(
-            DiagnosticCode.A2UI_INVALID_TABLE_CELL,
-            `Table row ${index + 1} contains a cell that did not resolve to text.`,
-            context.componentId,
-          );
+          throw new LoweringError({
+            code: DiagnosticCode.A2UI_INVALID_TABLE_CELL,
+            message: `Table row ${index + 1} contains a cell that did not resolve to text.`,
+            componentId: context.componentId,
+          });
         }
         return Cell({children: value});
       }),

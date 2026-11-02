@@ -61,7 +61,7 @@ export function App() {
   }, []);
 
   const dispatch = useCallback((actionId: string) => {
-    return sessionRef.current?.dispatch(actionId);
+    void sessionRef.current?.dispatch(actionId);
   }, []);
 
   const updateInput = useCallback((actionId: string, value: string) => {

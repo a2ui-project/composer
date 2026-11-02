@@ -21,14 +21,19 @@ import {DiagnosticCode, DiagnosticLevel, type PreviewDiagnostic} from './preview
 import {arrayField, recordField, stringField} from './record-fields';
 
 /**
- * What `@copilotkit/channels-ui` nodes show, before `renderBlockKit` renders
- * them, about the Slack limits it meets by trimming or truncating instead of
- * failing: whether it will drop blocks or actions elements, and which kinds of
- * text it will truncate, by their `*_TRUNCATED` diagnostic code.
+ * The Slack limits a surface's content goes over that the preview meets by
+ * cutting content rather than by failing. Building the Slack blocks drops the
+ * blocks past Slack's per-message limit and the buttons past its limit for one
+ * actions block, and shortens text longer than its block allows. Find it with
+ * `collectOutputLimitEvidence` before building the blocks, and pass it to
+ * `collectOutputLimitDiagnostics` to add a warning for each limit.
  */
 export interface OutputLimitEvidence {
+  /** Whether the message has more blocks than Slack allows, so the last ones are dropped. */
   readonly blocksTrimmed: boolean;
+  /** Whether an actions block has more elements than Slack allows, so the last ones are dropped. */
   readonly actionsElementsTrimmed: boolean;
+  /** The kinds of text that are too long and are cut short, by their `*_TRUNCATED` code. */
   readonly truncatedCodes: ReadonlySet<DiagnosticCode>;
 }
 

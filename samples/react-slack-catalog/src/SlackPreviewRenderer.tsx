@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {useCallback, useEffect, useMemo, useState, type MouseEvent} from 'react';
+import {useCallback, useMemo, type MouseEvent} from 'react';
 import {useSlackInputBridge} from './useSlackInputBridge';
 import {
   Renderer,
@@ -23,12 +23,7 @@ import {
 } from '@tightknitai/storybook-addon-slack-block-kit';
 import {type ThemePreference} from 'a2ui-bridge';
 import {collectActionIds} from './action-registry';
-import {
-  DiagnosticCode,
-  DiagnosticLevel,
-  type PreviewDiagnostic,
-  type PreviewSnapshot,
-} from './preview-snapshot';
+import {type PreviewSnapshot} from './preview-snapshot';
 
 /** The class slack-blocks-to-jsx gives each Block Kit button it draws. */
 const SLACK_BUTTON_CLASS = 'slack_blocks_to_jsx__button_element';
@@ -41,8 +36,12 @@ interface SlackPreviewRendererProps {
   readonly theme?: ThemePreference;
   /** Called with a Slack input's `action_id` and new value as the user types. */
   readonly updateInput: (actionId: string, value: string) => void;
-  /** Called with a Slack button's `action_id` when the user clicks it. */
-  readonly dispatch: (actionId: string) => void | Promise<void>;
+  /**
+   * Called with a Slack button's `action_id` when the user clicks it. It shows
+   * its own failures in the snapshot's diagnostics, as `PreviewSession.dispatch`
+   * does, so it must not throw or reject.
+   */
+  readonly dispatch: (actionId: string) => void;
 }
 
 type SlackRendererBlocks = RendererProps['blocks'];
@@ -50,8 +49,7 @@ type SlackRendererTheme = RendererProps['theme'];
 
 /**
  * Draws a ready render as a Slack message with the Tightknit Block Kit renderer,
- * and sends its button clicks and input edits back to the session. Shows an
- * error if dispatching a click fails.
+ * and sends its button clicks and input edits back to the session.
  */
 export function SlackPreviewRenderer({
   snapshot,
@@ -62,31 +60,12 @@ export function SlackPreviewRenderer({
   const inputResetKey = `${theme ?? 'system'}-${snapshot.inputResetKey ?? 0}`;
   const inputBridge = useSlackInputBridge(snapshot.blocks, updateInput, inputResetKey);
   const actionIds = useMemo(() => collectActionIds(snapshot.blocks), [snapshot.blocks]);
-  const [dispatchError, setDispatchError] = useState<PreviewDiagnostic | undefined>();
   const rendererTheme = theme as SlackRendererTheme | undefined;
-
-  useEffect(() => {
-    setDispatchError(undefined);
-  }, [snapshot.revision]);
 
   const dispatchCurrentAction = useCallback(
     (actionId: string | undefined) => {
-      if (!actionId || !actionIds.has(actionId)) {
-        return;
-      }
-
-      setDispatchError(undefined);
-      const reportDispatchFailure = (error: unknown) => {
-        setDispatchError({
-          level: DiagnosticLevel.ERROR,
-          code: DiagnosticCode.SLACK_ACTION_DISPATCH_FAILED,
-          message: error instanceof Error ? error.message : String(error),
-        });
-      };
-      try {
-        void Promise.resolve(dispatch(actionId)).catch(reportDispatchFailure);
-      } catch (error) {
-        reportDispatchFailure(error);
+      if (actionId && actionIds.has(actionId)) {
+        dispatch(actionId);
       }
     },
     [actionIds, dispatch],
@@ -145,13 +124,6 @@ export function SlackPreviewRenderer({
         theme={rendererTheme}
         validate
       />
-      {dispatchError ? (
-        <ul aria-label="Preview diagnostics">
-          <li>
-            {dispatchError.level}: {dispatchError.code} {dispatchError.message}
-          </li>
-        </ul>
-      ) : null}
     </section>
   );
 }

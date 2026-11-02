@@ -15,6 +15,7 @@
  */
 
 import {Image as ChannelImage, type Renderable} from '@copilotkit/channels-ui';
+import {parseHttpUrl} from './http-url';
 import {type LowerComponentContext} from './lowering-context';
 import {LoweringError} from './lowering-error';
 import {DiagnosticCode, DiagnosticLevel} from './preview-snapshot';
@@ -66,31 +67,13 @@ export function lowerImage(
 }
 
 function slackImageUrl(value: unknown, componentId: string): string {
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new LoweringError(
-      DiagnosticCode.A2UI_INVALID_IMAGE_URL,
-      'Image requires a non-empty URL string for Slack image_url.',
+  const parsedUrl = parseHttpUrl(value);
+  if (!parsedUrl) {
+    throw new LoweringError({
+      code: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
+      message: 'Image requires an absolute HTTP(S) URL with a host for Slack image_url.',
       componentId,
-    );
-  }
-
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(value);
-  } catch {
-    throw new LoweringError(
-      DiagnosticCode.A2UI_INVALID_IMAGE_URL,
-      'Image requires an absolute URL string for Slack image_url.',
-      componentId,
-    );
-  }
-
-  if (!['http:', 'https:'].includes(parsedUrl.protocol) || parsedUrl.hostname.length === 0) {
-    throw new LoweringError(
-      DiagnosticCode.A2UI_INVALID_IMAGE_URL,
-      'Image requires an HTTP(S) URL with a host for Slack image_url.',
-      componentId,
-    );
+    });
   }
 
   const imageUrl = parsedUrl.href;
@@ -101,11 +84,11 @@ function slackImageUrl(value: unknown, componentId: string): string {
     !RFC3986_QUERY_OR_FRAGMENT.test(parsedUrl.search.slice(1)) ||
     !RFC3986_QUERY_OR_FRAGMENT.test(parsedUrl.hash.slice(1))
   ) {
-    throw new LoweringError(
-      DiagnosticCode.A2UI_INVALID_IMAGE_URL,
-      'Image requires a valid URI string for Slack image_url.',
+    throw new LoweringError({
+      code: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
+      message: 'Image requires a valid URI string for Slack image_url.',
       componentId,
-    );
+    });
   }
 
   return imageUrl;
@@ -113,11 +96,11 @@ function slackImageUrl(value: unknown, componentId: string): string {
 
 function slackImageAltText(value: unknown, componentId: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new LoweringError(
-      DiagnosticCode.A2UI_INVALID_IMAGE_ALT_TEXT,
-      'Image requires non-empty description text for Slack alt_text.',
+    throw new LoweringError({
+      code: DiagnosticCode.A2UI_INVALID_IMAGE_ALT_TEXT,
+      message: 'Image requires non-empty description text for Slack alt_text.',
       componentId,
-    );
+    });
   }
 
   return value;

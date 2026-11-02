@@ -15,6 +15,45 @@
  */
 
 import {z} from 'zod/v3';
+import {HTTP_URL_PATTERN} from './http-url';
+
+/**
+ * The JSON Schema `pattern` the published catalog gives a market's `sourceName`:
+ * one line, without `<`, `>`, `[` or `]`. The source cell is a Slack link,
+ * `<url|text>`, with the name as its text. `<`, `>` and a line break would end
+ * that text early, and `[` and `]` could start a Markdown link inside it.
+ */
+export const SOURCE_NAME_PATTERN = '^[^<>[\\]\\r\\n]+$';
+
+/**
+ * The JSON Schema `pattern` the published catalog gives a market's `sourceUrl`:
+ * an HTTP(S) URL without `*`. The source link is written in Markdown, which can
+ * read `*` as emphasis and change the URL, and percent-encoding a `*` can name a
+ * different resource (RFC 3986, section 2.2), so the link can't carry one.
+ */
+export const SOURCE_URL_PATTERN = `${HTTP_URL_PATTERN}[^*]*$`;
+
+/**
+ * A market's `sourceName`. At run time it takes any string, so that a name that
+ * breaks `SOURCE_NAME_PATTERN` gets an `A2UI_INVALID_MARKET_SOURCE_NAME`
+ * diagnostic when the preview draws the snapshot, rather than the generic schema
+ * error (`A2UI_PROCESS_MESSAGE_ERROR`) a zod regex here would give. Only the
+ * published catalog adds the pattern.
+ */
+export const SourceNameSchema = z
+  .string()
+  .describe(
+    'Publisher or exchange for this row, shown as the source link text. One line, without <, >, [ or ].',
+  );
+
+/**
+ * A market's `sourceUrl`. At run time it takes any string, for the reason
+ * `SourceNameSchema` gives, with `A2UI_INVALID_MARKET_SOURCE_URL`. Only the
+ * published catalog adds `SOURCE_URL_PATTERN`.
+ */
+export const SourceUrlSchema = z
+  .string()
+  .describe('Canonical absolute HTTP(S) source URL, without *.');
 
 /** One market in a MarketSnapshot table. */
 const MarketRowSchema = z
@@ -22,8 +61,8 @@ const MarketRowSchema = z
     name: z.string().describe('Short market or contract label.'),
     price: z.string().describe('Current grounded price including currency and unit.'),
     change: z.string().describe('Latest grounded percentage or absolute move.'),
-    sourceName: z.string().describe('Publisher or exchange for this row.'),
-    sourceUrl: z.string().url().describe('Canonical absolute source URL.'),
+    sourceName: SourceNameSchema,
+    sourceUrl: SourceUrlSchema,
   })
   .strict();
 
@@ -50,3 +89,6 @@ export const MarketSnapshotSchema = z
 
 /** A MarketSnapshot's validated props. */
 export type MarketSnapshotProps = z.infer<typeof MarketSnapshotSchema>;
+
+/** One market row of a MarketSnapshot's validated props. */
+export type MarketRow = MarketSnapshotProps['markets'][number];

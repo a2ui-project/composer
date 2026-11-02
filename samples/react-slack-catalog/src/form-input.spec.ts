@@ -274,9 +274,44 @@ describe('Slack editable form inputs', () => {
     'rejects invalid initial dates: %s',
     date => {
       session.processMessages(messages(formComponents(), {location: '', date}));
-      expect(session.getSnapshot()).toMatchObject({status: PreviewStatus.ERROR, blocks: []});
+      expect(session.getSnapshot()).toMatchObject({
+        status: PreviewStatus.ERROR,
+        blocks: [],
+        diagnostics: [
+          expect.objectContaining({
+            code: DiagnosticCode.A2UI_INVALID_INPUT_VALUE,
+            componentId: 'date',
+          }),
+        ],
+      });
     },
   );
+
+  it.each([
+    {
+      name: 'a multiline value bound to a shortText field',
+      components: formComponents(),
+      value: {location: 'Line one\nLine two', date: ''},
+      code: DiagnosticCode.A2UI_INVALID_INPUT_VALUE,
+      componentId: 'location',
+    },
+    {
+      name: 'a label that resolves to an empty string',
+      components: [
+        {id: 'root', component: 'TextField', label: {path: '/label'}, value: {path: '/location'}},
+      ],
+      value: {label: '', location: ''},
+      code: DiagnosticCode.A2UI_INVALID_INPUT_LABEL,
+      componentId: 'root',
+    },
+  ])('names the input and the problem for $name', ({components, value, code, componentId}) => {
+    session.processMessages(messages(components, value));
+
+    expect(session.getSnapshot()).toMatchObject({
+      status: PreviewStatus.ERROR,
+      diagnostics: [expect.objectContaining({code, componentId})],
+    });
+  });
 
   it.each([
     {component: 'TextField', label: 'Location', value: 'literal'},

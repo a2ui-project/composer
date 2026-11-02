@@ -28,8 +28,12 @@ interface SlackPreviewProps {
   readonly theme?: ThemePreference;
   /** Called with a Slack input's `action_id` and new value as the user types. */
   readonly updateInput: (actionId: string, value: string) => void;
-  /** Called with a Slack button's `action_id` when the user clicks it. */
-  readonly dispatch: (actionId: string) => void | Promise<void>;
+  /**
+   * Called with a Slack button's `action_id` when the user clicks it. It shows
+   * its own failures in the snapshot's diagnostics, as `PreviewSession.dispatch`
+   * does, so it must not throw or reject.
+   */
+  readonly dispatch: (actionId: string) => void;
 }
 
 /**

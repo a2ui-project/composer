@@ -192,56 +192,6 @@ describe('SlackPreviewRenderer', () => {
     expect(dispatch).toHaveBeenCalledWith('a2ui-1-1');
   });
 
-  it('renders rejected action dispatch diagnostics and recovers on the next interaction', async () => {
-    const dispatch = vi
-      .fn<(actionId: string) => Promise<void>>()
-      .mockRejectedValueOnce(new Error('workspace action failed'))
-      .mockResolvedValueOnce(undefined);
-
-    await renderPreview(dispatch);
-
-    await clickPreviewButton('native-action');
-
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(dispatch).toHaveBeenCalledWith('a2ui-1-1');
-    const diagnostics = container.querySelector('[aria-label="Preview diagnostics"]');
-    expect(diagnostics).not.toBeNull();
-    expect(diagnostics?.textContent).toContain(
-      'error: SLACK_ACTION_DISPATCH_FAILED workspace action failed',
-    );
-
-    await clickPreviewButton('simulator-action');
-
-    expect(dispatch).toHaveBeenCalledTimes(2);
-    expect(dispatch).toHaveBeenLastCalledWith('a2ui-1-1');
-    expect(container.querySelector('[aria-label="Preview diagnostics"]')).toBeNull();
-  });
-
-  it('renders diagnostics when action dispatch throws synchronously', async () => {
-    const dispatch = vi
-      .fn<(actionId: string) => Promise<void>>()
-      .mockImplementationOnce(() => {
-        throw new Error('workspace dispatch exploded');
-      })
-      .mockResolvedValueOnce(undefined);
-
-    await renderPreview(dispatch);
-
-    await clickPreviewButton('native-action');
-
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    const diagnostics = container.querySelector('[aria-label="Preview diagnostics"]');
-    expect(diagnostics).not.toBeNull();
-    expect(diagnostics?.textContent).toContain(
-      'error: SLACK_ACTION_DISPATCH_FAILED workspace dispatch exploded',
-    );
-
-    await clickPreviewButton('simulator-action');
-
-    expect(dispatch).toHaveBeenCalledTimes(2);
-    expect(container.querySelector('[aria-label="Preview diagnostics"]')).toBeNull();
-  });
-
   it('ignores unrelated toolbar, simulator DOM, outside DOM, and unregistered native IDs', async () => {
     const dispatch = await renderPreview();
 

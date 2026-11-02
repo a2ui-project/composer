@@ -32,7 +32,14 @@ import {z} from 'zod/v3';
 import {zodToJsonSchema} from 'zod-to-json-schema';
 import {SLACK_LIMITS} from '@copilotkit/channels-slack/render';
 import {InputComponentType, InputKind} from './form-input';
-import {MarketSnapshotSchema} from './market-snapshot';
+import {HTTP_URL_PATTERN} from './http-url';
+import {
+  MarketSnapshotSchema,
+  SOURCE_NAME_PATTERN,
+  SOURCE_URL_PATTERN,
+  SourceNameSchema,
+  SourceUrlSchema,
+} from './market-snapshot';
 import {SLACK_TABLE_MAX_BODY_ROWS, SLACK_TEXT_INPUT_MAX_LENGTH} from './slack-limits';
 
 /** The catalog ID the Slack renderer registers and its surfaces must use. */
@@ -54,49 +61,71 @@ function slackComponentApi(name: string, schema: z.ZodTypeAny): ComponentApi {
 }
 
 /**
- * A string prop's schema: the given literal string, a data binding, or a
- * function call that returns a string.
+ * A data binding: a JSON Pointer to a value in the data model. The published
+ * catalog refers to `common_types.json`'s `DataBinding` for it.
  */
-function dynamicStringSchema(literal: z.ZodString) {
-  return z.union([
-    literal,
-    z.object({path: z.string()}).strict(),
-    z
-      .object({
-        call: z.string(),
-        args: z.record(z.unknown()),
-        returnType: z
-          .enum(['string', 'number', 'boolean', 'array', 'object', 'any', 'void'])
-          .default('string')
-          .optional(),
-      })
-      .strict(),
-  ]);
+const DataBindingSchema = z
+  .object({path: z.string()})
+  .strict()
+  .describe('REF:common_types.json#/$defs/DataBinding');
+
+/**
+ * A call to one of the catalog's functions, for a string prop. `returnType`,
+ * when given, must be `string`. The published catalog also checks the function
+ * name and its arguments (see `publishedSchemaFor`).
+ */
+const StringFunctionCallSchema = z
+  .object({
+    call: z.string(),
+    args: z.record(z.unknown()),
+    returnType: z.literal('string').optional(),
+  })
+  .strict();
+
+/**
+ * How the published catalog checks a `StringFunctionCallSchema`: the
+ * function-call member of `common_types.json`'s `DynamicString`. Its
+ * `FunctionCall` takes only a call to one of this catalog's functions, as listed
+ * in `$defs.anyFunction`.
+ */
+function stringFunctionCallJsonSchema(): Record<string, unknown> {
+  return {
+    allOf: [
+      {$ref: 'common_types.json#/$defs/FunctionCall'},
+      {properties: {returnType: {const: 'string'}}},
+    ],
+  };
 }
 
-const DynamicStringSchema = dynamicStringSchema(z.string());
-
 /**
- * The JSON Schema `pattern` the published catalog gives a literal Image `url`.
- * Slack fetches an image block's `image_url` itself and takes only HTTP(S)
- * URLs, and Composer reads this pattern to tell the assistant so.
+ * A string prop's schema: a literal string, a data binding, or a call to one of
+ * the catalog's functions that returns a string. The published catalog refers to
+ * `common_types.json`'s `DynamicString` for it, as the basic catalog does.
+ *
+ * @param description What the prop is for, published with the reference.
  */
-const HTTP_URL_PATTERN = '^https?://';
+function dynamicString(description?: string) {
+  return z
+    .union([z.string(), DataBindingSchema, StringFunctionCallSchema])
+    .describe(`REF:common_types.json#/$defs/DynamicString${description ? `|${description}` : ''}`);
+}
 
 /**
- * A literal Image `url`. At run time it takes any string, as before: lowering
- * rejects a URL that isn't HTTP(S) with an `A2UI_INVALID_IMAGE_URL`
+ * A literal Image `url`. Slack fetches an image block's `image_url` itself and
+ * takes only HTTP(S) URLs. At run time this takes any string, as before:
+ * lowering rejects a URL that isn't HTTP(S) with an `A2UI_INVALID_IMAGE_URL`
  * diagnostic that says what Slack needs, where a regex here would have the
  * message processor reject the component with a generic schema error
  * (`A2UI_PROCESS_MESSAGE_ERROR`) instead. Only the published catalog adds
- * `HTTP_URL_PATTERN` to it (see `addImageUrlPattern`).
+ * `HTTP_URL_PATTERN` to it (see `PUBLISHED_PATTERNS`), and Composer reads it
+ * there to tell the assistant.
  */
 const ImageUrlLiteralSchema = z.string();
 
 const AccessibilityAttributesSchema = z
   .object({
-    label: DynamicStringSchema.optional(),
-    description: DynamicStringSchema.optional(),
+    label: dynamicString().optional(),
+    description: dynamicString().optional(),
   })
   .strict();
 
@@ -117,7 +146,7 @@ const SlackTextFieldApi = slackComponentApi(
   z
     .object({
       ...CommonProps,
-      label: DynamicStringSchema,
+      label: dynamicString(),
       value: WritableStringSchema,
       variant: z
         .enum([InputKind.SHORT_TEXT, InputKind.LONG_TEXT])
@@ -135,7 +164,7 @@ const SlackDateTimeInputApi = slackComponentApi(
   z
     .object({
       ...CommonProps,
-      label: DynamicStringSchema.optional(),
+      label: dynamicString().optional(),
       value: WritableStringSchema,
       enableDate: z.literal(true).default(true).optional(),
       enableTime: z.literal(false).default(false).optional(),
@@ -151,10 +180,10 @@ const SlackImageApi = slackComponentApi(
   z
     .object({
       ...CommonProps,
-      url: dynamicStringSchema(ImageUrlLiteralSchema).describe(
-        'The HTTP(S) URL of the image to display in Slack.',
-      ),
-      description: DynamicStringSchema.describe(
+      url: z
+        .union([ImageUrlLiteralSchema, DataBindingSchema, StringFunctionCallSchema])
+        .describe('The HTTP(S) URL of the image to display in Slack.'),
+      description: dynamicString(
         'Required accessibility description rendered as Slack image alt_text.',
       ),
       fit: z
@@ -192,6 +221,37 @@ const SlackRowApi: ComponentApi = {
   ),
 };
 
+const buttonProps = ButtonApi.schema.shape;
+
+/**
+ * The basic catalog's Button, limited to what a Slack button can do: it requires
+ * an action, which the preview runs when the button is clicked; it takes no
+ * checks (`checks`, `isValid` and `validationErrors`), the rules that disable a
+ * basic catalog Button, since a Slack button can't be disabled; and its variant
+ * is `default` or `primary`, the two styles Slack draws.
+ */
+const SlackButtonApi: ComponentApi = {
+  name: ButtonApi.name,
+  schema: ButtonApi.schema
+    .omit({checks: true, isValid: true, validationErrors: true})
+    .extend({
+      variant: buttonProps.variant
+        .unwrap()
+        .removeDefault()
+        .exclude(['borderless'])
+        .default('default')
+        .describe(
+          "A hint for the button style. 'primary' marks the main call to action and becomes Slack's primary button; 'default' is a plain Slack button.",
+        )
+        .optional(),
+      action: buttonProps.action.unwrap(),
+    })
+    .strict()
+    .describe(
+      'A Slack button. Requires an action: an event, or a call to a catalog function. The borderless variant and checks are unsupported.',
+    ),
+};
+
 const TableSchema = z
   .object({
     ...CommonProps,
@@ -199,7 +259,7 @@ const TableSchema = z
       .array(
         z
           .object({
-            header: DynamicStringSchema.describe('Header text or binding for this column.'),
+            header: dynamicString('Header text or binding for this column.'),
             align: z.enum(['left', 'center', 'right']).optional(),
           })
           .strict(),
@@ -208,7 +268,7 @@ const TableSchema = z
       .max(SLACK_LIMITS.tableColumns)
       .describe('Ordered column definitions. Use right alignment for scores or numeric values.'),
     rows: z
-      .array(z.array(DynamicStringSchema).min(1).max(SLACK_LIMITS.tableColumns))
+      .array(z.array(dynamicString()).min(1).max(SLACK_LIMITS.tableColumns))
       .min(1)
       .max(SLACK_TABLE_MAX_BODY_ROWS)
       .describe(
@@ -229,7 +289,7 @@ const slackBasicComponents: ComponentApi[] = [
   SlackRowApi,
   ColumnApi,
   CardApi,
-  ButtonApi,
+  SlackButtonApi,
   SlackTextFieldApi,
   SlackDateTimeInputApi,
 ];
@@ -247,6 +307,17 @@ const slackComponents = [
 /** The Slack renderer's A2UI catalog: the components and functions it can lower to Slack. */
 export const slackCatalog = new Catalog(SLACK_CATALOG_ID, slackComponents, slackBasicFunctions);
 
+/** A JSON Schema object, with the keywords this file reads typed. */
+interface JsonSchemaObject {
+  /** The JSON Schema dialect, named only at the root of a document or of a schema with an `$id`. */
+  readonly $schema?: string;
+  /** The schemas of an object's properties, by name. */
+  readonly properties?: Record<string, unknown>;
+  /** The properties an object must have. */
+  readonly required?: string[];
+  readonly [keyword: string]: unknown;
+}
+
 interface SlackCatalogJson {
   $schema: string;
   title: string;
@@ -256,7 +327,7 @@ interface SlackCatalogJson {
   functions?: Array<{
     name: string;
     description?: string;
-    parameters: Record<string, unknown>;
+    parameters: JsonSchemaObject;
     returnType: A2uiReturnType;
   }>;
   theme?: unknown;
@@ -285,14 +356,33 @@ type JsonSchemaConverter = (
 const toJsonSchema = zodToJsonSchema as JsonSchemaConverter;
 
 /**
- * Called by zod-to-json-schema with each zod schema (`def`) and the JSON
- * Schema it made from it. Adds `HTTP_URL_PATTERN` to the one made from
- * `ImageUrlLiteralSchema` and returns every other JSON Schema unchanged.
+ * The JSON Schema `pattern` the published catalog gives each string prop that
+ * takes any string at run time, keyed by the prop's zod definition. The preview
+ * checks these props when it draws the component, so it can report a specific
+ * diagnostic; the pattern lets Composer's editor and assistant see the rule.
  */
-function addImageUrlPattern(jsonSchema: unknown, def: unknown): unknown {
-  return def === ImageUrlLiteralSchema._def
-    ? {...(jsonSchema as Record<string, unknown>), pattern: HTTP_URL_PATTERN}
-    : jsonSchema;
+const PUBLISHED_PATTERNS = new Map<unknown, string>([
+  [ImageUrlLiteralSchema._def, HTTP_URL_PATTERN],
+  [SourceNameSchema._def, SOURCE_NAME_PATTERN],
+  [SourceUrlSchema._def, SOURCE_URL_PATTERN],
+]);
+
+/**
+ * Called by zod-to-json-schema with each zod schema (`def`) and the JSON
+ * Schema it made from it. Adds the pattern from `PUBLISHED_PATTERNS`, replaces
+ * the JSON Schema made from `StringFunctionCallSchema` with
+ * `stringFunctionCallJsonSchema`, and returns every other JSON Schema
+ * unchanged.
+ */
+function publishedSchemaFor(jsonSchema: unknown, def: unknown): unknown {
+  const pattern = PUBLISHED_PATTERNS.get(def);
+  if (pattern !== undefined) {
+    return {...(jsonSchema as Record<string, unknown>), pattern};
+  }
+  if (def === StringFunctionCallSchema._def) {
+    return stringFunctionCallJsonSchema();
+  }
+  return jsonSchema;
 }
 
 function processRefs(node: unknown): void {
@@ -318,12 +408,12 @@ function processRefs(node: unknown): void {
   }
 }
 
-function schemaJsonFor(schema: unknown): Record<string, unknown> {
+function schemaJsonFor(schema: unknown): JsonSchemaObject {
   const jsonSchema = toJsonSchema(schema, {
     target: 'jsonSchema2019-09',
     $refStrategy: 'none',
-    postProcess: addImageUrlPattern,
-  }) as Record<string, unknown>;
+    postProcess: publishedSchemaFor,
+  }) as JsonSchemaObject;
   processRefs(jsonSchema);
   return jsonSchema;
 }
@@ -340,9 +430,9 @@ function componentSchemaFor(name: string, api: ComponentApi): Record<string, unk
         type: 'object',
         properties: {
           component: {const: name},
-          ...((zodSchema.properties as Record<string, unknown> | undefined) ?? {}),
+          ...zodSchema.properties,
         },
-        required: ['component', ...((zodSchema.required as string[] | undefined) ?? [])],
+        required: ['component', ...(zodSchema.required ?? [])],
       },
     ],
     unevaluatedProperties: false,
@@ -364,6 +454,9 @@ function functionSchemaFor(
  * The schema of a call to one function, shaped like the basic catalog's entries under
  * `functions`. `functions` here is the inline catalog's list, which a `$ref` can't
  * address by name, so `$defs.anyFunction` inlines these instead.
+ *
+ * A function whose `returnType` is `any` takes any `returnType` in a call, so a
+ * prop that needs a string can call it with `returnType: 'string'`.
  */
 function functionCallSchemaFor(
   fn: NonNullable<SlackCatalogJson['functions']>[number],
@@ -373,11 +466,41 @@ function functionCallSchemaFor(
     ...(fn.description ? {description: fn.description} : {}),
     properties: {
       call: {const: fn.name},
-      args: fn.parameters,
-      returnType: {const: fn.returnType},
+      args: callArgsSchemaFor(fn.parameters),
+      returnType: fn.returnType === 'any' ? {} : {const: fn.returnType},
     },
     required: ['call', 'args'],
     unevaluatedProperties: false,
+  };
+}
+
+/**
+ * The schema of a call's `args`, from the function's `parameters`. `parameters`
+ * describes the values the function receives, but a call can also give each
+ * argument as a data binding or another function call, which the client resolves
+ * to such a value before calling the function.
+ *
+ * It leaves out the `$schema` that `parameters` has. JSON Schema 2019-09 (section
+ * 8.1.1) allows `$schema` only in a document's root schema or a schema with its
+ * own `$id`, and `args` is neither: it sits inside the catalog's
+ * `$defs.anyFunction`.
+ */
+function callArgsSchemaFor(parameters: JsonSchemaObject): JsonSchemaObject {
+  const {$schema: _dialect, properties = {}, ...rest} = parameters;
+  return {
+    ...rest,
+    properties: Object.fromEntries(
+      Object.entries(properties).map(([name, schema]) => [
+        name,
+        {
+          anyOf: [
+            schema,
+            {$ref: 'common_types.json#/$defs/DataBinding'},
+            {$ref: 'common_types.json#/$defs/FunctionCall'},
+          ],
+        },
+      ]),
+    ),
   };
 }
 

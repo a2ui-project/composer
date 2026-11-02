@@ -41,10 +41,10 @@ import {
  */
 export function validateSlackOutput(blocks: readonly KnownBlock[]): void {
   if (blocks.length > SLACK_LIMITS.blocksPerMessage) {
-    throw new LoweringError(
-      DiagnosticCode.SLACK_BLOCK_LIMIT_EXCEEDED,
-      `Slack output rendered ${blocks.length} blocks; the message limit is ${SLACK_LIMITS.blocksPerMessage}.`,
-    );
+    throw new LoweringError({
+      code: DiagnosticCode.SLACK_BLOCK_LIMIT_EXCEEDED,
+      message: `Slack output rendered ${blocks.length} blocks; the message limit is ${SLACK_LIMITS.blocksPerMessage}.`,
+    });
   }
 
   let aggregateTableLength = 0;
@@ -64,10 +64,10 @@ export function validateSlackOutput(blocks: readonly KnownBlock[]): void {
       );
       const fields = block.fields ?? [];
       if (fields.length > SLACK_LIMITS.fieldsPerSection) {
-        throw new LoweringError(
-          DiagnosticCode.SLACK_SECTION_FIELDS_LIMIT_EXCEEDED,
-          `Slack output rendered ${fields.length} section fields; the limit is ${SLACK_LIMITS.fieldsPerSection}.`,
-        );
+        throw new LoweringError({
+          code: DiagnosticCode.SLACK_SECTION_FIELDS_LIMIT_EXCEEDED,
+          message: `Slack output rendered ${fields.length} section fields; the limit is ${SLACK_LIMITS.fieldsPerSection}.`,
+        });
       }
       for (const field of fields) {
         assertTextLimit(
@@ -80,10 +80,10 @@ export function validateSlackOutput(blocks: readonly KnownBlock[]): void {
     if (block.type === 'actions') {
       const elements = block.elements;
       if (elements.length > SLACK_LIMITS.actionsElements) {
-        throw new LoweringError(
-          DiagnosticCode.SLACK_ACTIONS_ELEMENTS_LIMIT_EXCEEDED,
-          `Slack output rendered ${elements.length} action elements; the limit is ${SLACK_LIMITS.actionsElements}.`,
-        );
+        throw new LoweringError({
+          code: DiagnosticCode.SLACK_ACTIONS_ELEMENTS_LIMIT_EXCEEDED,
+          message: `Slack output rendered ${elements.length} action elements; the limit is ${SLACK_LIMITS.actionsElements}.`,
+        });
       }
       for (const element of elements) {
         validateActionElement(element);
@@ -99,10 +99,10 @@ export function validateSlackOutput(blocks: readonly KnownBlock[]): void {
       const cellTexts = tableCellTexts(block);
       aggregateTableLength += cellTexts.reduce((sum, text) => sum + text.length, 0);
       if (aggregateTableLength > SLACK_TABLE_TEXT_MAX_LENGTH) {
-        throw new LoweringError(
-          DiagnosticCode.SLACK_TABLE_CELL_TEXT_AGGREGATE_LIMIT_EXCEEDED,
-          `Slack output rendered ${aggregateTableLength} aggregate table cell characters; the table and message limit is ${SLACK_TABLE_TEXT_MAX_LENGTH}.`,
-        );
+        throw new LoweringError({
+          code: DiagnosticCode.SLACK_TABLE_CELL_TEXT_AGGREGATE_LIMIT_EXCEEDED,
+          message: `Slack output rendered ${aggregateTableLength} aggregate table cell characters; the table and message limit is ${SLACK_TABLE_TEXT_MAX_LENGTH}.`,
+        });
       }
       for (const cellText of cellTexts) {
         assertTextLimit(
@@ -129,10 +129,10 @@ function validateActionElement(element: ActionsBlockElement): void {
 function validateContextBlock(block: ContextBlock): void {
   const elements = block.elements;
   if (elements.length > SLACK_LIMITS.contextElements) {
-    throw new LoweringError(
-      DiagnosticCode.SLACK_CONTEXT_ELEMENTS_LIMIT_EXCEEDED,
-      `Slack output rendered ${elements.length} context elements; the limit is ${SLACK_LIMITS.contextElements}.`,
-    );
+    throw new LoweringError({
+      code: DiagnosticCode.SLACK_CONTEXT_ELEMENTS_LIMIT_EXCEEDED,
+      message: `Slack output rendered ${elements.length} context elements; the limit is ${SLACK_LIMITS.contextElements}.`,
+    });
   }
 
   for (const element of elements) {
@@ -183,10 +183,10 @@ function assertTextLimit(text: string | undefined, limit: number, code: Diagnost
   if (text === undefined || text.length <= limit) {
     return;
   }
-  throw new LoweringError(
+  throw new LoweringError({
     code,
-    `Slack output rendered ${text.length} characters; the limit is ${limit}.`,
-  );
+    message: `Slack output rendered ${text.length} characters; the limit is ${limit}.`,
+  });
 }
 
 function tableCellTexts(block: TableBlock): string[] {

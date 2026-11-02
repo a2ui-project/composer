@@ -38,6 +38,7 @@ import {
   DiagnosticLevel,
   PreviewStatus,
   createEmptySnapshot,
+  type PreviewDiagnostic,
   type PreviewSnapshot,
 } from './preview-snapshot';
 
@@ -63,7 +64,13 @@ export interface PreviewSession {
    * @return A function that stops the calls.
    */
   subscribeSurfaceCreated(listener: (surface: SurfaceModel) => void): () => void;
-  /** Runs the A2UI action behind a Slack button's `action_id`. */
+  /**
+   * Runs the A2UI action behind a Slack button's `action_id`, and adds what went
+   * wrong to the snapshot's diagnostics: a local function's errors, or a
+   * `SLACK_ACTION_DISPATCH_FAILED` if running the action threw. The next click
+   * replaces or removes that `SLACK_ACTION_DISPATCH_FAILED`. The returned
+   * promise doesn't reject.
+   */
   dispatch(actionId: string): Promise<void>;
   /** Writes a value typed into a Slack input to the input's data binding. */
   updateInput(actionId: string, value: string): void;
@@ -163,6 +170,28 @@ export function createSlackPreviewSession(
     ];
   };
 
+  /**
+   * Runs an entry's action: sends an event to `actionHandler`, or calls a local
+   * function, if the entry is from the surface the preview shows.
+   *
+   * @return The diagnostics a local function call reported.
+   */
+  const runAction = async (entry: ActionDispatchEntry): Promise<PreviewDiagnostic[]> => {
+    const surface = lastSurface(processor);
+    if (!('functionCall' in entry.action)) {
+      await dispatchCurrentEventAction(entry.actionId, {surface, registry: actions});
+      return [];
+    }
+    if (!isCurrentActionEntry(entry, surface)) {
+      return [];
+    }
+    const context = new ComponentContext(surface, entry.sourceComponentId, entry.basePath);
+    return (
+      dispatchReadOnlyLocalFunctionAction(context, entry.action, entry.sourceComponentId)
+        .diagnostics ?? []
+    );
+  };
+
   const rerender = () => {
     revision += 1;
     const surface = lastSurface(processor);
@@ -227,36 +256,44 @@ export function createSlackPreviewSession(
 
     async dispatch(actionId) {
       const entry = actions.get(actionId);
-      if (!entry) {
+      if (disposed || !entry) {
         return;
       }
-      const surface = lastSurface(processor);
-      if (!('functionCall' in entry.action)) {
-        await dispatchCurrentEventAction(actionId, {surface, registry: actions});
-        return;
+      const clickedRevision = revision;
+      let functionDiagnostics: PreviewDiagnostic[] = [];
+      let failure: PreviewDiagnostic | undefined;
+      try {
+        functionDiagnostics = await runAction(entry);
+      } catch (error) {
+        failure = {
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.SLACK_ACTION_DISPATCH_FAILED,
+          componentId: entry.sourceComponentId,
+          message: error instanceof Error ? error.message : String(error),
+        };
       }
-      if (!isCurrentActionEntry(entry, surface)) {
+      // A render that replaced the clicked one while the action ran has its own
+      // diagnostics, which this click's don't belong in.
+      if (disposed || revision !== clickedRevision) {
         return;
       }
 
-      const context = new ComponentContext(surface, entry.sourceComponentId, entry.basePath);
-      const result = dispatchReadOnlyLocalFunctionAction(
-        context,
-        entry.action,
-        entry.sourceComponentId,
+      const shown = snapshot.diagnostics.filter(
+        diagnostic => diagnostic.code !== DiagnosticCode.SLACK_ACTION_DISPATCH_FAILED,
       );
-      if (!result.diagnostics?.length) {
+      // Clicking a button whose local function fails again reports the same
+      // errors, which the preview already shows.
+      const added = [
+        ...functionDiagnostics.filter(
+          diagnostic => !shown.some(previous => isSameDiagnostic(previous, diagnostic)),
+        ),
+        ...(failure ? [failure] : []),
+      ];
+      if (added.length === 0 && shown.length === snapshot.diagnostics.length) {
         return;
       }
 
-      publish(
-        {
-          ...snapshot,
-          diagnostics: [...snapshot.diagnostics, ...result.diagnostics],
-        },
-        actions,
-        inputs,
-      );
+      publish({...snapshot, diagnostics: [...shown, ...added]}, actions, inputs);
     },
 
     updateInput(actionId, value) {
@@ -366,6 +403,16 @@ type SubscriptionLike = {unsubscribe(): void};
 interface ActiveSurfaceSubscription {
   readonly surfaceId: string;
   readonly unsubscribe: () => void;
+}
+
+/** Whether two diagnostics report the same problem in the same component. */
+function isSameDiagnostic(first: PreviewDiagnostic, second: PreviewDiagnostic): boolean {
+  return (
+    first.level === second.level &&
+    first.code === second.code &&
+    first.componentId === second.componentId &&
+    first.message === second.message
+  );
 }
 
 /** The surface the preview shows: the most recently created one. */

@@ -49,6 +49,16 @@ export enum DiagnosticCode {
   A2UI_INVALID_ACTION = 'A2UI_INVALID_ACTION',
   A2UI_INVALID_IMAGE_ALT_TEXT = 'A2UI_INVALID_IMAGE_ALT_TEXT',
   A2UI_INVALID_IMAGE_URL = 'A2UI_INVALID_IMAGE_URL',
+  /** A TextField or DateTimeInput whose value isn't bound to a data model path. */
+  A2UI_INVALID_INPUT_BINDING = 'A2UI_INVALID_INPUT_BINDING',
+  /** A TextField or DateTimeInput label that Slack can't show. */
+  A2UI_INVALID_INPUT_LABEL = 'A2UI_INVALID_INPUT_LABEL',
+  /** A TextField or DateTimeInput bound to a value its Slack input can't hold. */
+  A2UI_INVALID_INPUT_VALUE = 'A2UI_INVALID_INPUT_VALUE',
+  /** A MarketSnapshot `sourceName` that can't be the text of its source link. */
+  A2UI_INVALID_MARKET_SOURCE_NAME = 'A2UI_INVALID_MARKET_SOURCE_NAME',
+  /** A MarketSnapshot `sourceUrl` that isn't an HTTP(S) URL its source link can hold. */
+  A2UI_INVALID_MARKET_SOURCE_URL = 'A2UI_INVALID_MARKET_SOURCE_URL',
   A2UI_INVALID_TABLE_CELL = 'A2UI_INVALID_TABLE_CELL',
   A2UI_INVALID_TABLE_HEADER = 'A2UI_INVALID_TABLE_HEADER',
   A2UI_INVALID_TABLE_ROW = 'A2UI_INVALID_TABLE_ROW',

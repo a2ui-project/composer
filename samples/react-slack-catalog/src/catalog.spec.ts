@@ -17,6 +17,9 @@
 import {MessageProcessor} from '@a2ui/web_core/v0_9';
 import Ajv2019, {type SchemaObject, type ValidateFunction} from 'ajv/dist/2019';
 import {describe, expect, it} from 'vitest';
+// web_core doesn't export its JSON schemas, so this reads the copy it ships from
+// the workspace's root node_modules, as vitest.config.ts does for React.
+import commonTypesJson from '../../../node_modules/@a2ui/web_core/src/v0_9/schemas/common_types.json';
 import {SLACK_CATALOG_ID, slackCatalog, slackCatalogJson} from './catalog';
 import dataBoundActionJson from '../public/examples/data-bound-action.json';
 import marketSnapshotJson from '../public/examples/market-snapshot.json';
@@ -37,93 +40,60 @@ const EXPECTED_COMPONENTS = [
   'MarketSnapshot',
 ].sort();
 const TableSchema = slackCatalog.components.get('Table')!.schema;
-const COMMON_TYPES_SCHEMA: SchemaObject = {
-  $id: 'common_types.json',
-  type: 'object',
-  $defs: {
-    ComponentId: {
-      type: 'string',
-    },
-    DataBinding: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-        },
-      },
-      required: ['path'],
-      additionalProperties: false,
-    },
-    FunctionCall: {
-      type: 'object',
-      properties: {
-        call: {
-          type: 'string',
-        },
-        args: {
-          type: 'object',
-        },
-        returnType: {
-          enum: ['string', 'number', 'boolean', 'array', 'object', 'any', 'void'],
-        },
-      },
-      required: ['call', 'args'],
-      additionalProperties: false,
-    },
-    DynamicString: {
-      oneOf: [
-        {
-          type: 'string',
-        },
-        {
-          $ref: '#/$defs/DataBinding',
-        },
-        {
-          allOf: [
-            {
-              $ref: '#/$defs/FunctionCall',
-            },
-            {
-              properties: {
-                returnType: {
-                  const: 'string',
-                },
-              },
-            },
-          ],
-        },
-      ],
-    },
-    AccessibilityAttributes: {
-      type: 'object',
-      properties: {
-        label: {
-          $ref: '#/$defs/DynamicString',
-        },
-        description: {
-          $ref: '#/$defs/DynamicString',
-        },
-      },
-    },
-    ComponentCommon: {
-      type: 'object',
-      properties: {
-        id: {
-          $ref: '#/$defs/ComponentId',
-        },
-        accessibility: {
-          $ref: '#/$defs/AccessibilityAttributes',
-        },
-      },
-      required: ['id'],
-    },
+
+/** Where the Slack-specific components take a string: each builds props holding `text` there. */
+const STRING_PROPS = [
+  {
+    name: 'Image url',
+    component: 'Image',
+    props: (text: unknown) => ({url: text, description: 'Chart'}),
   },
-};
+  {
+    name: 'Image description',
+    component: 'Image',
+    props: (text: unknown) => ({url: 'https://example.com/chart.png', description: text}),
+  },
+  {
+    name: 'TextField label',
+    component: 'TextField',
+    props: (text: unknown) => ({label: text, value: {path: '/location'}}),
+  },
+  {
+    name: 'DateTimeInput label',
+    component: 'DateTimeInput',
+    props: (text: unknown) => ({label: text, value: {path: '/date'}}),
+  },
+  {
+    name: 'Table header',
+    component: 'Table',
+    props: (text: unknown) => ({columns: [{header: text}], rows: [['1']]}),
+  },
+  {
+    name: 'Table cell',
+    component: 'Table',
+    props: (text: unknown) => ({columns: [{header: 'Score'}], rows: [[text]]}),
+  },
+];
+/**
+ * A validator that has web_core's v0.9 `common_types.json` and the Slack catalog,
+ * under the names Composer's JSON editor gives them: `common_types.json` and
+ * `catalog.json`. The component schemas refer to `common_types.json`, and its
+ * `FunctionCall` accepts only a call that matches the catalog's
+ * `$defs.anyFunction`.
+ *
+ * `common_types.json` is written in JSON Schema 2020-12 and the catalog in
+ * 2019-09, and an Ajv instance knows the meta-schema of only one of them, so
+ * `validateSchema` is off. Both use their keywords the same way here.
+ */
+function createAjv(): Ajv2019 {
+  const ajv = new Ajv2019({strict: false, validateSchema: false});
+  ajv.addSchema({...commonTypesJson, $id: 'common_types.json'} as SchemaObject);
+  ajv.addSchema({...slackCatalogJson, $id: 'catalog.json'} as SchemaObject);
+  return ajv;
+}
 
 function compileComponentSchema(schema: unknown): ValidateFunction {
-  const ajv = new Ajv2019({strict: false});
-  ajv.addSchema(COMMON_TYPES_SCHEMA);
-  return ajv.compile(schema as SchemaObject);
+  return createAjv().compile(schema as SchemaObject);
 }
 
 function collectRefs(value: unknown, path = '$'): Array<{path: string; ref: string}> {
@@ -212,13 +182,24 @@ describe('Slack catalog schema payload', () => {
   });
 
   it('accepts a call to a Slack function and rejects one to openUrl through anyFunction', () => {
-    const ajv = new Ajv2019({strict: false});
-    ajv.addSchema(COMMON_TYPES_SCHEMA);
-    ajv.addSchema({...slackCatalogJson, $id: 'catalog.json'} as SchemaObject);
-    const validateCall = ajv.compile({$ref: 'catalog.json#/$defs/anyFunction'});
+    const validateCall = createAjv().compile({$ref: 'catalog.json#/$defs/anyFunction'});
 
     expect(validateCall({call: 'required', args: {value: 'Pick-up location'}})).toBe(true);
     expect(validateCall({call: 'openUrl', args: {url: 'https://example.com'}})).toBe(false);
+  });
+
+  it('accepts bound and nested arguments in anyFunction calls', () => {
+    const validateCall = createAjv().compile({$ref: 'catalog.json#/$defs/anyFunction'});
+
+    expect(validateCall({call: 'formatNumber', args: {value: {path: '/price'}}})).toBe(true);
+    expect(
+      validateCall({
+        call: 'formatNumber',
+        args: {value: {call: 'add', args: {a: 1, b: {path: '/fee'}}, returnType: 'number'}},
+      }),
+    ).toBe(true);
+    expect(validateCall({call: 'formatNumber', args: {value: true}})).toBe(false);
+    expect(validateCall({call: 'formatNumber', args: {}})).toBe(false);
   });
 
   it('does not publish unresolved component-local refs', () => {
@@ -297,7 +278,7 @@ describe('Slack catalog schema payload', () => {
     });
   });
 
-  it('exports a self-contained Table schema accepting bound headers and cells', () => {
+  it('publishes Table headers and cells as DynamicString, accepting bound and computed text', () => {
     const props = {
       columns: [
         {header: {path: '/labels/team'}, align: 'left'},
@@ -313,6 +294,22 @@ describe('Slack catalog schema payload', () => {
     expect(validateTable({id: 'scores', component: 'Table', ...props})).toBe(true);
     expect(collectRefs(slackCatalogJson.components.Table)).toEqual([
       {path: '$/allOf/0', ref: 'common_types.json#/$defs/ComponentCommon'},
+      {
+        path: '$/allOf/1/properties/accessibility/properties/label',
+        ref: 'common_types.json#/$defs/DynamicString',
+      },
+      {
+        path: '$/allOf/1/properties/accessibility/properties/description',
+        ref: 'common_types.json#/$defs/DynamicString',
+      },
+      {
+        path: '$/allOf/1/properties/columns/items/properties/header',
+        ref: 'common_types.json#/$defs/DynamicString',
+      },
+      {
+        path: '$/allOf/1/properties/rows/items/items',
+        ref: 'common_types.json#/$defs/DynamicString',
+      },
     ]);
   });
 
@@ -425,7 +422,7 @@ describe('Slack catalog schema payload', () => {
     const validateImage = compileComponentSchema(slackCatalogJson.components.Image);
     const imageProperties = (
       slackCatalogJson.components.Image as {
-        allOf: Array<{properties?: Record<string, {anyOf: unknown[]}>}>;
+        allOf: Array<{properties?: Record<string, {anyOf?: unknown[]; $ref?: string}>}>;
       }
     ).allOf[1].properties;
     const mailtoImageProps = {
@@ -433,8 +430,8 @@ describe('Slack catalog schema payload', () => {
       description: 'Email URI',
     };
 
-    expect(imageProperties?.['url'].anyOf[0]).toEqual({type: 'string', pattern: '^https?://'});
-    expect(imageProperties?.['description'].anyOf[0]).toEqual({type: 'string'});
+    expect(imageProperties?.['url'].anyOf?.[0]).toEqual({type: 'string', pattern: '^https?://'});
+    expect(imageProperties?.['description'].$ref).toBe('common_types.json#/$defs/DynamicString');
     expect(
       validateImage({
         id: 'chart-image',
@@ -447,6 +444,60 @@ describe('Slack catalog schema payload', () => {
     // The runtime schema still takes it, so lowering can report it as
     // A2UI_INVALID_IMAGE_URL rather than as a generic props error.
     expect(image?.schema.safeParse(mailtoImageProps).success).toBe(true);
+  });
+
+  it.each(STRING_PROPS)(
+    'checks a function call in $name against the catalog functions returning a string',
+    ({component, props}) => {
+      const runtimeSchema = slackCatalog.components.get(component)!.schema;
+      const validate = compileComponentSchema(slackCatalogJson.components[component]);
+      const published = (text: unknown) => validate({id: 'target', component, ...props(text)});
+
+      const formatted = {
+        call: 'formatNumber',
+        args: {value: {path: '/price'}},
+        returnType: 'string',
+      };
+      expect(published(formatted)).toBe(true);
+      expect(runtimeSchema.safeParse(props(formatted)).success).toBe(true);
+      expect(published({call: 'formatString', args: {value: '${/name}'}})).toBe(true);
+
+      expect(published({call: 'openUrl', args: {url: 'https://example.com'}})).toBe(false);
+      expect(published({call: 'missingFunction', args: {}})).toBe(false);
+      expect(published({call: 'formatNumber', args: {}})).toBe(false);
+      const numberResult = {call: 'add', args: {a: 1, b: 2}, returnType: 'number'};
+      expect(published(numberResult)).toBe(false);
+      expect(runtimeSchema.safeParse(props(numberResult)).success).toBe(false);
+    },
+  );
+
+  it('requires a Button action and accepts only the variants Slack draws', () => {
+    const button = slackCatalog.components.get('Button')!;
+    const validateButton = compileComponentSchema(slackCatalogJson.components.Button);
+    const props = {
+      child: 'button-label',
+      variant: 'primary',
+      action: {event: {name: 'acknowledge'}},
+    };
+    const published = (buttonProps: Record<string, unknown>) =>
+      validateButton({id: 'button', component: 'Button', ...buttonProps});
+    const {action: _action, ...withoutAction} = props;
+
+    expect(published(props)).toBe(true);
+    expect(button.schema.safeParse(props).success).toBe(true);
+    expect(
+      published({...props, action: {functionCall: {call: 'formatString', args: {value: 'x'}}}}),
+    ).toBe(true);
+    for (const unsupported of [
+      withoutAction,
+      {...props, variant: 'borderless'},
+      {...props, checks: [{condition: true, message: 'Never shown'}]},
+      {...props, isValid: true},
+      {...props, validationErrors: []},
+    ]) {
+      expect(published(unsupported), JSON.stringify(unsupported)).toBe(false);
+      expect(button.schema.safeParse(unsupported).success, JSON.stringify(unsupported)).toBe(false);
+    }
   });
 
   it('defines a strict three-row MarketSnapshot schema', () => {
@@ -497,6 +548,28 @@ describe('Slack catalog schema payload', () => {
     expect(marketSnapshotSchemaJson).toContain('sourceUrl');
   });
 
+  it('publishes the MarketSnapshot source patterns that the preview checks when drawing', () => {
+    const validate = compileComponentSchema(slackCatalogJson.components.MarketSnapshot);
+    const [{id, component, ...props}] = SLACK_COMPONENT_USAGES.MarketSnapshot.usage;
+    const withSource = (source: {sourceName?: string; sourceUrl?: string}) => ({
+      ...props,
+      markets: [{...props.markets[0], ...source}, ...props.markets.slice(1)],
+    });
+
+    expect(validate({id, component, ...props})).toBe(true);
+    for (const source of [
+      {sourceUrl: 'javascript:alert(1)'},
+      {sourceUrl: 'https://example.com/*a*'},
+      {sourceName: 'Example <https://evil.example|here>'},
+      {sourceName: 'Example\nSecond line'},
+    ]) {
+      expect(validate({id, component, ...withSource(source)}), JSON.stringify(source)).toBe(false);
+      // The runtime schema takes it, so the preview can report it as
+      // A2UI_INVALID_MARKET_SOURCE_NAME or _URL rather than as a generic props error.
+      expect(MarketSnapshotSchema.safeParse(withSource(source)).success).toBe(true);
+    }
+  });
+
   it('validates all advertised Slack usage examples against their component schemas', () => {
     expect(Object.keys(SLACK_COMPONENT_USAGES).sort()).toEqual(EXPECTED_COMPONENTS);
 
@@ -506,6 +579,14 @@ describe('Slack catalog schema payload', () => {
 
         expect(api, `Missing catalog schema for ${component}`).toBeDefined();
         expect(api?.schema.safeParse(props).success, `Invalid usage for ${component}`).toBe(true);
+        expect(
+          compileComponentSchema(slackCatalogJson.components[component])({
+            id: 'target',
+            component,
+            ...props,
+          }),
+          `Invalid published usage for ${component}`,
+        ).toBe(true);
       }
     }
   });

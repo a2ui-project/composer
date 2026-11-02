@@ -82,13 +82,13 @@ export function registerAction(
 ): string {
   const parsed = ActionSchema.safeParse(rawAction);
   if (!parsed.success) {
-    throw new LoweringError(
-      DiagnosticCode.A2UI_INVALID_ACTION,
-      `Component requires a valid A2UI action definition: ${parsed.error.issues
+    throw new LoweringError({
+      code: DiagnosticCode.A2UI_INVALID_ACTION,
+      message: `Component requires a valid A2UI action definition: ${parsed.error.issues
         .map(issue => `${issue.path.join('.') || 'action'} ${issue.message}`)
         .join('; ')}`,
       componentId,
-    );
+    });
   }
   const actionId = `a2ui-${state.revision}-${state.nextActionOrdinal}`;
   state.nextActionOrdinal += 1;

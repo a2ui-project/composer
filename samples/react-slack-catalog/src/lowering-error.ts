@@ -14,17 +14,37 @@
  * limitations under the License.
  */
 
+/** What a `LoweringError` reports. */
+export interface LoweringErrorOptions {
+  /**
+   * A `DiagnosticCode`, or the code of an error the A2UI surface reported while
+   * binding data, such as `EXPRESSION_ERROR`.
+   */
+  readonly code: string;
+  /** What is wrong, for the person editing the surface. */
+  readonly message: string;
+  /** The A2UI component the problem is in, when there is one. */
+  readonly componentId?: string;
+}
+
 /**
- * A problem that stops a surface from lowering to Slack. `lowerSurface` shows
- * it as the one diagnostic of an `ERROR` snapshot, with this `code`.
+ * An error that stops the preview from turning an A2UI surface into Slack
+ * blocks, such as a component with no Slack equivalent, a value Slack doesn't
+ * accept, or blocks over one of Slack's limits. Throw it while turning the
+ * surface into Slack blocks or checking those blocks. The preview then draws no
+ * Slack blocks for the surface, and lists one diagnostic with this error's
+ * `code`, `message` and `componentId`.
  */
 export class LoweringError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly componentId?: string,
-  ) {
+  /** A `DiagnosticCode`, or the code of an error the A2UI surface reported. */
+  readonly code: string;
+  /** The A2UI component the problem is in, when there is one. */
+  readonly componentId?: string;
+
+  constructor({code, message, componentId}: LoweringErrorOptions) {
     super(message);
     this.name = 'LoweringError';
+    this.code = code;
+    this.componentId = componentId;
   }
 }

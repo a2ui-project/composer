@@ -17,6 +17,8 @@
 import {ComponentContext, type SurfaceModel} from '@a2ui/web_core/v0_9';
 import {createNativeNode, type ChannelNode} from '@copilotkit/channels-ui';
 import {type InputBlock} from '@slack/types';
+import {LoweringError} from './lowering-error';
+import {DiagnosticCode} from './preview-snapshot';
 import {SLACK_INPUT_LABEL_MAX_LENGTH, SLACK_TEXT_INPUT_MAX_LENGTH} from './slack-limits';
 
 /** The A2UI components the sample lowers onto Slack inputs. */
@@ -39,12 +41,12 @@ export enum InputKind {
 }
 
 /**
- * An A2UI TextField or DateTimeInput lowered onto a Slack input, kept so text
- * typed in Slack can be written back to the A2UI data model.
+ * A Slack input in the preview and the A2UI data it edits: the TextField or
+ * DateTimeInput it was drawn from, and the data model path where what the user
+ * types into it is stored.
  *
- * Create it with `createInputDispatchEntry`, which checks the component has a
- * writable value binding. The other functions here take an entry, so they rely
- * on that check instead of repeating it.
+ * Create one with `createInputDispatchEntry`, draw it with `lowerFormInput`,
+ * and pass it to `updateFormInput` with each value the user types.
  */
 export interface InputDispatchEntry {
   /** The Slack `action_id` given to the input element. */
@@ -66,8 +68,8 @@ export interface InputDispatchEntry {
 /**
  * Wraps a TextField or DateTimeInput for use as a Slack input.
  *
- * @throws If the component's `value` isn't bound to a data model path, since
- *     Slack input would have nowhere to go.
+ * @throws LoweringError If the component's `value` isn't bound to a data model
+ *     path, since Slack input would have nowhere to go.
  */
 export function createInputDispatchEntry(
   actionId: string,
@@ -86,7 +88,11 @@ export function createInputDispatchEntry(
     typeof binding.path !== 'string' ||
     !binding.path
   ) {
-    throw new Error('Slack inputs require a writable value binding.');
+    throw new LoweringError({
+      code: DiagnosticCode.A2UI_INVALID_INPUT_BINDING,
+      message: 'Slack inputs require a writable value binding.',
+      componentId,
+    });
   }
   return {
     actionId,
@@ -107,7 +113,8 @@ export function createInputDispatchEntry(
 /**
  * Builds the Slack input block for an entry, pre-filled from the data model.
  *
- * @throws If the label or the current value breaks one of Slack's limits.
+ * @throws LoweringError If the label or the current value breaks one of Slack's
+ *     limits.
  */
 export function lowerFormInput(
   entry: InputDispatchEntry,
@@ -115,9 +122,11 @@ export function lowerFormInput(
 ): ChannelNode {
   const label = props.label ?? (entry.kind === InputKind.DATE ? 'Date' : undefined);
   if (typeof label !== 'string' || !label.trim() || label.length > SLACK_INPUT_LABEL_MAX_LENGTH) {
-    throw new Error(
-      `Slack input labels must contain 1–${SLACK_INPUT_LABEL_MAX_LENGTH} characters.`,
-    );
+    throw new LoweringError({
+      code: DiagnosticCode.A2UI_INVALID_INPUT_LABEL,
+      message: `Slack input labels must contain 1–${SLACK_INPUT_LABEL_MAX_LENGTH} characters.`,
+      componentId: entry.componentId,
+    });
   }
   const value = readFormInputValue(entry);
   validateInputValue(entry, value);
@@ -148,7 +157,8 @@ export function lowerFormInput(
 /**
  * Writes a value typed in Slack to the input's data model path.
  *
- * @throws If the value isn't one Slack's input could have produced.
+ * @throws LoweringError If the value isn't one Slack's input could have
+ *     produced.
  */
 export function updateFormInput(entry: InputDispatchEntry, value: unknown): void {
   validateInputValue(entry, value);
@@ -164,8 +174,14 @@ export function readFormInputValue(entry: InputDispatchEntry): unknown {
 }
 
 function validateInputValue(entry: InputDispatchEntry, value: unknown): asserts value is string {
+  const invalidValue = (message: string) =>
+    new LoweringError({
+      code: DiagnosticCode.A2UI_INVALID_INPUT_VALUE,
+      message,
+      componentId: entry.componentId,
+    });
   if (typeof value !== 'string') {
-    throw new Error('Slack input values must be strings.');
+    throw invalidValue('Slack input values must be strings.');
   }
   if (entry.kind === InputKind.DATE) {
     if (value === '') {
@@ -178,15 +194,17 @@ function validateInputValue(entry: InputDispatchEntry, value: unknown): asserts 
       !Number.isFinite(date.getTime()) ||
       date.toISOString().slice(0, 10) !== value
     ) {
-      throw new Error('Slack dates must be valid calendar dates in YYYY-MM-DD format.');
+      throw invalidValue('Slack dates must be valid calendar dates in YYYY-MM-DD format.');
     }
     return;
   }
   if (value.length > SLACK_TEXT_INPUT_MAX_LENGTH) {
-    throw new Error(`Slack text inputs accept at most ${SLACK_TEXT_INPUT_MAX_LENGTH} characters.`);
+    throw invalidValue(
+      `Slack text inputs accept at most ${SLACK_TEXT_INPUT_MAX_LENGTH} characters.`,
+    );
   }
   if (entry.kind === InputKind.SHORT_TEXT && /[\r\n]/.test(value)) {
-    throw new Error(
+    throw invalidValue(
       'Slack shortText inputs must contain a single line. Use longText for multiple lines.',
     );
   }

@@ -18,11 +18,15 @@ import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {a2uiBridge, ThemePreference, type RendererConfig} from 'a2ui-bridge';
-import {type A2uiMessage, type UpdateComponentsMessage} from '@a2ui/web_core/v0_9';
+import {
+  ComponentContext,
+  type A2uiMessage,
+  type UpdateComponentsMessage,
+} from '@a2ui/web_core/v0_9';
 import {slackCatalogJson} from './catalog';
 import {App} from './App';
 import {SlackPreview} from './SlackPreview';
-import {PreviewStatus, type PreviewSnapshot} from './preview-snapshot';
+import {DiagnosticCode, PreviewStatus, type PreviewSnapshot} from './preview-snapshot';
 
 const rendererMock = vi.hoisted(() => vi.fn());
 
@@ -255,6 +259,41 @@ describe('SlackPreview', () => {
         },
       ],
     });
+  });
+
+  it('shows a failed click and the render warnings in one diagnostics list', async () => {
+    vi.spyOn(ComponentContext.prototype, 'dispatchAction').mockRejectedValue(
+      new Error('workspace action failed'),
+    );
+    await renderApp();
+    await act(async () => {
+      attachedProcessor?.processMessages([
+        createSurface(),
+        updateComponents('test-surface', [
+          {id: 'root', component: 'Row', children: ['summary', 'acknowledge']},
+          {id: 'summary', component: 'Text', text: 'Ready for Slack review'},
+          {
+            id: 'acknowledge',
+            component: 'Button',
+            child: 'acknowledge-label',
+            action: {event: {name: 'acknowledge'}},
+          },
+          {id: 'acknowledge-label', component: 'Text', text: 'Acknowledge'},
+        ]),
+      ]);
+    });
+    const {onInteraction} = rendererMock.mock.lastCall![0];
+
+    await act(async () => {
+      onInteraction({type: 'button', action_id: 'a2ui-1-1'});
+    });
+
+    const lists = container.querySelectorAll('[aria-label="Preview diagnostics"]');
+    expect(lists).toHaveLength(1);
+    expect(lists[0].textContent).toContain(DiagnosticCode.SLACK_LAYOUT_FLATTENED);
+    expect(lists[0].textContent).toContain(
+      `${DiagnosticCode.SLACK_ACTION_DISPATCH_FAILED} acknowledge workspace action failed`,
+    );
   });
 
   it('disposes the bridge subscription when unmounted', async () => {

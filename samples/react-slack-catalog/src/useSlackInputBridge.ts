@@ -41,6 +41,12 @@ const INPUT_WRAPPER =
 const ENTER_TO_SUBMIT_HINT = "↵ Please 'enter' to submit";
 
 /**
+ * Every line break in a textarea's value. A textarea's `value` writes each line
+ * break as `\n`, whatever the pasted or typed text used.
+ */
+const LINE_BREAKS = /\n/g;
+
+/**
  * Connects the Slack inputs drawn by the Tightknit renderer (the `Renderer`
  * component of @tightknitai/storybook-addon-slack-block-kit) to A2UI data
  * bindings.
@@ -101,8 +107,9 @@ export function useSlackInputBridge(
         // slack-blocks-to-jsx 1.1.2 ignores `multiline` and draws every text input
         // as a 100px textarea, so a shortText field would look like a longText
         // one (https://github.com/themashcodee/slack-blocks-to-jsx/issues/121).
-        // Size it from `multiline`, as Slack does; `onKeyDown` below stops Enter
-        // adding a line to a single-line field.
+        // Size it from `multiline`, as Slack does. `onKeyDown` below stops Enter
+        // adding a line to a single-line field, and `commitInput` replaces line
+        // breaks pasted into one.
         const multiline = block.element.multiline === true;
         control.rows = multiline ? 3 : 1;
         control.dataset.slackMultiline = String(multiline);
@@ -149,6 +156,18 @@ export function useSlackInputBridge(
     if (!wrapper || !event.currentTarget.contains(wrapper) || !inputs.has(wrapper.id)) {
       return;
     }
+    // `onKeyDown` stops Enter adding a line to a single-line field, but pasting or
+    // dropping text can still add one, which a shortText value can't hold. Put a
+    // space in place of each line break, in the field too, as a single-line
+    // browser input does. The `input` event `replaceValue` sends commits the
+    // new value.
+    if (isSingleLineTextarea(control)) {
+      const singleLine = control.value.replace(LINE_BREAKS, ' ');
+      if (singleLine !== control.value) {
+        replaceValue(control, singleLine);
+        return;
+      }
+    }
     pendingFocus.current = {
       control,
       index: Array.from(inputs.keys()).indexOf(wrapper.id),
@@ -169,12 +188,35 @@ export function useSlackInputBridge(
     if (
       event.key === 'Enter' &&
       !event.nativeEvent.isComposing &&
-      event.target instanceof HTMLTextAreaElement &&
-      event.target.dataset.slackMultiline === 'false'
+      isSingleLineTextarea(event.target)
     ) {
       event.preventDefault();
     }
   };
 
   return {ref, onChange, onKeyDown, onCompositionEnd: commitInput};
+}
+
+/** Whether `target` is a textarea drawn for a single-line Slack text input. */
+function isSingleLineTextarea(target: EventTarget): target is HTMLTextAreaElement {
+  return target instanceof HTMLTextAreaElement && target.dataset.slackMultiline === 'false';
+}
+
+/**
+ * Sets a textarea's value and sends the `input` event typing would, so the React
+ * state slack-blocks-to-jsx keeps for the field takes the new value. React
+ * records each value written through the element's `value` property and treats
+ * an `input` event that leaves that value unchanged as no change, so this writes
+ * through the `HTMLTextAreaElement` prototype's setter instead. The caret stays
+ * where it was, so `value` must be as long as the current value.
+ */
+function replaceValue(control: HTMLTextAreaElement, value: string): void {
+  const {selectionStart, selectionEnd} = control;
+  // `value` is a DOM accessor property, so the descriptor and its setter exist.
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+    control,
+    value,
+  );
+  control.setSelectionRange(selectionStart, selectionEnd);
+  control.dispatchEvent(new Event('input', {bubbles: true}));
 }

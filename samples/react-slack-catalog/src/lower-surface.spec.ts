@@ -521,6 +521,82 @@ describe('createSlackPreviewSession', () => {
     ]);
   });
 
+  describe('MarketSnapshot source links', () => {
+    const [marketSnapshot] = SLACK_COMPONENT_USAGES.MarketSnapshot.usage;
+
+    const renderSource = (source: {sourceName: string; sourceUrl: string}) => {
+      session.processMessages([
+        createSurface(),
+        updateComponents('test-surface', [
+          {
+            ...marketSnapshot,
+            id: 'root',
+            markets: [
+              {...marketSnapshot.markets[0], ...source},
+              ...marketSnapshot.markets.slice(1),
+            ],
+          },
+        ]),
+      ]);
+    };
+
+    const firstSourceCell = (): unknown => {
+      const table = session.getSnapshot().blocks.find(block => blockRecord(block).type === 'table');
+      const rows = blockRecord(table).rows as unknown[][];
+      return rows[1][3];
+    };
+
+    it('links the source name to the source URL, whatever markup the URL holds', () => {
+      renderSource({
+        sourceName: 'S&P Global | Indices',
+        sourceUrl: 'https://en.example.com/wiki/S_P_(index)/[a]?q=1&r=x|y~~z~~#__top__',
+      });
+
+      expect(session.getSnapshot()).toMatchObject({status: PreviewStatus.READY, diagnostics: []});
+      expect(firstSourceCell()).toEqual({
+        type: 'rich_text',
+        elements: [
+          {
+            type: 'rich_text_section',
+            elements: [
+              {
+                type: 'link',
+                url: 'https://en.example.com/wiki/S%5FP%5F(index)/%5Ba%5D?q=1&r=x%7Cy%7E%7Ez%7E%7E#%5F%5Ftop%5F%5F',
+                text: 'S&P Global | Indices',
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    it.each([
+      {code: DiagnosticCode.A2UI_INVALID_MARKET_SOURCE_URL, sourceUrl: 'javascript:alert(1)'},
+      {code: DiagnosticCode.A2UI_INVALID_MARKET_SOURCE_URL, sourceUrl: 'data:text/html,<p>x</p>'},
+      {code: DiagnosticCode.A2UI_INVALID_MARKET_SOURCE_URL, sourceUrl: 'ftp://example.com/'},
+      {code: DiagnosticCode.A2UI_INVALID_MARKET_SOURCE_URL, sourceUrl: 'not a url'},
+      {code: DiagnosticCode.A2UI_INVALID_MARKET_SOURCE_URL, sourceUrl: 'https://example.com/*a*'},
+      {
+        code: DiagnosticCode.A2UI_INVALID_MARKET_SOURCE_NAME,
+        sourceName: 'Example <https://evil.example|here>',
+      },
+      {
+        code: DiagnosticCode.A2UI_INVALID_MARKET_SOURCE_NAME,
+        sourceName: 'Example [here](https://evil.example)',
+      },
+      {code: DiagnosticCode.A2UI_INVALID_MARKET_SOURCE_NAME, sourceName: 'Example\nSecond line'},
+      {code: DiagnosticCode.A2UI_INVALID_MARKET_SOURCE_NAME, sourceName: ''},
+    ])('rejects a source the link could not hold as written (%#)', ({code, ...source}) => {
+      renderSource({sourceName: 'Example', sourceUrl: 'https://example.com/', ...source});
+
+      expect(session.getSnapshot()).toMatchObject({
+        status: PreviewStatus.ERROR,
+        blocks: [],
+        diagnostics: [{level: DiagnosticLevel.ERROR, code, componentId: 'root'}],
+      });
+    });
+  });
+
   it('diagnoses Gallery-wrapped MarketSnapshot layout flattening on the wrapper only', () => {
     const [marketSnapshot] = SLACK_COMPONENT_USAGES.MarketSnapshot.usage;
 
