@@ -33,7 +33,7 @@
     "@a2ui/web_core": "0.10.7",
     "@modelcontextprotocol/sdk": "1.32.1",
     "jmespath": "0.16.0",
-    "re2js": "2.8.6",
+    "re2js": "2.8.7",
     "zod": "4.6.5"
   },
   "devDependencies": {
