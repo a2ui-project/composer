@@ -1,0 +1,1 @@
+import{It as U}from"./chunk-DOs8whki.js";var a={enabled:!1,measurementId:``};var o=new U(`USAGE_TRACKING_CONFIG`,{providedIn:`root`,factory:()=>a});var e=class{};export{o as n,e as t};
