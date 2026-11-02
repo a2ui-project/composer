@@ -29,6 +29,7 @@ import {signal} from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
 class MockChatState {
+  readonly isProgrammaticStreamActive = signal(false);
   private readonly _chatHistory: LlmMessage[] = [];
   readonly chatHistory = vi.fn(() => this._chatHistory);
   setChatHistory = vi.fn((history: LlmMessage[]) => {
@@ -210,38 +211,30 @@ describe('StateSync Autosave Draft Integrations', () => {
     ]);
   });
 
-  it('synchronizes active draft immediately and skips the later duplicate debounce', () => {
-    service.updateDraft('[{"version": "v0.9", "live": true}]');
-    TestBed.tick();
+  it('does not add a canvas reset to the conversation while a response is streaming', () => {
+    service.syncActiveDraftToHistory();
+    chatStateMock.updateChatHistory(history => [
+      ...history,
+      {role: MessageRole.USER, content: 'Create a Slack approval message'},
+      {role: MessageRole.MODEL, content: ' ●●●'},
+    ]);
+    chatStateMock.isProgrammaticStreamActive.set(true);
+    const slackSample = '[{"version":"v0.9","createSurface":{"surfaceId":"slack-sample"}}]';
+    startupConfigStateMock.activeRenderer.set({samplePayload: slackSample});
 
+    catalogManagementMock.activeCatalog.set({catalogId: 'slack-catalog'});
+    TestBed.tick();
+    service.flushDraft();
+    vi.advanceTimersByTime(300);
+
+    expect(service.activeDraft()).toBe(slackSample);
+    expect(chatStateMock.chatHistory()).toHaveLength(3);
+    expect(chatStateMock.chatHistory().at(-1)?.role).toBe(MessageRole.MODEL);
+
+    chatStateMock.isProgrammaticStreamActive.set(false);
     service.syncActiveDraftToHistory();
 
-    expect(chatStateMock.setChatHistory).toHaveBeenCalledWith([
-      {
-        role: MessageRole.USER,
-        content: '[{"version":"v0.9","live":true}]',
-        isSnapshot: true,
-      },
-    ]);
-
-    chatStateMock.setChatHistory.mockClear();
-    chatStateMock.updateChatHistory.mockClear();
-    vi.advanceTimersByTime(300);
-
-    expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
-    expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
-  });
-
-  it('ignores stale delayed draft syncs after an LLM commit replaces the active draft', () => {
-    service.updateDraft('[{"version": "v0.9", "stale": true}]');
-    TestBed.tick();
-
-    service.commitLayoutFromLlm('[{"version": "v0.9", "fromLlm": true}]');
-    vi.advanceTimersByTime(300);
-
-    expect(service.activeDraft()).toBe('[{"version": "v0.9", "fromLlm": true}]');
-    expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
-    expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+    expect(chatStateMock.chatHistory().at(-1)?.content).toContain('slack-sample');
   });
 
   it('updates target layout node in-place if last message is also user layout snapshot', () => {

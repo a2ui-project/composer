@@ -39,6 +39,20 @@ export class EnvironmentContextService {
     return new URL(url, this.document.baseURI);
   }
 
+  /**
+   * Whether two renderer URLs load the same page once resolved with
+   * `resolveRendererUrl`, so a page-relative URL from the app config matches the
+   * absolute URL a `?renderer=` link resolved to. URLs that can't be parsed match
+   * only when they're written the same.
+   */
+  isSameRendererUrl(first: string, second: string): boolean {
+    try {
+      return this.resolveRendererUrl(first).href === this.resolveRendererUrl(second).href;
+    } catch {
+      return first === second;
+    }
+  }
+
   isLocalhost(hostname: string): boolean {
     return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
   }

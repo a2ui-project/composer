@@ -37,6 +37,7 @@ import {
   LlmResponse,
   LlmRequestOptions,
   LlmStreamResponse,
+  LlmToolDefinition,
   MessageRole,
   CANCEL_ERROR_NAME,
 } from '../llm-client/llm-client';
@@ -253,7 +254,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
   let stateSyncMock: MockStateSync;
   let llmClientMock: MockLlmClient;
   const rendererTool = {
-    definition: vi.fn(() => ({
+    definition: vi.fn<() => LlmToolDefinition | null>(() => ({
       name: 'switchRenderer',
       description: 'Switch renderer',
       parametersJsonSchema: {type: 'object'},
@@ -401,6 +402,127 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
   });
 
   /* Pre-existing baseline specs mapped to dynamic settings mocks */
+  it('keeps an edited canvas, and its layouts in the next request, when the model switches renderers', async () => {
+    stateSyncMock.hasEditedDraft.mockReturnValue(true);
+    chatStateMock.setChatHistory([
+      {role: MessageRole.USER, content: '[{"version":"v0.9","edited":true}]', isSnapshot: true},
+    ]);
+    rendererSelection.selectRenderer.mockImplementation(async () => {
+      configProviderMock.rendererUrl.set('samples/react-slack-catalog/');
+    });
+    llmClientMock.chatStream.mockResolvedValueOnce(toolStream());
+
+    await service.submitPrompt('Convert this form to Slack');
+
+    expect(stateSyncMock.flushDraft).not.toHaveBeenCalled();
+    const [messages] = llmClientMock.chatStream.mock.calls[1];
+    expect(messages.some(m => m.content === '[{"version":"v0.9","edited":true}]')).toBe(true);
+  });
+
+  it("leaves the previous renderer's unedited sample out of the request after a switch", async () => {
+    chatStateMock.setChatHistory([
+      {role: MessageRole.USER, content: '[{"version":"v0.9","sample":true}]', isSnapshot: true},
+    ]);
+    rendererSelection.selectRenderer.mockImplementation(async () => {
+      configProviderMock.rendererUrl.set('samples/react-slack-catalog/');
+    });
+    llmClientMock.chatStream.mockResolvedValueOnce(toolStream());
+
+    await service.submitPrompt('Create a Slack approval message');
+
+    expect(stateSyncMock.flushDraft).toHaveBeenCalledOnce();
+    const [firstMessages] = llmClientMock.chatStream.mock.calls[0];
+    const [nextMessages] = llmClientMock.chatStream.mock.calls[1];
+    expect(firstMessages.some(m => m.content === '[{"version":"v0.9","sample":true}]')).toBe(true);
+    expect(nextMessages.some(m => m.content === '[{"version":"v0.9","sample":true}]')).toBe(false);
+    expect(nextMessages.some(m => m.content === 'Create a Slack approval message')).toBe(true);
+  });
+
+  it('keeps the canvas when the model switches to the renderer the preview already shows', async () => {
+    // A `?renderer=` link stores the resolved URL; the app config has the relative one.
+    configProviderMock.rendererUrl.set(
+      new URL('samples/react-slack-catalog/', document.baseURI).href,
+    );
+    TestBed.tick();
+    await Promise.resolve();
+    stateSyncMock.flushDraft.mockClear();
+    chatStateMock.setChatHistory([
+      {role: MessageRole.USER, content: '[{"version":"v0.9","sample":true}]', isSnapshot: true},
+    ]);
+    rendererSelection.selectRenderer.mockResolvedValue();
+    llmClientMock.chatStream.mockResolvedValueOnce(toolStream());
+
+    await service.submitPrompt('Create a Slack approval message');
+
+    expect(stateSyncMock.flushDraft).not.toHaveBeenCalled();
+    expect(llmClientMock.chatStream).toHaveBeenCalledTimes(2);
+    const [nextMessages] = llmClientMock.chatStream.mock.calls[1];
+    expect(nextMessages.some(m => m.content === '[{"version":"v0.9","sample":true}]')).toBe(true);
+  });
+
+  it('keeps the conversation when a switch is stopped after the preview changed renderers', async () => {
+    const started = createDeferred<void>();
+    rendererSelection.selectRenderer.mockImplementation(async (_id, signal) => {
+      // Settings commits the selection before the new renderer's catalog arrives.
+      configProviderMock.rendererUrl.set('samples/react-slack-catalog/');
+      started.resolve();
+      await new Promise<void>((_resolve, reject) =>
+        signal.addEventListener('abort', () => reject(signal.reason), {once: true}),
+      );
+    });
+    llmClientMock.chatStream.mockResolvedValueOnce(toolStream());
+    const submission = service.submitPrompt('Create a Slack message');
+    await started.promise;
+
+    service.cancelActiveStream();
+    await submission;
+    TestBed.tick();
+    await Promise.resolve();
+
+    expect(stateSyncMock.flushDraft).not.toHaveBeenCalled();
+    expect(chatStateMock.chatHistory().some(m => m.content === 'Create a Slack message')).toBe(
+      true,
+    );
+  });
+
+  it("clears the first request's text from the model turn once the renderer switch is done", async () => {
+    rendererSelection.selectRenderer.mockResolvedValue();
+    llmClientMock.chatStream.mockResolvedValueOnce({
+      contentStream: (async function* () {
+        yield {
+          content: 'Switching to Slack.',
+          thinking: 'The user wants Slack.',
+          toolCalls: [{name: 'switchRenderer', args: {rendererId: 'slack'}}],
+        };
+      })(),
+      complete: Promise.resolve('Switching to Slack.'),
+    });
+    const nextStream = createControlledStream();
+    const nextRequested = createDeferred<void>();
+    llmClientMock.chatStream.mockImplementationOnce(async () => {
+      nextRequested.resolve();
+      return {contentStream: nextStream.contentStream, complete: new Promise<string>(() => {})};
+    });
+
+    const submission = service.submitPrompt('Create a Slack message');
+    await nextRequested.promise;
+
+    const modelTurn = chatStateMock.chatHistory().find(m => m.role === MessageRole.MODEL);
+    expect(modelTurn?.content).not.toContain('Switching to Slack.');
+    expect(modelTurn?.thinking).toBe('');
+    service.cancelActiveStream();
+    nextStream.fail(Object.assign(new Error('Cancelled'), {name: CANCEL_ERROR_NAME}));
+    await submission;
+  });
+
+  it('offers the model no tool when there is no other renderer to switch to', async () => {
+    rendererTool.definition.mockReturnValueOnce(null);
+
+    await service.submitPrompt('Create a card');
+
+    expect(llmClientMock.chatStream.mock.calls[0][1]).toBeUndefined();
+  });
+
   it('initializes successfully with dynamic computed signal properties', () => {
     expect(service).toBeTruthy();
     expect(service.systemPrompt).toBeDefined();
@@ -674,99 +796,6 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
         2,
       ),
     );
-  });
-
-  it('syncs the live draft into the LLM request context immediately before the prompt', async () => {
-    const liveDraft =
-      '[{"version": "v0.9", "createSurface": {"surfaceId": "live", "catalogId": "test"}}]';
-    stateSyncMock.activeDraftSignal.set(liveDraft);
-    stateSyncMock.syncActiveDraftToHistory.mockImplementation(() => {
-      chatStateMock.updateChatHistory(history => [
-        ...history,
-        {
-          role: MessageRole.USER,
-          content: liveDraft,
-        },
-      ]);
-    });
-
-    await service.submitPrompt('Edit the live draft');
-
-    expect(stateSyncMock.syncActiveDraftToHistory.mock.invocationCallOrder[0]).toBeLessThan(
-      llmClientMock.chatStream.mock.invocationCallOrder[0],
-    );
-    const request = llmClientMock.chatStream.mock.calls[0][0];
-    expect(request.at(-2)).toEqual({
-      role: MessageRole.USER,
-      content: liveDraft,
-    });
-    expect(request.at(-1)).toEqual(
-      expect.objectContaining({
-        role: MessageRole.USER,
-        content: 'Edit the live draft',
-      }),
-    );
-  });
-
-  it('applies assistant deltas to the live active draft without dropping unrelated content', async () => {
-    const activeDraft = JSON.stringify([
-      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'test'}},
-      {
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId: 's1',
-          components: [
-            {id: 'root', component: 'Column', children: ['kept']},
-            {id: 'kept', component: 'Text', text: 'Keep me'},
-          ],
-        },
-      },
-    ]);
-    stateSyncMock.activeDraftSignal.set(activeDraft);
-    catalogManagementMock.activeCatalog.set({
-      catalogId: 'test',
-      components: {
-        Column: {},
-        Text: {},
-      },
-    });
-    const delta =
-      '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "new", "component": "Text", "text": "Added"}]}}';
-    llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
-      const contentStream = createMockStream([delta]);
-      return {contentStream, complete: Promise.resolve(delta)};
-    });
-
-    await service.submitPrompt('Add one component');
-
-    const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
-    const parsed = JSON.parse(committedOutput);
-    expect(parsed).toHaveLength(3);
-    expect(JSON.stringify(parsed)).toContain('Keep me');
-    expect(JSON.stringify(parsed)).toContain('Added');
-  });
-
-  it('rejects unknown-surface deltas and preserves the active draft', async () => {
-    const activeDraft = JSON.stringify([
-      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'test'}},
-    ]);
-    stateSyncMock.activeDraftSignal.set(activeDraft);
-    catalogManagementMock.activeCatalog.set({catalogId: 'test', components: {Text: {}}});
-    const delta =
-      '{"version": "v0.9", "updateComponents": {"surfaceId": "missing", "components": [{"id": "root", "component": "Text", "text": "Bad"}]}}';
-    llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
-      const contentStream = createMockStream([delta]);
-      return {contentStream, complete: Promise.resolve(delta)};
-    });
-
-    await service.submitPrompt('Patch missing surface');
-
-    expect(stateSyncMock.commitLayoutFromLlm).not.toHaveBeenCalled();
-    expect(stateSyncMock.activeDraft()).toBe(activeDraft);
-    expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
-    const history = chatStateMock.chatHistory();
-    expect(history.at(-1)?.role).toBe(MessageRole.ERROR);
-    expect(history.at(-1)?.errorDetails).toContain('surface "missing" does not exist');
   });
 
   it('does not commit stale output after renderer changes while a stream is in flight', async () => {

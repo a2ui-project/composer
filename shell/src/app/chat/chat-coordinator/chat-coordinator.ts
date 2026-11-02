@@ -48,6 +48,7 @@ import {cleanErrorMessage, redactApiKey} from '../chat-service/error-utils';
 import {RendererSelection} from '../renderer-selection/renderer-selection';
 import {RendererTool} from '../renderer-selection/renderer-tool';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {getCatalogId} from '../../storage/models/catalog-storage.model';
 
 /** Why a response was cancelled before it finished. */
@@ -122,6 +123,7 @@ export class ChatCoordinator {
   private readonly llmClient = inject(LlmClient);
   private readonly rendererTool = inject(RendererTool);
   private readonly rendererSelection = inject(RendererSelection);
+  private readonly environmentContext = inject(EnvironmentContextService);
   private readonly errorLogger = inject(ErrorLogger);
   private readonly logger = inject(ErrorLogger).withTag('[ChatCoordinator]');
   private readonly chatCleaner = inject(ChatCleaner);
@@ -171,7 +173,10 @@ export class ChatCoordinator {
       .subscribe(url => {
         // The renderer tool's own switch is part of the request in flight, which
         // rebuilds the canvas for the new catalog itself.
-        if (url === this.expectedToolRendererUrl) {
+        if (
+          this.expectedToolRendererUrl !== undefined &&
+          this.environmentContext.isSameRendererUrl(url, this.expectedToolRendererUrl)
+        ) {
           this.expectedToolRendererUrl = undefined;
           return;
         }
@@ -525,13 +530,7 @@ export class ChatCoordinator {
       if (isLastRequest || response.toolCalls.length !== 1) {
         throw new Error('The assistant must request one renderer change at a time.');
       }
-      const nextContext = await this.switchRendererForToolCall(
-        response.toolCalls[0],
-        run.context,
-        run.requestId,
-        run.rendererUrl,
-        run.toolSignal,
-      );
+      const nextContext = await this.switchRendererForToolCall(response.toolCalls[0], run);
       if (!nextContext) {
         return;
       }
@@ -553,9 +552,10 @@ export class ChatCoordinator {
     isLastRequest: boolean,
   ): Promise<ModelResponse | null> {
     // Trigger streaming GenAI completions call using client facade
+    const tool = isLastRequest ? null : this.rendererTool.definition();
     const responseStream = await this.llmClient.chatStream(
       run.context,
-      isLastRequest ? undefined : {tools: [this.rendererTool.definition()]},
+      tool ? {tools: [tool]} : undefined,
     );
     run.responseStream = responseStream;
 
@@ -674,8 +674,14 @@ export class ChatCoordinator {
    * Switches to the renderer the model asked for with the renderer tool, instead of
    * answering, and returns the request to send next: the same conversation, told to
    * use the newly selected catalog. The switch is the request's own, so it isn't
-   * handled as a renderer change (see the constructor); the canvas is rebuilt for the
-   * new catalog by the next response.
+   * handled as a renderer change (see the constructor); the next response rebuilds the
+   * canvas for the new catalog.
+   *
+   * The canvas changes as it does when the user picks another renderer, except that the
+   * conversation is kept. An edited canvas stays, so a next request that fails or is
+   * stopped doesn't lose it, and the next request rebuilds it for the new catalog. An
+   * unedited canvas is the previous renderer's sample: it's replaced with the new
+   * renderer's sample, and the next request is sent without it.
    *
    * @return The next request's messages, or null if the conversation was cleared
    *     during the switch.
@@ -683,35 +689,56 @@ export class ChatCoordinator {
    */
   private async switchRendererForToolCall(
     call: LlmToolCall,
-    context: LlmMessage[],
-    requestId: number,
-    rendererUrlAtSubmit: string,
-    signal: AbortSignal,
+    run: PromptRun,
   ): Promise<LlmMessage[] | null> {
     if (this.cancelReason !== null) {
       throw this.cancelError();
     }
     const renderer = this.rendererTool.rendererFor(call);
-    const changedRenderer = renderer.rendererUrl !== rendererUrlAtSubmit;
+    const hadEditedDraft = this.stateSync.hasEditedDraft();
+    const changedRenderer = !this.environmentContext.isSameRendererUrl(
+      renderer.rendererUrl,
+      run.rendererUrl,
+    );
     this.expectedToolRendererUrl = changedRenderer ? renderer.rendererUrl : undefined;
     try {
-      await this.rendererSelection.selectRenderer(renderer.id, signal);
+      await this.rendererSelection.selectRenderer(renderer.id, run.toolSignal);
     } finally {
-      if (requestId === this.activeRequestId) {
+      // The constructor's subscriber clears the expected URL once it sees the preview
+      // switch to it. It runs on Angular's next change detection, which can come after
+      // this, for example when the switch is cancelled right after Settings commits it.
+      // So the URL is cleared here only if the preview never switched to it.
+      if (
+        run.requestId === this.activeRequestId &&
+        !this.environmentContext.isSameRendererUrl(
+          this.configProvider.rendererUrl(),
+          renderer.rendererUrl,
+        )
+      ) {
         this.expectedToolRendererUrl = undefined;
       }
     }
-    if (requestId !== this.activeRequestId) {
+    if (run.requestId !== this.activeRequestId) {
       return null;
     }
     if (this.cancelReason !== null) {
       throw this.cancelError();
     }
-    if (changedRenderer) {
+    const replacesSample = changedRenderer && !hadEditedDraft;
+    if (replacesSample) {
       this.stateSync.flushDraft();
     }
-    // Retain the user's intent and attachments. Earlier layouts remain
-    // reference material, while only the newly selected catalog is allowed.
+    // Clear what the first request streamed before it asked to switch, so a next request
+    // that fails doesn't leave it showing.
+    this.updateTargetModelMessage(run.promptId, {
+      role: MessageRole.MODEL,
+      content: this.chatCleaner.appendPulse(''),
+      thinking: '',
+      promptId: run.promptId,
+    });
+    // Retain the user's intent and attachments. Earlier layouts remain reference
+    // material, unless they show the previous renderer's sample, while only the newly
+    // selected catalog is allowed.
     const nextContext: LlmMessage[] = [
       {
         role: MessageRole.SYSTEM,
@@ -719,7 +746,11 @@ export class ChatCoordinator {
           this.systemPrompt() +
           '\nThe renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a complete createSurface/updateComponents/updateDataModel sequence.',
       },
-      ...context.filter(message => message.role !== MessageRole.SYSTEM),
+      ...run.context.filter(
+        message =>
+          message.role !== MessageRole.SYSTEM &&
+          (!replacesSample || !this.chatCleaner.isUserLayoutSnapshot(message)),
+      ),
     ];
     this.chatState.addRawLlmLog(LlmLogType.REQUEST, nextContext);
     return nextContext;

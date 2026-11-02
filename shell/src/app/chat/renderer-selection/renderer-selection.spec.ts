@@ -336,7 +336,7 @@ describe('RendererSelection', () => {
     expect(service.isSwitching()).toBe(false);
   });
 
-  it('cancels a pending handshake and does not accept late messages', async () => {
+  it('cancels a pending handshake without reporting an error, and does not accept late messages', async () => {
     const controller = new AbortController();
     const selection = service.selectRenderer('lit', controller.signal);
     const cancellation = new Error('Renderer change canceled.');
@@ -346,7 +346,7 @@ describe('RendererSelection', () => {
     controller.abort(cancellation);
     await rejection;
     finishCatalog();
-    expect(service.error()).toContain('canceled');
+    expect(service.error()).toBeNull();
     expect(service.isSwitching()).toBe(false);
   });
 

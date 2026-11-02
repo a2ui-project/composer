@@ -33,22 +33,35 @@ export class RendererTool {
   private readonly selection = inject(RendererSelection);
   private readonly environmentContext = inject(EnvironmentContextService);
 
-  definition(): LlmToolDefinition {
+  /**
+   * The tool to offer the model, or null when there's no other renderer to switch to.
+   * With no renderers configured, the tool's `rendererId` would be an empty `enum`,
+   * which the model API rejects as an invalid request.
+   */
+  definition(): LlmToolDefinition | null {
     const renderers = this.selection.renderers();
+    if (renderers.length < 2) {
+      return null;
+    }
     const available = renderers.map(({id, name, rendererUrl}) => ({
       id,
       name,
       origin: this.originOf(rendererUrl),
     }));
-    const current = this.selection.selectedRendererId();
+    // The renderer the preview shows, which can differ from the selected one after a
+    // `?renderer=` link; see `RendererSelection.activeRenderer`. A preview showing a
+    // renderer that isn't configured has no current renderer to name.
+    const current = this.selection.activeRenderer()?.id;
     const currentOrigin = available.find(renderer => renderer.id === current)?.origin;
+    const currentLine = current
+      ? `Current renderer: ${current}${currentOrigin ? `, origin ${currentOrigin}` : ''}.\n`
+      : '';
     return {
       name: TOOL_NAME,
       description: `Switch the canvas renderer ONLY when the user asks for an output format that another renderer produces, choosing by the renderers' names.
 Do not switch just because the content mentions a platform or format. Keep the active renderer for ordinary edits.
 If more than one renderer produces that format, choose the one whose origin is the current renderer's origin, unless the user asks for another.
-Current renderer: ${current}${currentOrigin ? `, origin ${currentOrigin}` : ''}.
-Available renderers: ${JSON.stringify(available)}.
+${currentLine}Available renderers: ${JSON.stringify(available)}.
 Call this tool before emitting any canvas JSON; generation resumes with the selected catalog.`,
       parametersJsonSchema: {
         type: 'object',

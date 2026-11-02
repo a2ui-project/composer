@@ -86,6 +86,24 @@ describe('EnvironmentContextService', () => {
     it('throws for a URL that cannot be parsed', () => {
       expect(() => service.resolveRendererUrl('http://')).toThrow(TypeError);
     });
+
+    it('matches a page-relative URL to the absolute URL it resolves to', () => {
+      serveComposerFrom('https://example.com/composer/');
+      expect(
+        service.isSameRendererUrl(
+          'samples/bundled-renderer/',
+          'https://example.com/composer/samples/bundled-renderer/',
+        ),
+      ).toBe(true);
+      expect(
+        service.isSameRendererUrl('samples/bundled-renderer/', 'https://example.com/other/'),
+      ).toBe(false);
+    });
+
+    it('matches URLs that cannot be parsed only when they are written the same', () => {
+      expect(service.isSameRendererUrl('http://', 'http://')).toBe(true);
+      expect(service.isSameRendererUrl('http://', 'https://')).toBe(false);
+    });
   });
 
   it('determines if environment is localhost', () => {

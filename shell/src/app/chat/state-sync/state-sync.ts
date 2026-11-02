@@ -132,6 +132,14 @@ export class StateSync {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((val: string) => {
+        // While a response streams, its model turn must stay the conversation's last
+        // turn. The editor and preview are locked then, so a canvas change can only be
+        // a reset to the renderer's sample, for example after the assistant switched
+        // renderers; the response replaces it, and the next prompt sends the canvas
+        // with its request either way.
+        if (this.chatState.isProgrammaticStreamActive()) {
+          return;
+        }
         this.syncLayoutToHistory(val);
       });
   }

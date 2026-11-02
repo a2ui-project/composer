@@ -40,11 +40,13 @@ describe('RendererTool', () => {
     readOnly: true,
   };
   const selection = {
-    selectedRendererId: signal('default'),
+    activeRenderer: signal<typeof basic | null>(null),
     renderers: signal([basic, slack, localSlack]),
   };
   let tool: RendererTool;
   beforeEach(() => {
+    selection.activeRenderer.set(null);
+    selection.renderers.set([basic, slack, localSlack]);
     TestBed.configureTestingModule({
       providers: [{provide: RendererSelection, useValue: selection}],
     });
@@ -52,7 +54,8 @@ describe('RendererTool', () => {
   });
 
   it('offers every configured renderer with the origin it is served from', () => {
-    const definition = tool.definition();
+    selection.activeRenderer.set(basic);
+    const definition = tool.definition()!;
     expect(definition.parametersJsonSchema).toMatchObject({
       properties: {rendererId: {enum: ['default', 'slack', 'slack-local']}},
     });
@@ -62,6 +65,30 @@ describe('RendererTool', () => {
     expect(definition.description).toContain(
       '{"id":"slack-local","name":"Slack Block Kit","origin":"http://localhost:4200"}',
     );
+  });
+
+  it('names the renderer the preview shows as the current one', () => {
+    selection.activeRenderer.set(slack);
+
+    expect(tool.definition()!.description).toContain(
+      'Current renderer: slack, origin https://renderers.example.',
+    );
+  });
+
+  it('names no current renderer when the preview shows one that is not configured', () => {
+    const description = tool.definition()!.description;
+
+    expect(description).not.toContain('Current renderer');
+    expect(description).toContain('Available renderers: ');
+  });
+
+  it.each([
+    {count: 'no renderers', renderers: []},
+    {count: 'one renderer', renderers: [basic]},
+  ])('offers no tool with $count to choose from', ({renderers}) => {
+    selection.renderers.set(renderers);
+
+    expect(tool.definition()).toBeNull();
   });
 
   it('returns the configured renderer a call names', () => {

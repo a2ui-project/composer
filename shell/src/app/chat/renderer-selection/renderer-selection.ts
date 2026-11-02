@@ -151,7 +151,13 @@ export class RendererSelection {
     try {
       await Promise.all([selection, wait.promise]);
     } catch (error) {
-      this._error.set(error instanceof Error ? error.message : 'Could not change the renderer.');
+      // A caller that cancels the switch, such as the assistant's Stop button, reports
+      // the cancellation itself. Settings can commit the selection before the switch is
+      // cancelled, and `error` clears only when the selection changes, so a message set
+      // after that would stay under the renderer menu until the next switch.
+      if (!signal?.aborted) {
+        this._error.set(error instanceof Error ? error.message : 'Could not change the renderer.');
+      }
       throw error;
     } finally {
       wait.dispose();
@@ -237,17 +243,9 @@ export class RendererSelection {
    * preview loads.
    */
   private isSameUrl(configuredUrl: string, resolvedUrl: string | null): boolean {
-    if (resolvedUrl === null) {
-      return false;
-    }
-    try {
-      return (
-        this.environmentContext.resolveRendererUrl(configuredUrl).href ===
-        this.environmentContext.resolveRendererUrl(resolvedUrl).href
-      );
-    } catch {
-      return configuredUrl === resolvedUrl;
-    }
+    return (
+      resolvedUrl !== null && this.environmentContext.isSameRendererUrl(configuredUrl, resolvedUrl)
+    );
   }
 
   private catalogWaitHost(): CatalogWaitHost {
