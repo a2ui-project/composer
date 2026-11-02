@@ -16,6 +16,7 @@
 
 import {readFileSync} from 'node:fs';
 import {expect, type FrameLocator, type Locator, type Page} from '@playwright/test';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {RENDERED_FRAME_SELECTORS} from '../src/app/preview/rendered/test/rendered-frame-selectors';
 import {firstPreviewFrame, previewIframe} from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
@@ -133,6 +134,8 @@ export function blockKitDetails(page: Page): Locator {
 interface WindowWithPreviewActivity extends Window {
   __previewActivityInstalled?: boolean;
   __lastPreviewMessageAt?: number;
+  __previewMessageCount?: number;
+  __previewRenderCount?: number;
 }
 
 /**
@@ -141,6 +144,12 @@ interface WindowWithPreviewActivity extends Window {
  */
 const PREVIEW_QUIET_MS = 800;
 
+/** How long to wait for the preview to send a message or to go quiet. */
+const PREVIEW_SETTLE_TIMEOUT_MS = 15_000;
+
+/** How often to check the preview's recorded activity while waiting. */
+const PREVIEW_ACTIVITY_POLL_MS = 50;
+
 /**
  * A viewport at which the preview is roughly the width of a 360px Slack embed. The
  * preview shares its tab group with the JSON editor and that group's width follows the
@@ -148,21 +157,85 @@ const PREVIEW_QUIET_MS = 800;
  */
 export const SLACK_360_EMBED_VIEWPORT = {width: 630, height: 900} as const;
 
-/** Starts recording when the preview iframe last sent the shell a message. */
-async function trackPreviewActivity(page: Page): Promise<void> {
-  await page.evaluate(iframeSelector => {
-    const activity = window as WindowWithPreviewActivity;
-    if (!activity.__previewActivityInstalled) {
-      activity.__previewActivityInstalled = true;
-      window.addEventListener('message', event => {
-        const frame = document.querySelector<HTMLIFrameElement>(iframeSelector);
-        if (frame && event.source === frame.contentWindow) {
+/** What the preview iframe has sent the shell so far; see `trackPreviewActivity`. */
+interface PreviewActivity {
+  /** How many messages the preview has sent. */
+  readonly messages: number;
+  /** How many of those reported a render's result: RENDER_SUCCESS or RENDER_ERROR. */
+  readonly renders: number;
+}
+
+/**
+ * Starts recording the messages the preview iframe sends the shell: how many, how many
+ * reported a render's result, and when the last one arrived. Recording starts once per
+ * page; the first time, it counts the preview as active now, so a test that waits right
+ * after loading the page still waits out the renders the page load started.
+ */
+async function trackPreviewActivity(page: Page): Promise<PreviewActivity> {
+  return page.evaluate(
+    ({iframeSelector, renderResults}) => {
+      const activity = window as WindowWithPreviewActivity;
+      if (!activity.__previewActivityInstalled) {
+        activity.__previewActivityInstalled = true;
+        activity.__previewMessageCount = 0;
+        activity.__previewRenderCount = 0;
+        activity.__lastPreviewMessageAt = performance.now();
+        window.addEventListener('message', event => {
+          const frame = document.querySelector<HTMLIFrameElement>(iframeSelector);
+          if (!frame || event.source !== frame.contentWindow) {
+            return;
+          }
           activity.__lastPreviewMessageAt = performance.now();
-        }
-      });
-    }
-    activity.__lastPreviewMessageAt = performance.now();
-  }, RENDERED_FRAME_SELECTORS.iframe);
+          activity.__previewMessageCount = (activity.__previewMessageCount ?? 0) + 1;
+          const type = (event.data as {type?: unknown} | null)?.type;
+          if (renderResults.includes(type as string)) {
+            activity.__previewRenderCount = (activity.__previewRenderCount ?? 0) + 1;
+          }
+        });
+      }
+      return {
+        messages: activity.__previewMessageCount ?? 0,
+        renders: activity.__previewRenderCount ?? 0,
+      };
+    },
+    {
+      iframeSelector: RENDERED_FRAME_SELECTORS.iframe,
+      renderResults: [
+        PreviewBridgeMessageType.RENDER_SUCCESS,
+        PreviewBridgeMessageType.RENDER_ERROR,
+      ] as string[],
+    },
+  );
+}
+
+/**
+ * What `waitForPreviewToSettle` waits for before a quiet preview. Both take counts from
+ * `trackPreviewActivity` recorded before a change, so a change whose effect reaches the
+ * preview after a delay is waited for, instead of the preview counting as settled
+ * before the change has reached it.
+ */
+interface PreviewSettleOptions {
+  /** The preview must report a render after this many, as after an editor edit. */
+  readonly afterRenders?: number;
+  /**
+   * The preview must send any message after this many, as after a change to its own
+   * page that resizes it.
+   */
+  readonly afterMessages?: number;
+}
+
+/** Waits until a recorded count on the page is greater than `count`. */
+async function waitForPreviewCountAbove(
+  page: Page,
+  read: () => number | undefined,
+  count: number,
+): Promise<void> {
+  await expect
+    .poll(() => page.evaluate(read), {
+      timeout: PREVIEW_SETTLE_TIMEOUT_MS,
+      intervals: [PREVIEW_ACTIVITY_POLL_MS],
+    })
+    .toBeGreaterThan(count);
 }
 
 /**
@@ -183,8 +256,25 @@ async function trackPreviewActivity(page: Page): Promise<void> {
  * render has replaced the controls. Wait on a real signal instead once RawFrame sends
  * each canvas once, or the bridge reports which canvas it rendered.
  */
-export async function waitForPreviewToSettle(page: Page): Promise<void> {
+export async function waitForPreviewToSettle(
+  page: Page,
+  options: PreviewSettleOptions = {},
+): Promise<void> {
   await trackPreviewActivity(page);
+  if (options.afterRenders !== undefined) {
+    await waitForPreviewCountAbove(
+      page,
+      () => (window as WindowWithPreviewActivity).__previewRenderCount,
+      options.afterRenders,
+    );
+  }
+  if (options.afterMessages !== undefined) {
+    await waitForPreviewCountAbove(
+      page,
+      () => (window as WindowWithPreviewActivity).__previewMessageCount,
+      options.afterMessages,
+    );
+  }
   await expect
     .poll(
       () =>
@@ -192,18 +282,19 @@ export async function waitForPreviewToSettle(page: Page): Promise<void> {
           () =>
             performance.now() - ((window as WindowWithPreviewActivity).__lastPreviewMessageAt ?? 0),
         ),
-      {timeout: 15_000, intervals: [100]},
+      {timeout: PREVIEW_SETTLE_TIMEOUT_MS, intervals: [PREVIEW_ACTIVITY_POLL_MS]},
     )
     .toBeGreaterThan(PREVIEW_QUIET_MS);
 }
 
 /**
  * Replaces the editor JSON the way a user would, by selecting everything and pasting,
- * then waits for the preview to settle (see waitForPreviewToSettle), so a render still
- * on its way can't replace a field the test types into next.
+ * then waits for the preview to render the new JSON and settle (see
+ * waitForPreviewToSettle), so a render still on its way can't replace a field the test
+ * types into next.
  */
 export async function replaceMonacoJson(page: Page, value: string): Promise<void> {
-  await trackPreviewActivity(page);
+  const beforeEdit = await trackPreviewActivity(page);
   // The JSON editor and the preview are tabs in one group: show the editor to edit it,
   // then the preview again, which is what the test interacts with next.
   await waitForMonacoEditor(page);
@@ -223,7 +314,7 @@ export async function replaceMonacoJson(page: Page, value: string): Promise<void
     );
   }, value);
   await waitForPreviewTab(page);
-  await waitForPreviewToSettle(page);
+  await waitForPreviewToSettle(page, {afterRenders: beforeEdit.renders});
 }
 
 /**
@@ -257,15 +348,17 @@ export async function expectBlockKitJsonToContain(page: Page, expectedText: stri
 }
 
 export async function openGeneratedBlockKit(page: Page): Promise<void> {
+  const beforeOpen = await trackPreviewActivity(page);
   const wasOpen = await blockKitDetails(page).evaluate((element: HTMLDetailsElement) => {
     const open = element.open;
     element.open = true;
     return open;
   });
   if (!wasOpen) {
-    // Opening the panel grows the preview, which resizes the frame and scrolls its docked
-    // panel; a click aimed before that settles can land beside the control it targeted.
-    await waitForPreviewToSettle(page);
+    // Opening the panel grows the preview, which reports its new size and makes the shell
+    // resize the frame and scroll its docked panel; a click aimed before that settles can
+    // land beside the control it targeted.
+    await waitForPreviewToSettle(page, {afterMessages: beforeOpen.messages});
   }
 }
 

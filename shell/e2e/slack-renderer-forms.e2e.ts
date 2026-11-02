@@ -1,6 +1,17 @@
 /**
  * Copyright 2026 Google LLC
- * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import {A2uiMessageListSchema} from '@a2ui/web_core/v0_9';
@@ -191,6 +202,7 @@ test.describe('Slack native booking form', () => {
   });
 
   test('keeps shared field bindings in sync without losing the typing cursor', async ({page}) => {
+    const errors = collectUnexpectedErrors(page);
     await openComposerWithSlackRenderer(page, {rendererId: 'slack'});
     await waitForMonacoEditor(page);
     const messages = A2uiMessageListSchema.parse(JSON.parse(bookingJson));
@@ -224,6 +236,7 @@ test.describe('Slack native booking form', () => {
     await location.pressSequentially('East ');
     await expect(location).toHaveValue('East Boston airport');
     await expect(confirmation).toHaveValue('East Boston airport');
+    expect(errors).toEqual([]);
   });
 });
 

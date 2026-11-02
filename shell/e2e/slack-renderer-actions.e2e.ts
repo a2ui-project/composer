@@ -136,7 +136,7 @@ async function roundTripWithPreview(page: Page): Promise<void> {
           captureWindow.__catalogReplies = (captureWindow.__catalogReplies ?? 0) + 1;
         }
       });
-      frame.contentWindow.postMessage({type: request}, '*');
+      frame.contentWindow.postMessage({type: request}, new URL(frame.src).origin);
     },
     {
       request: PreviewBridgeMessageType.GET_CATALOG,

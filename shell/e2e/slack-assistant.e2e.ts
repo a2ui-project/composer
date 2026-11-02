@@ -241,7 +241,7 @@ test.describe('Slack assistant browser journey', () => {
     const instructions = page.getByRole('dialog', {name: 'System Instructions'});
     // The catalog declares the pattern on Image.url; the shell reads it, not the wording.
     await expect(instructions.getByLabel('System instructions text')).toContainText(
-      'For Image.url, use only URLs matching `^https?://`',
+      'For Image.url, use only URLs matching "^https?://"',
     );
     await instructions.getByRole('button', {name: 'Close', exact: true}).click();
     await expect(instructions).toBeHidden();
@@ -323,6 +323,8 @@ test.describe('Slack assistant browser journey', () => {
       page.getByRole('menuitemradio', {name: 'Slack Block Kit Preview', exact: true}),
     ).toHaveAttribute('aria-checked', 'true');
     await expect(page.locator('.mat-mdc-menu-panel')).not.toHaveClass(/mat-menu-panel-animating/);
+    // The menu restores focus to the pill only if it had moved focus into the menu.
+    await expect(page.getByRole('menuitemradio').first()).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toBeHidden();
     await expect(selector).toBeFocused();
@@ -341,8 +343,11 @@ test.describe('Slack assistant browser journey', () => {
       page.getByRole('menuitemradio', {name: 'Slack Block Kit Preview', exact: true}),
     ).toBeVisible();
     await expect(page.locator('.mat-mdc-menu-panel')).not.toHaveClass(/mat-menu-panel-animating/);
+    // The menu restores focus to the pill only if it had moved focus into the menu.
+    await expect(page.getByRole('menuitemradio').first()).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toBeHidden();
+    await expect(selector).toBeFocused();
     expect(unexpectedErrors).toEqual([]);
   });
 
