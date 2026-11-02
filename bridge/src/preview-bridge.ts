@@ -247,6 +247,13 @@ export class PreviewBridge {
   private catalogRequestCount = 0;
 
   /**
+   * Whether the host is waiting for a catalog that no request in flight will send,
+   * because the renderer it was loaded for detached first. The next renderer to
+   * attach sends its catalog instead; see {@link handleSupersededCatalog}.
+   */
+  private isCatalogReplyOwed = false;
+
+  /**
    * A reference to the dynamically injected blocking overlay element in the DOM, or null if no overlay is active.
    * Used to prevent user interaction and display status messages during layout processing.
    */
@@ -578,6 +585,11 @@ export class PreviewBridge {
     this.sendMessage({
       type: PreviewBridgeMessageType.RENDERER_READY,
     });
+    // The host ignores RENDERER_READY until it has the catalog it already asked for,
+    // so a request the previous renderer left unanswered is answered now.
+    if (this.isCatalogReplyOwed) {
+      void this.handleGetCatalog();
+    }
 
     this.dispatchSurfaceResize(true);
 
@@ -625,6 +637,7 @@ export class PreviewBridge {
     this.handleBlockingOverlay(false);
     this.isListening = false;
     this.activeRenderer = null;
+    this.isCatalogReplyOwed = false;
     this.currentAppliedTheme = undefined;
 
     // Clean up active connections
@@ -1233,7 +1246,8 @@ export class PreviewBridge {
    * one, so dropping the result would leave it without a catalog until its watchdog
    * gives up. If a newer request is already answering the host, there's nothing to
    * do. Otherwise, if a renderer is attached, this requests that renderer's catalog.
-   * With no renderer attached there's no catalog to send, so it only warns.
+   * With no renderer attached there's no catalog to send yet, so the reply is owed
+   * to the host, and the next renderer to attach sends its catalog.
    *
    * @param request The number {@link handleGetCatalog} gave the stale request.
    */
@@ -1249,8 +1263,9 @@ export class PreviewBridge {
       return;
     }
     console.warn(
-      'PreviewBridge: A catalog request was dropped because its renderer detached before the catalog loaded.',
+      'PreviewBridge: The renderer detached while its catalog was loading. The next renderer to attach will send its catalog.',
     );
+    this.isCatalogReplyOwed = true;
   }
 
   /**
@@ -1274,6 +1289,8 @@ export class PreviewBridge {
   private async handleGetCatalog(): Promise<void> {
     const renderer = this.activeRenderer;
     const request = ++this.catalogRequestCount;
+    // This request answers the host, whichever renderer it was owed to.
+    this.isCatalogReplyOwed = false;
     let resolved: {rawData: unknown; isInMemory: boolean} | null = null;
     try {
       resolved = await this.resolveCatalog(renderer);

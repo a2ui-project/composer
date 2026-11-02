@@ -34,6 +34,17 @@ export declare interface CatalogComponentSchema {
 }
 
 /**
+ * One function a catalog declares when it lists its `functions` rather than
+ * keying them by name, as an A2UI v0.9 inline catalog does: the function's
+ * name, description, parameter schema and return type.
+ */
+export declare interface CatalogFunctionSchema {
+  /** The name a function call uses to call the function. */
+  name: string;
+  [key: string]: unknown;
+}
+
+/**
  * Represents a complete validated catalog package containing components,
  * identifiers, versions, and origin URLs.
  */
@@ -44,7 +55,11 @@ export declare interface Catalog {
   description?: string;
   catalogId?: string;
   components?: {[key: string]: CatalogComponentSchema};
-  functions?: {[key: string]: Record<string, unknown>};
+  /**
+   * The functions the catalog declares, either keyed by name or as a list of
+   * named functions. Read it with {@link catalogDeclaresFunction}.
+   */
+  functions?: {[key: string]: Record<string, unknown>} | CatalogFunctionSchema[];
   $defs?: {[key: string]: Record<string, unknown>};
 }
 
@@ -54,4 +69,19 @@ export declare interface Catalog {
  */
 export function getCatalogId(catalog: Catalog): string | undefined {
   return catalog.catalogId || catalog.$id;
+}
+
+/**
+ * Whether a catalog declares a function with the given name, in either form
+ * {@link Catalog.functions} takes.
+ */
+export function catalogDeclaresFunction(catalog: Catalog, name: string): boolean {
+  const functions = catalog.functions;
+  if (!functions) {
+    return false;
+  }
+  if (Array.isArray(functions)) {
+    return functions.some(declared => declared.name === name);
+  }
+  return Object.hasOwn(functions, name);
 }

@@ -181,6 +181,24 @@ describe('StartupResolution', () => {
     expect(url).toBe('http://query:3000/');
   });
 
+  // Either would resolve to a page of Composer's own origin, which needs no approval.
+  it.each(['?renderer=', '?renderer=slack'])(
+    'neither selects nor saves a custom renderer for %s',
+    async search => {
+      mockFetchConfig({renderers: {default: {rendererUrl: 'http://base:3000'}}});
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(search);
+      const originCheck = vi.spyOn(service, 'isOriginAllowed');
+
+      const url = await service.resolveStartupConfiguration();
+
+      expect(url).toBe('http://base:3000');
+      expect(originCheck).not.toHaveBeenCalled();
+      expect(stateService.selectedRendererId()).toBe('default');
+      expect(localStorage.getItem(LocalStorageKey.CUSTOM_RENDERERS)).toBeNull();
+      expect(localStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
+    },
+  );
+
   describe('sharedA2uiPayload signal', () => {
     it('parses compressed d1. payload from window hash fragment and assigns decompressed JSON string to sharedA2uiPayload', async () => {
       mockFetchConfig({});

@@ -74,11 +74,52 @@ describe('QueryParser', () => {
   });
 
   it('strips malformed parameter strings and logs a warning', () => {
+    const url = QueryParser.parseRendererUrl('?renderer=not-a-url', environmentContext, mockLogger);
+    expect(url).toBeNull();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "Malformed renderer parameter string encountered: 'not-a-url'. Stripping invalid URI. Did you mean rendererId=not-a-url?",
+    );
+  });
+
+  it('strips a URL that cannot be parsed and logs a warning', () => {
     const url = QueryParser.parseRendererUrl('?renderer=http://', environmentContext, mockLogger);
     expect(url).toBeNull();
     expect(mockLogger.warn).toHaveBeenCalledWith(
       "Malformed renderer parameter string encountered: 'http://'. Stripping invalid URI.",
     );
+  });
+
+  // Each of these would otherwise resolve to a page of Composer's own origin.
+  it.each([
+    {
+      name: 'an empty parameter',
+      search: '?renderer=',
+      warning: "Malformed renderer parameter string encountered: ''. Stripping invalid URI.",
+    },
+    {
+      name: 'a whitespace-only parameter',
+      search: '?renderer=%20%20',
+      warning: "Malformed renderer parameter string encountered: ''. Stripping invalid URI.",
+    },
+    {
+      name: 'a renderer ID passed as the renderer',
+      search: '?renderer=slack',
+      warning:
+        "Malformed renderer parameter string encountered: 'slack'. Stripping invalid URI. Did you mean rendererId=slack?",
+    },
+  ])('rejects $name', ({search, warning}) => {
+    expect(QueryParser.parseRendererUrl(search, environmentContext, mockLogger)).toBeNull();
+    expect(mockLogger.warn).toHaveBeenCalledExactlyOnceWith(warning);
+  });
+
+  it('skips a rejected parameter and returns the next renderer URL', () => {
+    expect(
+      QueryParser.parseRendererUrl(
+        '?renderer=slack&renderer=http://localhost:3000',
+        environmentContext,
+        mockLogger,
+      ),
+    ).toBe('http://localhost:3000/');
   });
 
   it('ignores a renderer parameter that is not an HTTP(S) URL', () => {
@@ -111,6 +152,24 @@ describe('QueryParser', () => {
 
     expect(url).toBe(`${globalThis.location.origin}/composer/pr/7/samples/ng-basic-catalog/`);
   });
+
+  it.each(['samples/react-slack-catalog/', './samples/react-slack-catalog/'])(
+    'resolves the page-relative renderer path %s',
+    rendererPath => {
+      base = document.createElement('base');
+      base.href = `${globalThis.location.origin}/composer/`;
+      document.head.appendChild(base);
+
+      const url = QueryParser.parseRendererUrl(
+        `?renderer=${rendererPath}`,
+        environmentContext,
+        mockLogger,
+      );
+
+      expect(url).toBe(`${globalThis.location.origin}/composer/samples/react-slack-catalog/`);
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    },
+  );
 
   it('returns null when no renderer parameter exists', () => {
     expect(QueryParser.parseRendererUrl('', environmentContext, mockLogger)).toBeNull();

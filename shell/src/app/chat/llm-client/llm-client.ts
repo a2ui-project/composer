@@ -107,8 +107,8 @@ export declare interface LlmToolCall {
 }
 
 /**
- * Describes a function the model may call, sent to the model with a request.
- * The field names are the ones Gemini's function declarations use.
+ * A function the model may call while answering a request: its name, what it
+ * does, and the JSON Schema of its arguments.
  */
 export declare interface LlmToolDefinition {
   /** The name the model uses to call the function. */

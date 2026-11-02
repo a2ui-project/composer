@@ -609,17 +609,67 @@ describe('PreviewBridge Core API Runtime', () => {
             ([message]) => message.type === PreviewBridgeMessageType.A2UI_CATALOG,
           ),
         ).toEqual([]);
-        // A detached renderer leaves the request unanswered, so it's reported. A
-        // destroyed bridge has stopped listening, so there's no one to report to.
-        const dropped =
-          'PreviewBridge: A catalog request was dropped because its renderer detached before the catalog loaded.';
+        // A detached renderer leaves the request for the next renderer to answer, so
+        // it's reported. A destroyed bridge has stopped listening, so there's no one
+        // to report to.
+        const owed =
+          'PreviewBridge: The renderer detached while its catalog was loading. The next renderer to attach will send its catalog.';
         if (lifecycle === 'detach') {
-          expect(warn).toHaveBeenCalledWith(dropped);
+          expect(warn).toHaveBeenCalledWith(owed);
         } else {
-          expect(warn).not.toHaveBeenCalledWith(dropped);
+          expect(warn).not.toHaveBeenCalledWith(owed);
         }
       },
     );
+
+    it("answers with the next renderer's catalog when a renderer detaches mid-request", async () => {
+      vi.useFakeTimers();
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const postMessage = vi.spyOn(window.parent, 'postMessage');
+      const surfaceGroup: SurfaceGroupLike = {
+        onSurfaceCreated: {subscribe: () => ({unsubscribe: vi.fn()})},
+      };
+      const catalogMessages = () =>
+        postMessage.mock.calls.filter(
+          ([message]) => message.type === PreviewBridgeMessageType.A2UI_CATALOG,
+        );
+      // A React StrictMode double mount or a hot swap detaches the first renderer
+      // before the second one attaches.
+      const first = bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {surfaceGroup, onSurfaceReady: vi.fn(), catalogJson: {catalogId: 'first-catalog'}},
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {type: PreviewBridgeMessageType.GET_CATALOG},
+        }),
+      );
+      first.unsubscribe();
+      await vi.runAllTimersAsync();
+      expect(catalogMessages()).toEqual([]);
+
+      // The host ignores the second renderer's RENDERER_READY while it waits, so
+      // it never asks again.
+      const catalog = {catalogId: 'second-catalog', components: {}};
+      bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {surfaceGroup, onSurfaceReady: vi.fn(), catalogJson: catalog},
+      );
+      await vi.runAllTimersAsync();
+      expect(catalogMessages()).toEqual([
+        [{type: PreviewBridgeMessageType.A2UI_CATALOG, payload: catalog}, window.location.origin],
+      ]);
+
+      // Once answered, the request is not answered again.
+      bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {surfaceGroup, onSurfaceReady: vi.fn(), catalogJson: {catalogId: 'third-catalog'}},
+      );
+      await vi.runAllTimersAsync();
+      expect(catalogMessages()).toHaveLength(1);
+    });
   });
 
   it('responds with COMPONENT_USAGES containing usages from getComponentUsages callback (async)', async () => {
