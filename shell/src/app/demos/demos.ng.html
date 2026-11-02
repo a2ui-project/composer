@@ -53,14 +53,14 @@
   } @else if (loadFailed()) {
     <div class="empty-state" role="alert">
       <mat-icon class="empty-icon">error_outline</mat-icon>
-      <h3 class="empty-title">Demos could not be loaded</h3>
+      <h2 class="empty-title">Demos could not be loaded</h2>
       <p class="empty-subtitle">The renderer could not provide its demos. Try again.</p>
       <button mat-stroked-button type="button" (click)="retry()">Retry</button>
     </div>
   } @else if (isEmpty()) {
     <div class="empty-state">
       <mat-icon class="empty-icon">auto_awesome_mosaic</mat-icon>
-      <h3 class="empty-title">No Demos Available</h3>
+      <h2 class="empty-title">No Demos Available</h2>
       <p class="empty-subtitle">This renderer doesn't provide demos yet.</p>
       @if (resolvedRendererUrl(); as rendererUrl) {
         <p class="empty-renderer">
