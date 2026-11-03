@@ -25,10 +25,7 @@ import {
   StreamProcessingState,
 } from './llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {
-  ModelSelectionService,
-  ThinkingLevel as SelectedThinkingLevel,
-} from '../../settings/model-selection/model-selection.service';
+import {ModelSelectionService} from '../../settings/model-selection/model-selection.service';
 import {
   GoogleGenAI,
   Content,
@@ -44,13 +41,6 @@ const DEFAULT_3P_GEMINI_MODEL = 'gemini-flash-latest';
 
 /** Thinking level used when `config.json` declares no `models` allow-list. */
 const DEFAULT_3P_THINKING_LEVEL = ThinkingLevel.MEDIUM;
-
-const THINKING_LEVEL_MAP: Readonly<Record<SelectedThinkingLevel, ThinkingLevel>> = {
-  [SelectedThinkingLevel.MINIMAL]: ThinkingLevel.MINIMAL,
-  [SelectedThinkingLevel.LOW]: ThinkingLevel.LOW,
-  [SelectedThinkingLevel.MEDIUM]: ThinkingLevel.MEDIUM,
-  [SelectedThinkingLevel.HIGH]: ThinkingLevel.HIGH,
-};
 
 /**
  * Standard public endpoint authentication client utilizing user developer keys.
@@ -207,12 +197,9 @@ export class Standalone3pLlmClient extends LlmClient {
     if (abortSignal) {
       config.abortSignal = abortSignal;
     }
-    const selectedLevel = this.modelSelection.thinkingLevel();
-    const thinkingLevel = selectedLevel
-      ? THINKING_LEVEL_MAP[selectedLevel]
-      : this.modelSelection.selectedModel()
-        ? undefined
-        : DEFAULT_3P_THINKING_LEVEL;
+    const thinkingLevel =
+      this.modelSelection.thinkingLevel() ??
+      (this.modelSelection.selectedModel() ? undefined : DEFAULT_3P_THINKING_LEVEL);
     if (thinkingLevel) {
       config.thinkingConfig = {
         includeThoughts: true,

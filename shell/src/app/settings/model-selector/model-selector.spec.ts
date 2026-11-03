@@ -19,12 +19,9 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {MatOptionHarness} from '@angular/material/core/testing';
 import {MatSelectHarness} from '@angular/material/select/testing';
+import {ThinkingLevel} from '@google/genai';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
-import {
-  LlmModelOption,
-  ModelSelectionService,
-  ThinkingLevel,
-} from '../model-selection/model-selection.service';
+import {LlmModelOption, ModelSelectionService} from '../model-selection/model-selection.service';
 import {ModelSelectorComponent} from './model-selector';
 
 describe('ModelSelectorComponent', () => {

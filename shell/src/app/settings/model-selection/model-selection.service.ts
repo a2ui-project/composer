@@ -15,21 +15,11 @@
  */
 
 import {Injectable, Signal, computed, inject, signal} from '@angular/core';
+import {ThinkingLevel} from '@google/genai';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
-
-/**
- * Backend-agnostic thinking depth. Each LLM client maps these onto its own
- * API (e.g. Gemini `ThinkingLevel`).
- */
-export enum ThinkingLevel {
-  MINIMAL = 'minimal',
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-}
 
 const ALL_THINKING_LEVELS: readonly ThinkingLevel[] = [
   ThinkingLevel.MINIMAL,
@@ -40,6 +30,7 @@ const ALL_THINKING_LEVELS: readonly ThinkingLevel[] = [
 
 /** Human-friendly labels for the thinking level selector. */
 export const THINKING_LEVEL_LABELS: Readonly<Record<ThinkingLevel, string>> = {
+  [ThinkingLevel.THINKING_LEVEL_UNSPECIFIED]: 'Unspecified',
   [ThinkingLevel.MINIMAL]: 'Minimal',
   [ThinkingLevel.LOW]: 'Low',
   [ThinkingLevel.MEDIUM]: 'Medium',
@@ -64,13 +55,13 @@ export declare interface LlmModelOption {
 
 /**
  * Parses a user- or config-supplied thinking level string, returning
- * `undefined` for unknown values.
+ * `undefined` for unknown or unspecified values.
  */
 export function parseThinkingLevel(value: unknown): ThinkingLevel | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
-  const normalized = value.trim().toLowerCase();
+  const normalized = value.trim().toUpperCase();
   return ALL_THINKING_LEVELS.find(level => level === normalized);
 }
 

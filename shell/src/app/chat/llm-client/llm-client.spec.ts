@@ -20,10 +20,8 @@ import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {LlmClient, LlmMessage, LlmResponse, CANCEL_ERROR_NAME} from './llm-client';
 import {Standalone3pLlmClient} from './standalone-3p-llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {
-  ModelSelectionService,
-  ThinkingLevel,
-} from '../../settings/model-selection/model-selection.service';
+import {ThinkingLevel} from '@google/genai';
+import {ModelSelectionService} from '../../settings/model-selection/model-selection.service';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {MessageRole} from './llm-client';
 import {

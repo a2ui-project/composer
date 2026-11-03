@@ -16,12 +16,13 @@
 
 import {signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
+import {ThinkingLevel} from '@google/genai';
 import {beforeEach, describe, expect, it} from 'vitest';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
-import {ModelSelectionService, ThinkingLevel, parseThinkingLevel} from './model-selection.service';
+import {ModelSelectionService, parseThinkingLevel} from './model-selection.service';
 
 class FakeLocalStorage {
   readonly items = new Map<string, string>();
@@ -140,12 +141,15 @@ describe('ModelSelectionService', () => {
     expect(service.thinkingLevel()).toBeUndefined();
   });
 
-  it('persists the thinking level choice', () => {
+  it('persists the thinking level choice and ignores unspecified levels', () => {
     const service = setup();
     configState.setModels([{model: 'gemini-flash-latest', thinkingLevels: ['low', 'high']}]);
     service.selectThinkingLevel(ThinkingLevel.HIGH);
     expect(service.thinkingLevel()).toBe(ThinkingLevel.HIGH);
-    expect(storage.getItem(LocalStorageKey.SELECTED_THINKING_LEVEL)).toBe('high');
+    expect(storage.getItem(LocalStorageKey.SELECTED_THINKING_LEVEL)).toBe(ThinkingLevel.HIGH);
+
+    service.selectThinkingLevel(ThinkingLevel.THINKING_LEVEL_UNSPECIFIED);
+    expect(service.thinkingLevel()).toBe(ThinkingLevel.HIGH);
   });
 
   it('only offers models matching the active auth type', () => {
@@ -163,6 +167,8 @@ describe('ModelSelectionService', () => {
 
   it('parses thinking levels case-insensitively', () => {
     expect(parseThinkingLevel(' Medium ')).toBe(ThinkingLevel.MEDIUM);
+    expect(parseThinkingLevel('HIGH')).toBe(ThinkingLevel.HIGH);
+    expect(parseThinkingLevel(ThinkingLevel.THINKING_LEVEL_UNSPECIFIED)).toBeUndefined();
     expect(parseThinkingLevel('ultra')).toBeUndefined();
     expect(parseThinkingLevel(42)).toBeUndefined();
   });

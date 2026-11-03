@@ -17,10 +17,10 @@
 import {Component, computed, inject, input} from '@angular/core';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
+import {ThinkingLevel} from '@google/genai';
 import {
   ModelSelectionService,
   THINKING_LEVEL_LABELS,
-  ThinkingLevel,
 } from '../model-selection/model-selection.service';
 
 /**
