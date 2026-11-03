@@ -36,7 +36,6 @@
       "model": "gemini-flash-latest",
       "displayName": "Gemini Flash",
       "thinkingLevels": [
-        "minimal",
         "low",
         "medium",
         "high"
