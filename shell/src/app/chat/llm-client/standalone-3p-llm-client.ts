@@ -25,6 +25,7 @@ import {
   StreamProcessingState,
 } from './llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {ModelSelectionService} from '../../settings/model-selection/model-selection.service';
 import {
   GoogleGenAI,
   Content,
@@ -34,6 +35,12 @@ import {
   GenerateContentResponse,
   ThinkingLevel,
 } from '@google/genai';
+
+/** Model used when `config.json` declares no `models` allow-list. */
+const DEFAULT_3P_GEMINI_MODEL = 'gemini-flash-latest';
+
+/** Thinking level used when `config.json` declares no `models` allow-list. */
+const DEFAULT_3P_THINKING_LEVEL = ThinkingLevel.MEDIUM;
 
 /**
  * Standard public endpoint authentication client utilizing user developer keys.
@@ -51,6 +58,9 @@ export class Standalone3pLlmClient extends LlmClient {
    * visual destinations.
    */
   private readonly config = inject(AppConfigProvider);
+
+  /** The user's active model and thinking level selection. */
+  private readonly modelSelection = inject(ModelSelectionService);
 
   /**
    * Helper function to extract system instructions and map conversational
@@ -140,7 +150,7 @@ export class Standalone3pLlmClient extends LlmClient {
       resolveComplete = resolve;
       rejectComplete = reject;
     });
-    complete.catch(() => {
+    void complete.catch(() => {
       // The stream is consumed from a background task. Mark the returned
       // promise as handled until callers await it so expected cancellations
       // and transport failures do not surface as unhandled rejections.
@@ -187,10 +197,15 @@ export class Standalone3pLlmClient extends LlmClient {
     if (abortSignal) {
       config.abortSignal = abortSignal;
     }
-    config.thinkingConfig = {
-      includeThoughts: true,
-      thinkingLevel: ThinkingLevel.MEDIUM,
-    };
+    const thinkingLevel =
+      this.modelSelection.thinkingLevel() ??
+      (this.modelSelection.selectedModel() ? undefined : DEFAULT_3P_THINKING_LEVEL);
+    if (thinkingLevel) {
+      config.thinkingConfig = {
+        includeThoughts: true,
+        thinkingLevel,
+      };
+    }
     return config;
   }
 
@@ -201,7 +216,7 @@ export class Standalone3pLlmClient extends LlmClient {
     const {systemInstruction, contents} = this.parseMessages(messages);
     const config = this.buildGenerateContentConfig(systemInstruction, abortSignal);
     return {
-      model: 'gemini-flash-latest',
+      model: this.modelSelection.selectedModel()?.model ?? DEFAULT_3P_GEMINI_MODEL,
       contents,
       config,
     };
