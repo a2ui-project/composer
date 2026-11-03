@@ -6705,7 +6705,7 @@ __metadata:
     typescript-eslint: "npm:8.65.0"
     vite: "npm:8.2.4"
     vitest: "npm:4.1.11"
-    zod: "npm:4.4.3"
+    zod: "npm:4.6.6"
   languageName: unknown
   linkType: soft
 
@@ -8158,13 +8158,6 @@ __metadata:
   peerDependencies:
     zod: ^3.25.28 || ^4
   checksum: 10c0/dd300554393903022487688af14fbda5c719ba8179702bb55b3aa86318830467f0f7beb7d654036975ac963dc4843b72e59636448bfff9a0608f277bb6a14939
-  languageName: node
-  linkType: hard
-
-"zod@npm:4.4.3":
-  version: 4.4.3
-  resolution: "zod@npm:4.4.3"
-  checksum: 10c0/7ea31b558e88f9faf44f31dd185e2e1cbf51fed3081787fb96cc2534749b50c0acfc6da7f0922a7353ed092dd358c7d50c28ea96c94d04af64191bd33152eca3
   languageName: node
   linkType: hard
 
