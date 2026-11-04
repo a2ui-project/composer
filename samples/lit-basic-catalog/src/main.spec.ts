@@ -140,9 +140,13 @@ describe('AppRoot Lit Element', () => {
     );
     const surfaceEl = element.shadowRoot?.querySelector('a2ui-surface');
     await (surfaceEl as unknown as {updateComplete: Promise<void>})?.updateComplete;
-    const textEl = surfaceEl?.shadowRoot?.querySelector('a2ui-basic-text');
+    const textEl =
+      surfaceEl?.querySelector('a2ui-basic-text') ??
+      surfaceEl?.shadowRoot?.querySelector('a2ui-basic-text');
     await (textEl as unknown as {updateComplete: Promise<void>})?.updateComplete;
-    expect(textEl?.shadowRoot?.innerHTML).toContain('<strong>bold text</strong>');
+    expect(textEl?.innerHTML ?? textEl?.shadowRoot?.innerHTML).toContain(
+      '<strong>bold text</strong>',
+    );
   });
 
   it('slots an empty loading element when surface has no root component', async () => {
@@ -176,7 +180,7 @@ describe('AppRoot Lit Element', () => {
 
   it('serves the full basic-catalog demo set', async () => {
     const {DEMOS} = await import('../../shared/demos');
-    expect(DEMOS).toHaveLength(46);
+    expect(DEMOS).toHaveLength(47);
     for (const demo of DEMOS) {
       expect(demo.id).toBeTruthy();
       expect(demo.name).toBeTruthy();
@@ -210,7 +214,7 @@ describe('AppRoot Lit Element', () => {
     expect(rendererConfig.getDemos).toBeTypeOf('function');
 
     const served = await rendererConfig.getDemos!();
-    expect(served).toHaveLength(46);
+    expect(served).toHaveLength(47);
     expect(served).toBe(DEMOS);
   });
 });

@@ -46,7 +46,8 @@ export function dispatchReadOnlyLocalFunctionAction(
   }
 
   const errors: SurfaceError[] = [];
-  const subscription = context.dataContext.surface.onError.subscribe(error => {
+  const surface = context.dataContext.surface;
+  const subscription = surface?.onError.subscribe(error => {
     errors.push(isSurfaceError(error) ? error : {message: String(error)});
   });
 
@@ -59,7 +60,7 @@ export function dispatchReadOnlyLocalFunctionAction(
       expression: action.functionCall.call,
     });
   } finally {
-    subscription.unsubscribe();
+    subscription?.unsubscribe();
   }
 
   const diagnostics = errors.map(error => localFunctionDiagnostic(error, componentId));

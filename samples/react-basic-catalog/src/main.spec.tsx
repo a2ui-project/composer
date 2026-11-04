@@ -21,7 +21,7 @@ import {App} from './App';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {useA2uiSandbox} from 'a2ui-bridge/react';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
-import {basicCatalog} from '@a2ui/react/v0_9';
+import {basicCatalog} from '@a2ui/web_core/v0_9/basic_catalog';
 
 describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
   let container: HTMLDivElement | null = null;
@@ -29,6 +29,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
   let originalParent: Window;
 
   beforeEach(() => {
+    document.adoptedStyleSheets = document.adoptedStyleSheets || [];
     originalParent = window.parent;
     Object.defineProperty(window, 'parent', {
       configurable: true,
@@ -120,13 +121,18 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
             {
               id: 'button-1',
               component: 'Button',
-              child: 'Submit Ticket',
+              child: 'button-text',
               action: {
                 event: {
                   name: 'TICKET_SUBMIT',
                   context: {},
                 },
               },
+            },
+            {
+              id: 'button-text',
+              component: 'Text',
+              text: 'Submit Ticket',
             },
           ],
         },
@@ -146,15 +152,14 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
       );
     });
 
-    // Advance dynamic timers (Step 2 deferred rendering tick)
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+    // Wait for dynamic child widget layout element to paint and adopt stylesheets
+    await vi.waitFor(() => {
+      expect(container?.querySelector('strong')?.textContent).toBe('Welcome React User');
+      expect(container?.innerHTML).toContain('Submit Ticket');
+      expect(container?.querySelector('a2ui-basic-button')).not.toBeNull();
+      expect(container?.querySelector('button')).not.toBeNull();
+      expect(document.adoptedStyleSheets.length).toBeGreaterThan(0);
     });
-
-    // Verify dynamic child widget layout element paints resolved successfully!
-    expect(container?.querySelector('strong')?.textContent).toBe('Welcome React User');
-    expect(container?.innerHTML).toContain('Submit Ticket');
-    expect(container?.querySelector('button')).not.toBeNull();
   });
 
   it('renders a blank canvas when surface has no root component and renders once root is added', async () => {

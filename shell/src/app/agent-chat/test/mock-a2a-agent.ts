@@ -154,7 +154,7 @@ export const flightA2uiPayload = [
     version: 'v0.9',
     updateDataModel: {
       surfaceId: 'flight-options',
-      data: {
+      value: {
         selectedFlight: 'NH007',
         tripType: 'RoundTrip',
       },

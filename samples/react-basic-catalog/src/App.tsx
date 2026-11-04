@@ -20,7 +20,8 @@ import {ERROR_OVERLAY_DEBOUNCE_MS} from 'a2ui-bridge';
 import {COMPONENT_USAGES} from './usages.js';
 import {DEMOS} from '../../shared/demos';
 import {renderMarkdown} from '@a2ui/markdown-it';
-import {A2uiSurface, basicCatalog, MarkdownContext} from '@a2ui/react/v0_9';
+import {A2uiSurface, MarkdownContext} from '@a2ui/react/v0_9';
+import {basicCatalog} from '@a2ui/web_core/v0_9/basic_catalog';
 import {useDebouncedValue} from './hooks/use-debounced-value.js';
 
 export function App() {

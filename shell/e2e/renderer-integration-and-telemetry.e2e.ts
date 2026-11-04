@@ -174,8 +174,10 @@ const CONFIGS: IntegrationConfig[] = [
   {
     name: 'React',
     rendererUrl: RENDERER_URLS.react,
-    pickupDateLocator: iframe => iframe.locator('label:has-text("Pick-up Date") + input'),
-    pickupLocationLocator: iframe => iframe.locator('label:has-text("Pick-up Location") + input'),
+    pickupDateLocator: iframe =>
+      iframe.locator('a2ui-datetimeinput:has-text("Pick-up Date") input'),
+    pickupLocationLocator: iframe =>
+      iframe.locator('a2ui-basic-textfield:has-text("Pick-up Location") input'),
     fillDate: fillDateInput,
   },
   {
