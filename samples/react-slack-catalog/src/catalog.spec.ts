@@ -159,11 +159,21 @@ describe('Slack catalog schema payload', () => {
         returnType,
       })),
     ).toEqual(
-      upstreamInlineCatalog?.functions?.map(({name, description, returnType}) => ({
-        name,
-        description,
-        returnType,
-      })),
+      upstreamInlineCatalog?.functions?.map(
+        ({
+          name,
+          description,
+          returnType,
+        }: {
+          name: string;
+          description?: string;
+          returnType?: string;
+        }) => ({
+          name,
+          description,
+          returnType,
+        }),
+      ),
     );
   });
 

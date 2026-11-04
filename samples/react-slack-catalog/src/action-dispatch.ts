@@ -79,6 +79,8 @@ export async function dispatchCurrentEventAction(
   }
 
   const context = new ComponentContext(state.surface, entry.sourceComponentId, entry.basePath);
-  await context.dispatchAction(context.dataContext.resolveAction(entry.action));
+  await context.dispatchAction(
+    context.dataContext.resolveAction(entry.action) as Record<string, unknown>,
+  );
   return true;
 }
