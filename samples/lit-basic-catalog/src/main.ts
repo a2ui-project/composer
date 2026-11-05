@@ -21,7 +21,7 @@ import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import {renderMarkdown} from '@a2ui/markdown-it';
 
 // Export AppRoot class constructor value with a safe double cast to bypass duplicate-dependency nominal mismatches:
-import {COMPONENT_USAGES} from './usages.js';
+import {COMPONENT_USAGES} from '../../shared/usages.js';
 import {DEMOS} from '../../shared/demos';
 
 export const AppRoot = bootstrapLitSandbox([basicCatalog as unknown as Catalog<ComponentApi>], {
