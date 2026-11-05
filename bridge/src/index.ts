@@ -24,3 +24,4 @@ export * from './iframe-mcp-client.js';
 export * from './preview-bridge.js';
 export * from './render-config.js';
 export * from './surface-resize-observer.js';
+export * from './protocol/protocol-strategy-registry.js';

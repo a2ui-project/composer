@@ -21,6 +21,11 @@ import {
 
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
+import {
+  resolveProtocolStrategy,
+  detectProtocolVersion,
+} from './protocol/protocol-strategy-registry.js';
+
 import {DomainOriginVerificationService} from './domain-origin-verification';
 
 import {
@@ -30,7 +35,6 @@ import {
   SetThemePayload,
   DataModelChangePayload,
   CreateSurfaceCommand,
-  CatalogDetails,
   ThemePreference,
   McpResponsePayload,
 } from './bridge-message';
@@ -360,11 +364,26 @@ export class PreviewBridge {
     return this.mcpClient;
   }
 
+  /** Standalone or manually registered processor reference. */
+  private manualProcessor: RendererProcessor | null = null;
+
+  /**
+   * Sets or updates the active renderer processor reference.
+   *
+   * @param processor The framework-specific message processor.
+   */
+  setActiveProcessor(processor: RendererProcessor): void {
+    if (this.activeRenderer) {
+      this.activeRenderer.processor = processor;
+    }
+    this.manualProcessor = processor;
+  }
+
   /**
    * Returns the currently attached renderer processor, if any.
    */
   getActiveProcessor(): RendererProcessor | undefined {
-    return this.activeRenderer?.processor;
+    return this.activeRenderer?.processor ?? this.manualProcessor ?? undefined;
   }
 
   /**
@@ -461,12 +480,41 @@ export class PreviewBridge {
   private waitForInitialContent(messages: A2uiMessage[]): void {
     const renderer = this.activeRenderer;
     if (this.contentReady !== false || this.awaitingContentRender || !renderer) return;
-    const hasRoot = messages.some(
-      message =>
-        'updateComponents' in message &&
-        renderer.activeSurfaceIds.has(message.updateComponents.surfaceId) &&
-        message.updateComponents.components.some(component => component.id === 'root'),
-    );
+    const hasRoot = messages.some(message => {
+      if (!message || typeof message !== 'object') return false;
+      const record = message as Record<string, unknown>;
+      const updateComponents = record['updateComponents'] as
+        {surfaceId: string; components?: unknown[]} | undefined;
+      if (
+        updateComponents &&
+        renderer.activeSurfaceIds.has(updateComponents.surfaceId) &&
+        Array.isArray(updateComponents.components) &&
+        updateComponents.components.some(
+          component =>
+            component &&
+            typeof component === 'object' &&
+            (component as Record<string, unknown>)['id'] === 'root',
+        )
+      ) {
+        return true;
+      }
+      const createSurface = record['createSurface'] as
+        {surfaceId: string; components?: unknown[]} | undefined;
+      if (
+        createSurface &&
+        renderer.activeSurfaceIds.has(createSurface.surfaceId) &&
+        Array.isArray(createSurface.components) &&
+        createSurface.components.some(
+          component =>
+            component &&
+            typeof component === 'object' &&
+            (component as Record<string, unknown>)['id'] === 'root',
+        )
+      ) {
+        return true;
+      }
+      return false;
+    });
     const onInitialRender = renderer.config.onInitialRender;
     // Only renderers with the hook report readiness. Every RENDER_A2UI is still measured
     // by the caller's regular scheduleSurfaceResize, so skipping here doesn't skip that.
@@ -651,6 +699,7 @@ export class PreviewBridge {
     }
     this.activeConnections.clear();
     this.mcpClient = null;
+    this.manualProcessor = null;
   }
 
   private resolveExpectedParentOrigin(): string {
@@ -699,6 +748,24 @@ export class PreviewBridge {
         version: version,
         action: action,
       },
+    });
+  }
+
+  /**
+   * Forwards a v1.0 outbound listener message (action, callAgentFunction, rendererFunctionResponse, error)
+   * over SEND_TO_SERVER to the parent host window, stamping version 'v1.0' if omitted.
+   *
+   * @param msg Outbound message payload.
+   */
+  sendOutboundMessage(msg: unknown): void {
+    if (!msg || typeof msg !== 'object') return;
+    const payloadObj = {...(msg as Record<string, unknown>)};
+    if (!payloadObj['version']) {
+      payloadObj['version'] = 'v1.0';
+    }
+    this.sendMessage({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: payloadObj,
     });
   }
 
@@ -805,11 +872,9 @@ export class PreviewBridge {
   private handleIncomingDataModelChange(payload: unknown): void {
     const payloadObj = payload as DataModelChangePayload | undefined;
     if (payloadObj && payloadObj.updateDataModel) {
+      const strategy = resolveProtocolStrategy();
       const renderPayload = [
-        {
-          version: 'v0.9',
-          updateDataModel: payloadObj.updateDataModel,
-        },
+        strategy.buildSyntheticEnvelope('dataModelChange', payloadObj.updateDataModel),
       ];
       this.dispatchRenderA2ui(renderPayload);
     }
@@ -832,9 +897,12 @@ export class PreviewBridge {
       return;
     }
 
-    const hasCreateSurface =
-      Array.isArray(payload) &&
-      payload.some(item => item && typeof item === 'object' && 'createSurface' in item);
+    const version = detectProtocolVersion(Array.isArray(payload) ? payload : []);
+    const strategy = resolveProtocolStrategy(version);
+    const surfaceIdsToReset = strategy.extractSurfaceIdsToReset(
+      Array.isArray(payload) ? payload : [],
+    );
+    const hasCreateSurface = surfaceIdsToReset.length > 0;
 
     if (hasCreateSurface) {
       // Step 1: Synchronously dispatch null to trigger unmounting/reset.
@@ -885,43 +953,45 @@ export class PreviewBridge {
     }
 
     if (Array.isArray(payload)) {
-      const createSurfaceCommand = payload.find(
+      const version = detectProtocolVersion(payload);
+      const strategy = resolveProtocolStrategy(version);
+
+      const createSurfaceCommands = payload.filter(
         (item: unknown) => item && typeof item === 'object' && 'createSurface' in item,
-      ) as CreateSurfaceCommand | undefined;
+      ) as CreateSurfaceCommand[];
 
       let hasCreateSurface = false;
-      let surfaceId: string | undefined;
-      const createSurface = createSurfaceCommand && createSurfaceCommand.createSurface;
-      if (createSurface) {
-        hasCreateSurface = true;
-        const catalogId = createSurface.catalogId;
-        if (catalogId) {
-          this.notifyCatalogResolved(catalogId);
-        }
-        surfaceId = createSurface.surfaceId;
-        if (surfaceId) {
-          // Proactively clear any pre-existing instance of this surface in the
-          // renderer processor to prevent "Surface <surfaceId> already exists"
-          // collisions upon recreate.
-          const deleteMessage: A2uiMessage = {
-            version: 'v0.9',
-            deleteSurface: {
-              surfaceId,
-            },
-          };
-          try {
-            this.activeRenderer.processor.processMessages([deleteMessage]);
-          } catch (err) {
-            // Surface might not exist yet; safe to proceed. Logged so genuine
-            // processor failures remain diagnosable.
-            console.debug('PreviewBridge: pre-delete of surface failed', surfaceId, err);
+      let lastSurfaceId: string | undefined;
+
+      for (const cmd of createSurfaceCommands) {
+        const createSurface = cmd.createSurface;
+        if (createSurface) {
+          hasCreateSurface = true;
+          const catalogId = createSurface.catalogId;
+          if (catalogId) {
+            this.notifyCatalogResolved(catalogId);
           }
-          // Track the surface BEFORE processing. If a subsequent command in
-          // the payload has a typo and throws an error, we still want to
-          // clean this surface up next time.
-          this.activeRenderer.activeSurfaceIds.add(surfaceId);
-        } else {
-          console.warn('PreviewBridge: createSurface command found, but no surfaceId present.');
+          const surfaceId = createSurface.surfaceId;
+          if (surfaceId) {
+            lastSurfaceId = surfaceId;
+            // Proactively clear any pre-existing instance of this surface in the
+            // renderer processor to prevent "Surface <surfaceId> already exists"
+            // collisions upon recreate.
+            const deleteMessage = strategy.buildDeleteSurfaceItem(surfaceId) as A2uiMessage;
+            try {
+              this.activeRenderer.processor.processMessages([deleteMessage]);
+            } catch (err) {
+              // Surface might not exist yet; safe to proceed. Logged so genuine
+              // processor failures remain diagnosable.
+              console.debug('PreviewBridge: pre-delete of surface failed', surfaceId, err);
+            }
+            // Track the surface BEFORE processing. If a subsequent command in
+            // the payload has a typo and throws an error, we still want to
+            // clean this surface up next time.
+            this.activeRenderer.activeSurfaceIds.add(surfaceId);
+          } else {
+            console.warn('PreviewBridge: createSurface command found, but no surfaceId present.');
+          }
         }
       }
 
@@ -956,8 +1026,8 @@ export class PreviewBridge {
         });
       }
 
-      if (rendered && hasCreateSurface && surfaceId) {
-        this.activeRenderer.config.onSurfaceReady(surfaceId);
+      if (rendered && hasCreateSurface && lastSurfaceId) {
+        this.activeRenderer.config.onSurfaceReady(lastSurfaceId);
       }
 
       if (rendered) {
@@ -986,16 +1056,10 @@ export class PreviewBridge {
     if (!this.activeRenderer) return;
 
     const {processor, config, activeSurfaceIds} = this.activeRenderer;
+    const strategy = resolveProtocolStrategy();
     for (const surfaceId of activeSurfaceIds) {
       try {
-        processor.processMessages([
-          {
-            version: 'v0.9',
-            deleteSurface: {
-              surfaceId: surfaceId,
-            },
-          } as A2uiMessage,
-        ]);
+        processor.processMessages([strategy.buildDeleteSurfaceItem(surfaceId) as A2uiMessage]);
       } catch (e: unknown) {
         console.warn(`PreviewBridge: Error clearing surface ${surfaceId} during reset:`, e);
       }
@@ -1188,17 +1252,104 @@ export class PreviewBridge {
   }
 
   /**
-   * Coordinates in-memory retrieval (`catalogJson`) vs. HTTP network fetching
+   * Normalizes a catalog definition (Catalog instance, raw schema, URL string, or factory)
+   * into a standardized schema object, stamping protocolVersion and $id without mutating original objects.
+   */
+  private async normalizeCatalogEntry(entry: unknown): Promise<Record<string, unknown> | null> {
+    let resolved = entry;
+    if (typeof resolved === 'function') {
+      resolved = await (resolved as () => unknown)();
+    }
+    if (typeof resolved === 'string') {
+      const text = resolved.trim();
+      const safetyPrefix = ")]}'\n";
+      const withoutPrefix = text.startsWith(safetyPrefix)
+        ? text.substring(safetyPrefix.length).trim()
+        : text;
+      if (withoutPrefix.startsWith('{') || withoutPrefix.startsWith('[')) {
+        resolved = this.parseCatalogData(resolved);
+      } else {
+        const fetchRes = await this.fetchWithTimeout(text);
+        if (!fetchRes.ok) {
+          throw new Error(`Catalog fetch failed with status: ${fetchRes.status}`);
+        }
+        resolved = this.parseCatalogData(await fetchRes.text());
+      }
+    }
+    if (!resolved || typeof resolved !== 'object') {
+      return null;
+    }
+
+    const catObj = resolved as {
+      id?: string;
+      catalogId?: string;
+      protocolVersion?: string;
+      catalogSchema?: unknown;
+      toJson?: () => unknown;
+      [key: string]: unknown;
+    };
+
+    let schema: Record<string, unknown>;
+    if (catObj.catalogSchema && typeof catObj.catalogSchema === 'object') {
+      schema = {...(catObj.catalogSchema as Record<string, unknown>)};
+    } else if (typeof catObj.toJson === 'function') {
+      schema = {...(catObj.toJson() as Record<string, unknown>)};
+    } else {
+      schema = {...catObj};
+    }
+
+    const id =
+      (schema['catalogId'] as string | undefined) ??
+      (schema['$id'] as string | undefined) ??
+      catObj.id ??
+      catObj.catalogId;
+    if (id && typeof id === 'string') {
+      if (!schema['catalogId']) schema['catalogId'] = id;
+      if (!schema['$id']) schema['$id'] = id;
+    }
+
+    const version = (schema['protocolVersion'] as string | undefined) ?? catObj.protocolVersion;
+    if (version) {
+      schema['protocolVersion'] = version;
+    }
+
+    return schema;
+  }
+
+  /**
+   * Coordinates in-memory retrieval (`catalogs`, `catalogJson`, `catalog`) vs. HTTP network fetching
    * (including SPA HTML fallback to `/catalog.json`).
    */
   private async resolveCatalog(renderer: ActiveRenderer | null): Promise<{
-    rawData: unknown;
+    primarySchema: Record<string, unknown>;
+    allSchemas: Array<Record<string, unknown>>;
+    isMultiCatalog: boolean;
     isInMemory: boolean;
   } | null> {
     const config = renderer?.config;
-    const inMemoryCatalog = config?.catalogJson ?? config?.catalog;
-    if (inMemoryCatalog !== undefined) {
-      return {rawData: inMemoryCatalog, isInMemory: true};
+    const inMemorySource = config?.catalogs ?? config?.catalogJson ?? config?.catalog;
+
+    if (inMemorySource !== undefined) {
+      const isMulti = config?.catalogs !== undefined || Array.isArray(inMemorySource);
+      const rawList = Array.isArray(inMemorySource) ? inMemorySource : [inMemorySource];
+
+      const allSchemas: Array<Record<string, unknown>> = [];
+      for (const item of rawList) {
+        const normalized = await this.normalizeCatalogEntry(item);
+        if (normalized) {
+          allSchemas.push(normalized);
+        }
+      }
+
+      if (allSchemas.length > 0) {
+        return {
+          primarySchema: allSchemas[0],
+          allSchemas,
+          isMultiCatalog: isMulti,
+          isInMemory: true,
+        };
+      }
+      throw new Error('Failed to resolve valid catalog from configuration.');
     }
 
     if (typeof window === 'undefined' || !window.fetch) return null;
@@ -1236,7 +1387,15 @@ export class PreviewBridge {
       rawText = fallbackText;
     }
 
-    return {rawData: rawText, isInMemory: false};
+    const parsed = this.parseCatalogData(rawText);
+    const normalized = await this.normalizeCatalogEntry(parsed);
+    const allSchemas = normalized ? [normalized] : [];
+    return {
+      primarySchema: allSchemas[0] ?? (parsed as Record<string, unknown>),
+      allSchemas,
+      isMultiCatalog: false,
+      isInMemory: false,
+    };
   }
 
   /**
@@ -1291,7 +1450,12 @@ export class PreviewBridge {
     const request = ++this.catalogRequestCount;
     // This request answers the host, whichever renderer it was owed to.
     this.isCatalogReplyOwed = false;
-    let resolved: {rawData: unknown; isInMemory: boolean} | null = null;
+    let resolved: {
+      primarySchema: Record<string, unknown>;
+      allSchemas: Array<Record<string, unknown>>;
+      isMultiCatalog: boolean;
+      isInMemory: boolean;
+    } | null = null;
     try {
       resolved = await this.resolveCatalog(renderer);
       if (!this.isListening) {
@@ -1307,16 +1471,28 @@ export class PreviewBridge {
         return;
       }
 
-      const catalog = this.parseCatalogData(resolved.rawData);
-
-      const catalogId = (catalog as CatalogDetails | undefined)?.catalogId;
+      const {primarySchema, allSchemas, isMultiCatalog} = resolved;
+      const catalogId =
+        (primarySchema['catalogId'] as string | undefined) ??
+        (primarySchema['$id'] as string | undefined);
       if (catalogId) {
         this.notifyCatalogResolved(catalogId);
       }
 
+      let payload: unknown;
+      if (isMultiCatalog || catalogId !== undefined) {
+        payload = {
+          ...primarySchema,
+          catalog: primarySchema,
+          catalogs: allSchemas,
+        };
+      } else {
+        payload = primarySchema;
+      }
+
       this.sendMessage({
         type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: catalog,
+        payload,
       });
     } catch (error: unknown) {
       if (!this.isListening) {
@@ -1327,7 +1503,13 @@ export class PreviewBridge {
         return;
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (resolved?.isInMemory) {
+      const isInMemory =
+        Boolean(
+          this.activeRenderer?.config?.catalogs ??
+          this.activeRenderer?.config?.catalog ??
+          this.activeRenderer?.config?.catalogJson,
+        ) || Boolean(resolved?.isInMemory);
+      if (isInMemory) {
         console.error('PreviewBridge: Error processing/parsing in-memory catalog:', error);
       }
       this.sendMessage({

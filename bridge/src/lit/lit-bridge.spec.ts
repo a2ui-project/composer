@@ -100,6 +100,50 @@ describe('Lit Framework Adapter Spec', () => {
     element.remove();
   });
 
+  it('does not clobber catalog ids when multiple catalogs are passed to bootstrapLitSandbox', () => {
+    const cat1 = {
+      id: 'cat-1',
+      components: new Map<string, ComponentApi>(),
+    } as unknown as Catalog<ComponentApi>;
+    const cat2 = {
+      id: 'cat-2',
+      components: new Map<string, ComponentApi>(),
+    } as unknown as Catalog<ComponentApi>;
+    bootstrapLitSandbox([cat1, cat2], {elementTagName: 'app-root'});
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    const element = new A2uiSandboxRoot();
+    document.body.appendChild(element);
+
+    expect(attachSpy).toHaveBeenCalled();
+    const configPassed = attachSpy.mock.calls[0][1];
+
+    configPassed.onCatalogResolved!('urn:a2ui:catalog:new_id');
+
+    expect(cat1.id).toBe('cat-1');
+    expect(cat2.id).toBe('cat-2');
+
+    element.remove();
+  });
+
+  it('configures processor with outboundListener that forwards to a2uiBridge.sendOutboundMessage', () => {
+    bootstrapLitSandbox([dummyCatalog], {elementTagName: 'app-root'});
+    const sendOutboundSpy = vi.spyOn(a2uiBridge, 'sendOutboundMessage');
+
+    const element = new A2uiSandboxRoot();
+    document.body.appendChild(element);
+
+    const processor = element['processor'];
+    const rpc = processor.rpc;
+    const dummyMsg = {version: 'v1.0', callAgentFunction: {functionCallId: 'rpc-1'}};
+    rpc['outboundListener']?.(dummyMsg);
+
+    expect(sendOutboundSpy).toHaveBeenCalledWith(dummyMsg);
+
+    element.remove();
+  });
+
   it('handles context-request events for A2UIMarkdown and cleanly removes the listener on disconnect', () => {
     bootstrapLitSandbox([dummyCatalog], {
       elementTagName: 'app-root',

@@ -128,6 +128,9 @@ export declare interface SetBlockingStatePayload {
   message?: string;
 }
 
+/** Supported A2UI protocol wire specification versions. */
+export type A2uiProtocolVersion = 'v0.9' | 'v1.0';
+
 /** Details for error in A2UI_CATALOG handshake. */
 export declare interface CatalogErrorDetails {
   message: string;
@@ -135,20 +138,99 @@ export declare interface CatalogErrorDetails {
 
 /** Payload for A2UI_CATALOG message type. */
 export declare interface CatalogHandshakePayload {
+  catalog?: unknown;
+  catalogs?: unknown[];
   error?: CatalogErrorDetails;
+  [key: string]: unknown;
+}
+
+/** Handshake response payload containing primary catalog and multi-catalog array. */
+export type A2uiCatalogHandshakePayload = CatalogHandshakePayload;
+
+/** Function call payload invoking a remote renderer function (server to client). */
+export declare interface CallRendererFunctionPayload {
+  surfaceId?: string;
+  functionCallId: string;
+  callFunction: {
+    catalogId?: string;
+    call?: string;
+    '@call'?: string;
+    args?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/** Response payload from an agent function call (server to client). */
+export declare interface AgentFunctionResponsePayload {
+  functionCallId: string;
+  result?: unknown;
+  error?: {
+    code: string;
+    message: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/** Function call payload invoking an agent function (client to server). */
+export declare interface CallAgentFunctionPayload {
+  surfaceId: string;
+  functionCallId: string;
+  callFunction: {
+    '@call'?: string;
+    call?: string;
+    catalogId?: string;
+    args?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/** Response payload from a renderer function call (client to server). */
+export declare interface RendererFunctionResponsePayload {
+  functionCallId: string;
+  result?: unknown;
+  error?: {
+    code: string;
+    message: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/** Action payload for user interactions and events. */
+export declare interface ActionPayload {
+  userMessage?: string;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** Error payload dispatched across the bridge. */
+export declare interface ErrorPayload {
+  functionCallId?: string;
+  message?: string;
+  code?: string;
   [key: string]: unknown;
 }
 
 /** Payload for SEND_TO_SERVER message type. */
 export declare interface SendToServerPayload {
   version: string;
-  action: unknown;
+  action?: unknown;
+  callAgentFunction?: CallAgentFunctionPayload | unknown;
+  rendererFunctionResponse?: RendererFunctionResponsePayload | unknown;
+  error?: ErrorPayload | unknown;
+  [key: string]: unknown;
 }
 
 /** Inner details for createSurface command in RENDER_A2UI payload. */
 export declare interface CreateSurfaceDetails extends BaseSurfaceDetails {
-  catalogId: string;
+  catalogId?: string;
   sendDataModel?: boolean;
+  components?: unknown[];
+  dataModel?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 /** Layout command structure containing createSurface in RENDER_A2UI payload. */
@@ -178,8 +260,13 @@ export declare interface RenderA2uiItem {
   updateComponents?: UpdateComponentsDetails;
   updateDataModel?: UpdateDataModelDetails;
   deleteSurface?: DeleteSurfaceDetails;
+  callRendererFunction?: CallRendererFunctionPayload;
+  agentFunctionResponse?: AgentFunctionResponsePayload;
   [key: string]: unknown;
 }
+
+/** Alias for RenderA2uiItem representing an individual layout command item. */
+export type A2uiMessageItem = RenderA2uiItem;
 
 /**
  * Canonical update operation keys defined in the A2UI v0.9 layout specification.

@@ -74,6 +74,84 @@ describe('React Hook Adapter Spec', () => {
     container.remove();
   });
 
+  it('does not clobber catalog ids when multiple catalogs are passed to useA2uiSandbox', async () => {
+    const cat1 = {
+      id: 'cat-1',
+      components: new Map<string, ComponentApi>(),
+    } as unknown as Catalog<ComponentApi>;
+    const cat2 = {
+      id: 'cat-2',
+      components: new Map<string, ComponentApi>(),
+    } as unknown as Catalog<ComponentApi>;
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    function TestComponent() {
+      useA2uiSandbox([cat1, cat2]);
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(React.createElement(TestComponent));
+    });
+
+    expect(attachSpy).toHaveBeenCalled();
+    const configPassed = attachSpy.mock.calls[0][1];
+
+    await act(async () => {
+      configPassed.onCatalogResolved!('urn:a2ui:catalog:react_new_id');
+    });
+
+    expect(cat1.id).toBe('cat-1');
+    expect(cat2.id).toBe('cat-2');
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('configures processor with outboundListener that forwards to a2uiBridge.sendOutboundMessage', async () => {
+    const myCatalog = {
+      id: 'cat-single',
+      components: new Map<string, ComponentApi>(),
+    } as unknown as Catalog<ComponentApi>;
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    const sendOutboundSpy = vi.spyOn(a2uiBridge, 'sendOutboundMessage');
+
+    function TestComponent() {
+      useA2uiSandbox([myCatalog]);
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(React.createElement(TestComponent));
+    });
+
+    expect(attachSpy).toHaveBeenCalled();
+    const processor = attachSpy.mock.calls[0][0] as {
+      rpc?: {outboundListener?: (msg: unknown) => void};
+    };
+    const dummyMsg = {version: 'v1.0', callAgentFunction: {functionCallId: 'call-react'}};
+    processor.rpc?.outboundListener?.(dummyMsg);
+
+    expect(sendOutboundSpy).toHaveBeenCalledWith(dummyMsg);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it('updates hook state with active surface onSurfaceReady and resets onSurfaceCleared', async () => {
     const dummyCatalog = {
       id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',

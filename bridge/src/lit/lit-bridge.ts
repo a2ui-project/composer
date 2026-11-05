@@ -124,6 +124,11 @@ export class A2uiSandboxRoot extends LitElement {
     (action: A2uiClientAction) => {
       a2uiBridge.sendAction(action);
     },
+    {
+      outboundListener: (msg: unknown) => {
+        a2uiBridge.sendOutboundMessage(msg);
+      },
+    },
   );
 
   private markdownProvider = new ContextProvider(this, {
@@ -177,9 +182,15 @@ export class A2uiSandboxRoot extends LitElement {
       getDemos: (this.constructor as typeof A2uiSandboxRoot).getDemos,
       onThemeChange: (this.constructor as typeof A2uiSandboxRoot).onThemeChange,
       onCatalogResolved: catalogId => {
-        for (const catalog of (this.constructor as typeof A2uiSandboxRoot).catalogs) {
-          if (catalog) {
-            (catalog as unknown as CatalogDetails).id = catalogId;
+        const catalogs = (this.constructor as typeof A2uiSandboxRoot).catalogs;
+        if (
+          catalogs &&
+          catalogs.length === 1 &&
+          !catalogs.some(c => (c as {id?: string})?.id === catalogId)
+        ) {
+          const firstCatalog = catalogs[0];
+          if (firstCatalog) {
+            (firstCatalog as unknown as CatalogDetails).id = catalogId;
           }
         }
       },
@@ -265,8 +276,8 @@ export class A2uiSandboxRoot extends LitElement {
  *   callback).
  * @return The A2uiSandboxRoot custom element constructor value ready for nominal references.
  */
-export function bootstrapLitSandbox<T extends ComponentApi>(
-  catalogs: Catalog<T>[],
+export function bootstrapLitSandbox<T extends ComponentApi = ComponentApi>(
+  catalogs: Catalog<T>[] | unknown[],
   options?: LitSandboxOptions,
 ): typeof A2uiSandboxRoot {
   const elementTagName = options?.elementTagName || 'app-root';

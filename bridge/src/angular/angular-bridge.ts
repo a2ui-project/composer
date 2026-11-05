@@ -33,7 +33,6 @@ import {
   MarkdownRenderer,
   provideMarkdownRenderer,
 } from '@a2ui/angular/v0_9';
-import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import {
   a2uiBridge,
   ThemePreference,
@@ -150,12 +149,15 @@ export class A2uiSandboxConnection implements OnDestroy {
     this.rendererConnection = a2uiBridge.attachRenderer(processor, {
       surfaceGroup: this.rendererService.surfaceGroup,
       onCatalogResolved: (catalogId: string) => {
-        const catalogs = this.rendererConfig.catalogs;
-        if (catalogs) {
-          for (const catalog of catalogs) {
-            if (catalog) {
-              (catalog as unknown as CatalogDetails).id = catalogId;
-            }
+        const catalogs = this.rendererConfig?.catalogs;
+        if (
+          catalogs &&
+          catalogs.length === 1 &&
+          !catalogs.some(c => (c as {id?: string})?.id === catalogId)
+        ) {
+          const firstCatalog = catalogs[0];
+          if (firstCatalog) {
+            (firstCatalog as unknown as CatalogDetails).id = catalogId;
           }
         }
       },
@@ -202,10 +204,10 @@ export class A2uiSandboxConnection implements OnDestroy {
 /**
  * Provides a unified array of Angular dependency injection providers configured for the A2UI sandbox.
  *
- * Exposes a standardized registration block that includes catalog component classes, the central
- * rendering service, and the sandbox connection state to keep catalog bootstrap clean and modular.
+ * Exposes a standardized registration block that includes catalog component classes or instances,
+ * the central rendering service, and the sandbox connection state to keep catalog bootstrap clean and modular.
  *
- * @param catalogsClasses The array of catalog component provider classes (e.g. BasicCatalog) to register and manage.
+ * @param catalogs The array of catalog component provider classes (e.g. BasicCatalog) or instances to register and manage.
  * @param options Optional configuration adapter block holding `catalogJson` (preloaded catalog JSON),
  *   `markdownRendererFn` (custom markdown rendering delegate), `getComponentUsages` (component usage
  *   sample retrieval callback), `onThemeChange` (theme preference change callback), and `getDemos`
@@ -213,25 +215,36 @@ export class A2uiSandboxConnection implements OnDestroy {
  * @return Angular EnvironmentProviders ready for modern standalone bootstrapping application scopes.
  */
 export function provideA2uiSandbox(
-  catalogsClasses: Array<Type<Catalog<ComponentApi>>>,
+  catalogs: Array<Type<unknown> | unknown>,
   options?: AngularSandboxOptions,
 ): EnvironmentProviders {
+  const classProviders = (catalogs ?? []).filter(
+    (c): c is Type<unknown> => typeof c === 'function',
+  ) as Provider[];
+
   const providers: Provider[] = [
     A2uiRendererService,
     {
       provide: A2uiSandboxConnection,
       useFactory: () => new A2uiSandboxConnection(options),
     },
-    ...catalogsClasses,
+    ...classProviders,
     provideMarkdownRenderer(options?.markdownRendererFn),
     {
       provide: A2UI_RENDERER_CONFIG,
       useFactory: () => {
-        const resolvedCatalogs = catalogsClasses.map(cls => inject(cls));
+        const resolvedCatalogs = (catalogs ?? []).map(entry =>
+          typeof entry === 'function' ? inject(entry as Type<unknown>) : entry,
+        );
         return {
           catalogs: resolvedCatalogs,
           actionHandler: (action: unknown) => {
             a2uiBridge.sendAction(action);
+          },
+          processorOptions: {
+            outboundListener: (msg: unknown) => {
+              a2uiBridge.sendOutboundMessage(msg);
+            },
           },
         };
       },
