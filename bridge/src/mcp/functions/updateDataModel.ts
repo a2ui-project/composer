@@ -25,7 +25,7 @@ import {
 } from '@a2ui/web_core/v0_9';
 import {z} from 'zod/v3';
 
-import {resolveDynamicValueDeep} from '../dynamic-values.js';
+import {resolveDynamicValueDeep} from '../v0-9-dynamic-value-strategy.js';
 import {asyncable, type FunctionApiDefinition, withSettledArgs} from './common.js';
 
 /** Function API definition for `updateDataModel`. */
