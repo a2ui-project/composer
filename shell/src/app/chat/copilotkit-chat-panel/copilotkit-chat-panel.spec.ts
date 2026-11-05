@@ -41,7 +41,7 @@ import {
   ChatPromptFactoryService,
   CustomInstructionPreset,
   CustomInstructionsState,
-} from '../chat-prompt-factory/chat-prompt-factory.service';
+} from '../chat-prompt-factory/v0-9-prompt-strategy';
 import {CustomInstructionsDialogHarness} from '../custom-instructions-dialog/test/custom-instructions-dialog.harness';
 import {ComposerPanelId} from '../../shell/composer-workspace/composer-panel-id';
 import {StateSync} from '../state-sync/state-sync';

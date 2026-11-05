@@ -50,7 +50,7 @@ import {CustomInstructionsDialog} from '../custom-instructions-dialog/custom-ins
 import {
   ChatPromptFactoryService,
   CustomInstructionsState,
-} from '../chat-prompt-factory/chat-prompt-factory.service';
+} from '../chat-prompt-factory/v0-9-prompt-strategy';
 
 /**
  * Directive responsible for automatically scrolling a container to the bottom whenever its inputs change.

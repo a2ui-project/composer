@@ -40,7 +40,7 @@ import {
   getPayloadStrategy,
   parseAndHealJsonLines,
 } from '../a2ui-payload-parser/a2ui-payload-parser';
-import {ChatPromptFactoryService} from '../chat-prompt-factory/chat-prompt-factory.service';
+import {ChatPromptFactoryService} from '../chat-prompt-factory/v0-9-prompt-strategy';
 import {ChatErrorFormatterService} from '../chat-error-formatter/chat-error-formatter.service';
 import {cleanErrorMessage, redactApiKey} from '../chat-service/error-utils';
 import {RendererSelection} from '../renderer-selection/renderer-selection';

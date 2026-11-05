@@ -15,7 +15,7 @@
  */
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {TestBed} from '@angular/core/testing';
-import {ChatPromptFactoryService} from './chat-prompt-factory.service';
+import {ChatPromptFactoryService} from './v0-9-prompt-strategy';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
