@@ -443,4 +443,71 @@ describe('Angular Sandbox Connection Spec', () => {
 
     connInstance.ngOnDestroy();
   });
+
+  it('supports mixed [Class, instance] array and registers class providers while preserving instances', () => {
+    class MockCatalogClass {}
+    const mockClassInstance = new MockCatalogClass();
+    const directInstance = {id: 'instance-cat'};
+
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideA2uiSandbox([MockCatalogClass, directInstance]),
+        {provide: MockCatalogClass, useValue: mockClassInstance},
+        {provide: A2uiRendererService, useValue: mockRendererService},
+      ],
+    });
+
+    const config = TestBed.inject(A2UI_RENDERER_CONFIG);
+    expect(config.catalogs).toEqual([mockClassInstance, directInstance]);
+
+    const sendOutboundSpy = vi.spyOn(a2uiBridge, 'sendOutboundMessage');
+    const dummyMsg = {version: 'v1.0', callAgentFunction: {functionCallId: '1'}};
+    config.processorOptions?.outboundListener?.(dummyMsg);
+    expect(sendOutboundSpy).toHaveBeenCalledWith(dummyMsg);
+
+    const connInstance = TestBed.inject(A2uiSandboxConnection);
+    connInstance.ngOnDestroy();
+  });
+
+  it('does not clobber catalog ids when multiple catalogs are configured in onCatalogResolved', () => {
+    const cat1 = {id: 'cat-1'};
+    const cat2 = {id: 'cat-2'};
+
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    const mockRendererConfig = {
+      catalogs: [cat1, cat2],
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        {provide: A2uiRendererService, useValue: mockRendererService},
+        {provide: A2UI_RENDERER_CONFIG, useValue: mockRendererConfig},
+      ],
+    });
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    const connection = TestBed.runInInjectionContext(() => new A2uiSandboxConnection());
+
+    const configPassed = attachSpy.mock.lastCall![1];
+    configPassed.onCatalogResolved!('urn:a2ui:catalog:new_id');
+
+    // Both IDs should remain unchanged because catalogs.length > 1
+    expect(cat1.id).toBe('cat-1');
+    expect(cat2.id).toBe('cat-2');
+
+    connection.ngOnDestroy();
+  });
 });

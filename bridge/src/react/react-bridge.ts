@@ -54,7 +54,7 @@ export interface ReactSandboxOptions {
  * @return A reactive state object containing the active surface drawing model.
  */
 export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
-  catalogs: Catalog<C>[],
+  catalogs: Catalog<C>[] | unknown[],
   options?: ReactSandboxOptions,
 ): UseA2uiSandboxResult<C> {
   const [surface, setSurface] = useState<SurfaceModel<C> | undefined>(undefined);
@@ -78,9 +78,17 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
 
   useEffect(() => {
     // Instantiates a new dynamic MessageProcessor mapping outbound event actions
-    const processor = new MessageProcessor(catalogs, (action: A2uiClientAction) => {
-      a2uiBridge.sendAction(action);
-    });
+    const processor = new MessageProcessor(
+      catalogs as Catalog<C>[],
+      (action: A2uiClientAction) => {
+        a2uiBridge.sendAction(action);
+      },
+      {
+        outboundListener: (msg: unknown) => {
+          a2uiBridge.sendOutboundMessage(msg);
+        },
+      },
+    );
 
     // Connects the renderer stack and establishes inter-frame callbacks
     const connection = a2uiBridge.attachRenderer(processor, {
@@ -104,9 +112,11 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
         ? theme => optionsRef.current?.onThemeChange?.(theme)
         : undefined,
       onCatalogResolved: catalogId => {
-        for (const catalog of catalogsRef.current) {
-          if (catalog) {
-            (catalog as unknown as CatalogDetails).id = catalogId;
+        const cats = catalogsRef.current;
+        if (cats && cats.length === 1 && !cats.some(c => (c as {id?: string})?.id === catalogId)) {
+          const firstCatalog = cats[0];
+          if (firstCatalog) {
+            (firstCatalog as unknown as CatalogDetails).id = catalogId;
           }
         }
       },

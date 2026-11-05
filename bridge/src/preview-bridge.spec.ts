@@ -2966,6 +2966,224 @@ describe('PreviewBridge Core API Runtime', () => {
       );
     });
   });
+
+  describe('Outbound RPC Channel and Processor Management', () => {
+    it('sendOutboundMessage stamps version v1.0 by default and dispatches SEND_TO_SERVER', () => {
+      bridge.sendOutboundMessage({
+        callAgentFunction: {
+          surfaceId: 'surf-1',
+          functionCallId: 'call-1',
+          callFunction: {'@call': 'fetchData'},
+        },
+      });
+
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            version: 'v1.0',
+            callAgentFunction: {
+              surfaceId: 'surf-1',
+              functionCallId: 'call-1',
+              callFunction: {'@call': 'fetchData'},
+            },
+          },
+        },
+        window.location.origin,
+      );
+    });
+
+    it('sendOutboundMessage preserves explicit version if already present', () => {
+      bridge.sendOutboundMessage({
+        version: 'v1.0',
+        rendererFunctionResponse: {
+          functionCallId: 'call-2',
+          result: {status: 'ok'},
+        },
+      });
+
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            version: 'v1.0',
+            rendererFunctionResponse: {
+              functionCallId: 'call-2',
+              result: {status: 'ok'},
+            },
+          },
+        },
+        window.location.origin,
+      );
+    });
+
+    it('manages manual and active processor via setActiveProcessor and getActiveProcessor', () => {
+      const mockProcessor = {processMessages: vi.fn()};
+      expect(bridge.getActiveProcessor()).toBeUndefined();
+
+      bridge.setActiveProcessor(mockProcessor);
+      expect(bridge.getActiveProcessor()).toBe(mockProcessor);
+
+      bridge.destroy();
+      expect(bridge.getActiveProcessor()).toBeUndefined();
+    });
+  });
+
+  describe('Multi-Catalog Handshake Resolution', () => {
+    it('resolves multiple catalogs, stamps protocolVersion and $id without mutating original objects, and dispatches {catalog, catalogs}', async () => {
+      const cat1Schema = Object.freeze({
+        catalogId: 'basic-cat',
+        title: 'Basic Catalog',
+        protocolVersion: '0.9',
+        components: {Text: {}},
+      });
+      const cat2 = {
+        id: 'mcp-cat',
+        protocolVersion: '1.0',
+        catalogSchema: Object.freeze({
+          $id: 'mcp-cat',
+          title: 'MCP Catalog',
+          functions: {callTool: {}},
+        }),
+      };
+
+      bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {
+          surfaceGroup: {
+            onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+          } as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+          catalogs: [cat1Schema, cat2],
+        },
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {type: PreviewBridgeMessageType.GET_CATALOG},
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          payload: expect.objectContaining({
+            catalogId: 'basic-cat',
+            $id: 'basic-cat',
+            title: 'Basic Catalog',
+            catalog: expect.objectContaining({
+              catalogId: 'basic-cat',
+              $id: 'basic-cat',
+              protocolVersion: '0.9',
+            }),
+            catalogs: expect.arrayContaining([
+              expect.objectContaining({
+                catalogId: 'basic-cat',
+                $id: 'basic-cat',
+                protocolVersion: '0.9',
+              }),
+              expect.objectContaining({
+                catalogId: 'mcp-cat',
+                $id: 'mcp-cat',
+                protocolVersion: '1.0',
+              }),
+            ]),
+          }),
+        }),
+        window.location.origin,
+      );
+    });
+
+    it('supports async factory function in catalogs configuration', async () => {
+      const asyncCatalogFactory = async () => ({
+        catalogId: 'async-cat',
+        components: {CustomComp: {}},
+      });
+
+      bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {
+          surfaceGroup: {
+            onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+          } as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+          catalogs: [asyncCatalogFactory],
+        },
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {type: PreviewBridgeMessageType.GET_CATALOG},
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          payload: expect.objectContaining({
+            catalogId: 'async-cat',
+            catalogs: [
+              expect.objectContaining({
+                catalogId: 'async-cat',
+                $id: 'async-cat',
+              }),
+            ],
+          }),
+        }),
+        window.location.origin,
+      );
+    });
+  });
+
+  describe('Multi-Surface Reset and v1.0 Initial Content', () => {
+    it('resets all surface IDs in a multi-surface batch', () => {
+      vi.useFakeTimers();
+      const processSpy = vi.fn();
+      bridge.attachRenderer(
+        {processMessages: processSpy},
+        {
+          surfaceGroup: {
+            onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+          } as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [
+              {version: 'v1.0', createSurface: {surfaceId: 'surf-x', catalogId: 'c1'}},
+              {version: 'v1.0', createSurface: {surfaceId: 'surf-y', catalogId: 'c2'}},
+            ],
+          },
+        }),
+      );
+
+      // Fast-forward step 2
+      vi.runAllTimers();
+
+      // Ensure pre-delete was called for both surfaces with strategy version v1.0
+      expect(processSpy).toHaveBeenCalledWith([
+        {version: 'v1.0', deleteSurface: {surfaceId: 'surf-x'}},
+      ]);
+      expect(processSpy).toHaveBeenCalledWith([
+        {version: 'v1.0', deleteSurface: {surfaceId: 'surf-y'}},
+      ]);
+      vi.useRealTimers();
+    });
+  });
 });
 
 describe('safeSerialize', () => {
