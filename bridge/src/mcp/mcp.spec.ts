@@ -29,7 +29,7 @@ import {
   readUiResourceUris,
   A2UI_MIME_TYPE,
 } from '../index.js';
-import {resolveDynamicValueDeep} from './dynamic-values.js';
+import {resolveDynamicValueDeep} from './v0-9-dynamic-value-strategy.js';
 import {withSettledArgs} from './functions/common.js';
 
 describe('MCP Bridge & Catalog Functions', () => {

@@ -33,7 +33,7 @@ import {CallToolResultSchema} from '@modelcontextprotocol/sdk/types.js';
 import type {CallToolResult, ReadResourceResult} from '@modelcontextprotocol/sdk/types.js';
 import {z} from 'zod/v3';
 
-import {resolveDynamicRecord} from '../dynamic-values.js';
+import {resolveDynamicRecord} from '../v0-9-dynamic-value-strategy.js';
 import type {FunctionApiDefinition} from './common.js';
 
 /** MIME type identifying an A2UI payload in an MCP resource. */
