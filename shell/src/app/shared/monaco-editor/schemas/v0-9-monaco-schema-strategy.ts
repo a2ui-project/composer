@@ -1,0 +1,874 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {
+  Component,
+  ElementRef,
+  input,
+  output,
+  inject,
+  effect,
+  signal,
+  untracked,
+  computed,
+  viewChild,
+  afterNextRender,
+  DestroyRef,
+} from '@angular/core';
+import loader from '@monaco-editor/loader';
+import type * as monaco from 'monaco-editor';
+import {CatalogManagement} from '../../..//storage/catalog-management/catalog-management';
+import {generateUuid} from '../../..//utils/uuid';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../../..//settings/app-config-provider/app-config-provider';
+import {COMMON_TYPES_SCHEMA} from '../../..//gallery/schema/common-types-schema';
+import {Catalog} from '../../..//storage/models/catalog-storage.model';
+
+/**
+ * A standalone Angular component that wraps the Monaco Editor.
+ *
+ * This component provides an embedded code editor specifically configured for
+ * editing A2UI layout JSON. It automatically synchronizes theme preferences
+ * (dark/light mode) and integrates with the active A2UI catalog to provide
+ * real-time schema validation and autocompletion for component properties.
+ */
+const ERROR_MARKER_DEBOUNCE_MS = 3000;
+
+const COMPOSER_LIGHT_THEME = 'composer-light';
+const COMPOSER_DARK_THEME = 'composer-dark';
+
+/**
+ * Reads a Material system token as defined for the given theme class. A detached
+ * probe is used so the value does not depend on which theme is currently active.
+ */
+function readThemeToken(themeClass: string, token: string): string {
+  const probe = document.createElement('div');
+  probe.className = themeClass;
+  probe.hidden = true;
+  document.body.appendChild(probe);
+  const value = getComputedStyle(probe).getPropertyValue(token).trim();
+  probe.remove();
+  return value;
+}
+
+/**
+ * Registers light and dark editor themes that sit on the shell's surface color,
+ * so the editor matches the panels around it instead of Monaco's own white or
+ * near-black background. Monaco only accepts hex colors, so a token that does
+ * not resolve to one leaves the base theme's background in place.
+ */
+function registerSurfaceThemes(monacoInstance: typeof monaco): void {
+  const themes = [
+    {name: COMPOSER_LIGHT_THEME, base: 'vs', themeClass: 'light-theme'},
+    {name: COMPOSER_DARK_THEME, base: 'vs-dark', themeClass: 'dark-theme'},
+  ] as const;
+  for (const {name, base, themeClass} of themes) {
+    const surface = readThemeToken(themeClass, '--mat-sys-surface');
+    const colors: Record<string, string> = /^#[0-9a-f]{6}$/i.test(surface)
+      ? {'editor.background': surface, 'editorGutter.background': surface}
+      : {};
+    monacoInstance.editor.defineTheme(name, {base, inherit: true, rules: [], colors});
+  }
+}
+/** Numeric values of `monaco.MarkerSeverity` (unavailable at runtime via AMD type-only import). */
+const MONACO_SEVERITY_WARNING = 4;
+const MONACO_SEVERITY_ERROR = 8;
+/** vscode-json-languageservice ErrorCode.CommentsNotPermitted/ValueExpected. */
+const JSON_COMMENT_NOT_PERMITTED_CODE = '521';
+
+/**
+ * Determines whether a Monaco diagnostic marker represents an error or warning.
+ *
+ * @param marker - The Monaco diagnostic marker to evaluate.
+ * @returns True if the marker has error or warning severity.
+ */
+export function isErrorOrWarningMarker(marker: monaco.editor.IMarker): boolean {
+  return marker.severity === MONACO_SEVERITY_ERROR || marker.severity === MONACO_SEVERITY_WARNING;
+}
+
+@Component({
+  selector: 'a2ui-composer-monaco-editor',
+  standalone: true,
+  templateUrl: './monaco-editor.ng.html',
+  styleUrl: './monaco-editor.scss',
+})
+export class MonacoEditor {
+  readonly value = input<string>('');
+  readonly readOnly = input<boolean>(false);
+  readonly ariaLabel = input<string>('Raw layout JSON');
+  readonly schemaMode = input<'layout' | 'gallery-example'>('layout');
+  readonly valueChange = output<string>();
+  readonly markersChange = output<monaco.editor.IMarker[]>();
+  readonly userInteraction = output<void>();
+
+  private readonly uuid = generateUuid();
+  private get modelUri(): string {
+    const prefix = this.schemaMode() === 'gallery-example' ? 'gallery-draft' : 'layout';
+    return `inmemory://model/${prefix}-${this.uuid}.json`;
+  }
+  readonly editorContainer = viewChild.required<ElementRef<HTMLDivElement>>('editorContainer');
+
+  private editor?: monaco.editor.IStandaloneCodeEditor;
+  private readonly monacoInstance = signal<typeof monaco | null>(null);
+
+  private readonly catalogManagement = inject(CatalogManagement);
+  private readonly configProvider = inject(AppConfigProvider);
+  private readonly destroyRef = inject(DestroyRef);
+
+  private markerDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingMarkers: monaco.editor.IMarker[] | null = null;
+  private pendingSignature = '';
+  private lastMarkersSignature = '';
+  private isResetting = false;
+
+  protected readonly isDarkTheme = computed(
+    () => this.configProvider.themePreference() === ThemePreference.DARK,
+  );
+  protected readonly monacoTheme = computed(() =>
+    this.isDarkTheme() ? COMPOSER_DARK_THEME : COMPOSER_LIGHT_THEME,
+  );
+
+  /**
+   * Resolves a JSON Pointer RFC 6901 compliant path against an object payload.
+   *
+   * @param obj - The base JSON object to traverse.
+   * @param pointer - The JSON pointer URI / path string.
+   * @returns The resolved inner object payload or undefined if invalid.
+   */
+  static resolveJsonPointer(obj: unknown, pointer: string): unknown {
+    if (!pointer || pointer === '' || pointer === '#') {
+      return obj;
+    }
+    let p = pointer.startsWith('#') ? pointer.substring(1) : pointer;
+    if (p.startsWith('/')) {
+      p = p.substring(1);
+    }
+    const parts = p.split('/');
+    let current: unknown = obj;
+
+    for (const part of parts) {
+      if (current === null || typeof current !== 'object') {
+        return undefined;
+      }
+
+      // RFC 6901 compliant segment unescaping and URL decoding before prototype
+      // guards to preserve exact segment logic and strictly avoid JS prototype
+      // pollution injections / URI decoding bugs
+      let unescaped = part.replace(/~1/g, '/').replace(/~0/g, '~');
+      try {
+        unescaped = decodeURIComponent(unescaped);
+      } catch {
+        // Fall back to unescaped if invalid URI encoding
+      }
+
+      if (unescaped === '__proto__' || unescaped === 'constructor' || unescaped === 'prototype') {
+        return undefined;
+      }
+
+      current = Object.prototype.hasOwnProperty.call(current, unescaped)
+        ? (current as Record<string, unknown>)[unescaped]
+        : undefined;
+    }
+
+    return current;
+  }
+
+  /**
+   * Evaluates Draft-07 JSON Schema inputs and synthesizes deep structure.
+   * Aggressively flattens in-memory `allOf` constructs and links `$ref` dependencies.
+   *
+   * @param rawSchema - The current node of the JSON schema.
+   * @param externalSchemas - Available root nodes to satisfy `$ref` queries.
+   * @param rootDefinitions - Storage accumulator for synthesized definitions.
+   * @param visited - Tracks cycle breaking refs.
+   * @param isRoot - Signals if the node is at the apex context.
+   * @param depth - Traverses execution tree structure (limit prevents cyclic halting).
+   * @returns Synthesized, flatter JSON structure representation without inline `allOf`.
+   */
+  static resolveAndFlattenSchemaForDraft07(
+    rawSchema: Record<string, unknown>,
+    externalSchemas: Record<string, Record<string, unknown>> = {},
+    rootDefinitions: Record<string, unknown> = {},
+    visited = new Set<string>(),
+    isRoot = true,
+    depth = 0,
+  ): Record<string, unknown> {
+    // Prevent call-stack overflows by returning an empty schema on deeply nested
+    // loops or halting when attempting to flatten deeply nested cyclic refs.
+    if (depth > 50) {
+      console.warn('MonacoEditor: Max schema recursion depth exceeded (> 50), failing open.');
+      return {};
+    }
+
+    const result: Record<string, unknown> = {...rawSchema};
+    if (isRoot) {
+      result['definitions'] = rootDefinitions;
+    }
+
+    const refResult = MonacoEditor.mergeSchemaRef(
+      result,
+      externalSchemas,
+      rootDefinitions,
+      visited,
+      depth,
+    );
+    if (refResult) {
+      return refResult;
+    }
+
+    if (Array.isArray(result['allOf'])) {
+      // allOf dependencies are eagerly evaluated inline synchronously
+      // because Draft-07 tooling often expects composed primitives instead of references.
+      MonacoEditor.resolveAllOf(result, externalSchemas, rootDefinitions, visited, depth);
+    }
+
+    if (
+      result['properties'] &&
+      typeof result['properties'] === 'object' &&
+      !Array.isArray(result['properties'])
+    ) {
+      const rawProps = result['properties'] as Record<string, unknown>;
+      const flattenedProps: Record<string, unknown> = {};
+      for (const [key, propSchema] of Object.entries(rawProps)) {
+        if (propSchema && typeof propSchema === 'object' && !Array.isArray(propSchema)) {
+          flattenedProps[key] = MonacoEditor.resolveAndFlattenSchemaForDraft07(
+            propSchema as Record<string, unknown>,
+            externalSchemas,
+            rootDefinitions,
+            visited,
+            false,
+            depth + 1,
+          );
+        } else {
+          flattenedProps[key] = propSchema;
+        }
+      }
+      result['properties'] = flattenedProps;
+    }
+
+    if (Array.isArray(result['items'])) {
+      result['items'] = (result['items'] as unknown[]).map(item =>
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? MonacoEditor.resolveAndFlattenSchemaForDraft07(
+              item as Record<string, unknown>,
+              externalSchemas,
+              rootDefinitions,
+              visited,
+              false,
+              depth + 1,
+            )
+          : item,
+      );
+    } else if (
+      result['items'] &&
+      typeof result['items'] === 'object' &&
+      !Array.isArray(result['items'])
+    ) {
+      result['items'] = MonacoEditor.resolveAndFlattenSchemaForDraft07(
+        result['items'] as Record<string, unknown>,
+        externalSchemas,
+        rootDefinitions,
+        visited,
+        false,
+        depth + 1,
+      );
+    }
+
+    if (Array.isArray(result['anyOf'])) {
+      result['anyOf'] = (result['anyOf'] as unknown[]).map(sub =>
+        sub && typeof sub === 'object' && !Array.isArray(sub)
+          ? MonacoEditor.resolveAndFlattenSchemaForDraft07(
+              sub as Record<string, unknown>,
+              externalSchemas,
+              rootDefinitions,
+              visited,
+              false,
+              depth + 1,
+            )
+          : sub,
+      );
+    }
+
+    if (Array.isArray(result['oneOf'])) {
+      result['oneOf'] = (result['oneOf'] as unknown[]).map(sub =>
+        sub && typeof sub === 'object' && !Array.isArray(sub)
+          ? MonacoEditor.resolveAndFlattenSchemaForDraft07(
+              sub as Record<string, unknown>,
+              externalSchemas,
+              rootDefinitions,
+              visited,
+              false,
+              depth + 1,
+            )
+          : sub,
+      );
+    }
+
+    return result;
+  }
+
+  private static mergeSchemaRef(
+    result: Record<string, unknown>,
+    externalSchemas: Record<string, Record<string, unknown>>,
+    rootDefinitions: Record<string, unknown>,
+    visited: Set<string>,
+    depth: number,
+  ): Record<string, unknown> | null {
+    if (typeof result['$ref'] === 'string') {
+      const ref = result['$ref'];
+      if (ref.includes('#')) {
+        const [uri, pointer] = ref.split('#');
+        if (uri && externalSchemas[uri]) {
+          const defKey = `${uri.replace(/[^a-zA-Z0-9]/g, '_')}_${pointer.replace(/[^a-zA-Z0-9]/g, '_')}`;
+          if (visited.has(ref)) {
+            return {$ref: `#/definitions/${defKey}`};
+          }
+          visited.add(ref);
+          const resolved = MonacoEditor.resolveJsonPointer(externalSchemas[uri], '#' + pointer);
+          if (resolved && typeof resolved === 'object') {
+            rootDefinitions[defKey] = MonacoEditor.resolveAndFlattenSchemaForDraft07(
+              resolved as Record<string, unknown>,
+              externalSchemas,
+              rootDefinitions,
+              visited,
+              false,
+              depth + 1,
+            );
+            return {$ref: `#/definitions/${defKey}`};
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  private static resolveAllOf(
+    result: Record<string, unknown>,
+    externalSchemas: Record<string, Record<string, unknown>>,
+    rootDefinitions: Record<string, unknown>,
+    visited: Set<string>,
+    depth: number,
+  ): void {
+    const properties: Record<string, unknown> = {
+      ...((result['properties'] as Record<string, unknown>) || {}),
+    };
+    const required = new Set<string>((result['required'] as string[]) || []);
+
+    const allOf = result['allOf'] as unknown[];
+    for (const sub of allOf) {
+      if (sub && typeof sub === 'object') {
+        const flattenedSub = MonacoEditor.resolveAndFlattenSchemaForDraft07(
+          sub as Record<string, unknown>,
+          externalSchemas,
+          rootDefinitions,
+          visited,
+          false,
+          depth + 1,
+        );
+        if (flattenedSub['properties'] && typeof flattenedSub['properties'] === 'object') {
+          Object.assign(properties, flattenedSub['properties']);
+        }
+        if (Array.isArray(flattenedSub['required'])) {
+          flattenedSub['required'].forEach(r => required.add(r));
+        }
+      }
+    }
+    result['properties'] = properties;
+    if (required.size > 0) {
+      result['required'] = Array.from(required);
+    }
+    if (result['additionalProperties'] === false || result['unevaluatedProperties'] === false) {
+      result['additionalProperties'] = false;
+    }
+    delete result['allOf'];
+    delete result['unevaluatedProperties'];
+  }
+
+  constructor() {
+    // Synchronize external value changes into the Monaco editor instance
+    // when the value signal is updated from outside.
+    effect(() => {
+      const val = this.value();
+      untracked(() => {
+        if (this.editor && this.editor.getValue() !== val) {
+          this.updateEditorContent(val);
+        }
+      });
+    });
+
+    // Toggle the editor's read-only state when the corresponding input signal changes.
+    effect(() => {
+      const val = this.readOnly();
+      untracked(() => {
+        if (this.editor) {
+          this.editor.updateOptions({readOnly: val});
+        }
+      });
+    });
+
+    // Dynamically register and update the JSON schema validation for Monaco
+    // based on the currently active A2UI catalog to provide real-time linting.
+    effect(() => {
+      const catalog = this.catalogManagement.activeCatalog();
+      const monacoInstance = this.monacoInstance();
+
+      if (!catalog || !monacoInstance) {
+        return;
+      }
+
+      const componentSchemas = Object.values(catalog.components || {});
+      const layoutSchema = {
+        ...catalog,
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            version: {type: 'string'},
+            createSurface: {
+              type: 'object',
+              properties: {
+                surfaceId: {type: 'string'},
+                catalogId: {type: 'string'},
+                sendDataModel: {type: 'boolean'},
+              },
+              required: ['surfaceId', 'catalogId'],
+            },
+            deleteSurface: {
+              type: 'object',
+              properties: {
+                surfaceId: {type: 'string'},
+              },
+              required: ['surfaceId'],
+            },
+            updateComponents: {
+              type: 'object',
+              properties: {
+                surfaceId: {type: 'string'},
+                components: {
+                  type: 'array',
+                  items: {
+                    anyOf: componentSchemas,
+                  },
+                },
+              },
+              required: ['surfaceId', 'components'],
+            },
+            updateDataModel: {
+              type: 'object',
+              properties: {
+                surfaceId: {type: 'string'},
+                path: {type: 'string'},
+                value: {},
+              },
+              required: ['surfaceId'],
+            },
+          },
+          additionalProperties: false,
+        },
+      };
+
+      const galleryExampleSchema = {
+        ...catalog,
+        type: 'object',
+        properties: {
+          components: {
+            type: 'array',
+            items: {
+              anyOf: componentSchemas,
+            },
+          },
+          data: {
+            type: 'object',
+          },
+        },
+        required: ['components'],
+        additionalProperties: false,
+      };
+
+      // @types/monaco-editor deprecates `monaco.languages.json` in favor of `monaco.json`,
+      // but our AMD loader still attaches the JSON API to `monaco.languages.json`.
+      // We safely cast through `unknown` to the modern ESM type, as the runtime structures
+      // match and no alternative AMD interfaces exist for `jsonDefaults`.
+      const jsonContrib = (monacoInstance.languages as unknown as {json: typeof monaco.json}).json;
+      jsonContrib.jsonDefaults.setDiagnosticsOptions({
+        validate: true,
+        schemaValidation: 'error',
+        schemas: this.buildValidationSchemas(layoutSchema, galleryExampleSchema, catalog),
+      });
+    });
+
+    // Update the editor's theme (dark vs. light mode) in response to
+    // application-level theme preference changes.
+    effect(() => {
+      const theme = this.monacoTheme();
+      untracked(() => {
+        if (this.editor) {
+          this.editor.updateOptions({theme});
+        }
+      });
+    });
+
+    // Update the editor's ariaLabel when the corresponding input signal changes.
+    effect(() => {
+      const label = this.ariaLabel();
+      untracked(() => {
+        if (this.editor) {
+          this.editor.updateOptions({ariaLabel: label});
+        }
+      });
+    });
+
+    let destroyed = false;
+    const overflowWidgetsDomNode =
+      typeof document !== 'undefined' ? document.createElement('div') : undefined;
+    if (overflowWidgetsDomNode) {
+      overflowWidgetsDomNode.className = 'monaco-editor monaco-overflow-widgets';
+      document.body.appendChild(overflowWidgetsDomNode);
+    }
+
+    this.destroyRef.onDestroy(() => {
+      destroyed = true;
+      if (this.markerDebounceTimer) {
+        clearTimeout(this.markerDebounceTimer);
+        this.markerDebounceTimer = null;
+      }
+      this.pendingMarkers = null;
+      if (this.editor) {
+        const model = this.editor.getModel();
+        if (model) {
+          model.dispose();
+        }
+        this.editor.dispose();
+      }
+      overflowWidgetsDomNode?.remove();
+    });
+
+    afterNextRender(() => {
+      loader.config({paths: {vs: 'assets/monaco/vs'}});
+
+      loader.init().then((monacoInstance: typeof monaco) => {
+        if (destroyed) {
+          return;
+        }
+        this.monacoInstance.set(monacoInstance);
+        registerSurfaceThemes(monacoInstance);
+
+        const modelUri = monacoInstance.Uri.parse(this.modelUri);
+        let model = monacoInstance.editor.getModel(modelUri);
+        if (model) {
+          model.setValue(this.value());
+        } else {
+          model = monacoInstance.editor.createModel(this.value(), 'json', modelUri);
+        }
+        // Monaco uses the platform's line ending, CRLF on Windows. The drafts Composer
+        // writes use LF, so on Windows every draft written into the editor came back as a
+        // different string and was reported as a user edit. Keep the model on LF.
+        model.setEOL(monacoInstance.editor.EndOfLineSequence.LF);
+
+        const editor = monacoInstance.editor.create(this.editorContainer().nativeElement, {
+          model,
+          fixedOverflowWidgets: true,
+          overflowWidgetsDomNode,
+          theme: this.monacoTheme(),
+          automaticLayout: true,
+          minimap: {enabled: false},
+          readOnly: this.readOnly(),
+          scrollBeyondLastLine: false,
+          lineNumbers: 'on',
+          folding: true,
+          wordWrap: 'on',
+          ariaLabel: this.ariaLabel(),
+        });
+        this.editor = editor;
+
+        const interactionDisposables: monaco.IDisposable[] = [
+          editor.onDidChangeModelContent(() => {
+            if (this.isResetting) {
+              return;
+            }
+            this.handleUserInteraction();
+            const val = editor.getValue();
+            if (val !== this.value()) {
+              this.valueChange.emit(val);
+            }
+          }),
+          editor.onDidChangeCursorPosition(() => this.handleUserInteraction()),
+          editor.onDidChangeCursorSelection(() => this.handleUserInteraction()),
+          editor.onKeyDown(() => this.handleUserInteraction()),
+          editor.onMouseDown(() => this.handleUserInteraction()),
+        ];
+
+        const markersDisposable = monacoInstance.editor.onDidChangeMarkers(
+          (uris: readonly monaco.Uri[]) => {
+            if (uris.some(u => u?.toString() === modelUri.toString())) {
+              const markers = monacoInstance.editor.getModelMarkers({resource: modelUri});
+              const currentSignature = markers
+                .map(
+                  (m: monaco.editor.IMarker) =>
+                    `${m.severity}:${m.message}:${m.startLineNumber}:${m.startColumn}`,
+                )
+                .sort()
+                .join('|');
+
+              const hasErrors = markers.some(isErrorOrWarningMarker);
+              const hadPendingMarkers = this.pendingMarkers !== null;
+
+              if (!hasErrors) {
+                if (this.markerDebounceTimer) {
+                  clearTimeout(this.markerDebounceTimer);
+                  this.markerDebounceTimer = null;
+                }
+                this.pendingMarkers = null;
+                this.pendingSignature = '';
+
+                if (this.lastMarkersSignature === currentSignature && !hadPendingMarkers) {
+                  return;
+                }
+                this.lastMarkersSignature = currentSignature;
+
+                this.markersChange.emit(markers);
+              } else {
+                // Deduplicating consecutive identical marker emissions via a composite signature
+                // prevents flooding the ErrorLogger and causing UI flashing in the Errors panel.
+                if (this.lastMarkersSignature === currentSignature) {
+                  return;
+                }
+                this.pendingMarkers = markers;
+                this.pendingSignature = currentSignature;
+                this.scheduleErrorMarkersDebounce();
+              }
+            }
+          },
+        );
+
+        this.destroyRef.onDestroy(() => {
+          markersDisposable.dispose();
+          for (const d of interactionDisposables) {
+            d.dispose();
+          }
+        });
+      });
+    });
+  }
+
+  /**
+   * Moves the editor cursor to the designated line and column, scrolling the viewport
+   * if necessary and focusing the editor instance.
+   *
+   * @param line - 1-indexed target line number.
+   * @param column - 1-indexed target column number (defaults to 1).
+   */
+  navigateToPosition(line: number, column = 1): void {
+    if (!this.editor) {
+      return;
+    }
+    const targetLine = Math.max(1, Math.floor(line) || 1);
+    const targetColumn = Math.max(1, Math.floor(column) || 1);
+    const position = {lineNumber: targetLine, column: targetColumn};
+    this.editor.setPosition(position);
+    this.editor.revealPositionInCenterIfOutsideViewport(position);
+    this.editor.focus();
+  }
+
+  /**
+   * Retrieves line and column coordinates for the first active error or warning marker,
+   * or null if no diagnostics are present.
+   *
+   * @param syntaxOnly When true, returns coordinates only if a syntax error marker
+   * is present, avoiding premature fallback to schema validation markers.
+   */
+  getFirstErrorMarker(syntaxOnly = false): {line: number; column: number} | null {
+    const monacoInstance = this.monacoInstance();
+    if (!monacoInstance) {
+      return null;
+    }
+    const modelUri = monacoInstance.Uri.parse(this.modelUri);
+    const markers = monacoInstance.editor.getModelMarkers({resource: modelUri});
+    const errorMarkers = markers.filter(isErrorOrWarningMarker);
+    if (errorMarkers.length === 0) {
+      return null;
+    }
+    const syntaxError = errorMarkers.find(
+      m =>
+        m.severity === MONACO_SEVERITY_ERROR &&
+        (m.source === 'json' || m.code === JSON_COMMENT_NOT_PERMITTED_CODE),
+    );
+    if (syntaxOnly && !syntaxError) {
+      return null;
+    }
+    const targetError =
+      syntaxError ??
+      errorMarkers.find(m => m.severity === MONACO_SEVERITY_ERROR) ??
+      errorMarkers[0];
+    return {
+      line: targetError.startLineNumber,
+      column: targetError.startColumn,
+    };
+  }
+
+  private scheduleErrorMarkersDebounce(): void {
+    if (this.markerDebounceTimer) {
+      clearTimeout(this.markerDebounceTimer);
+      this.markerDebounceTimer = null;
+    }
+    this.markerDebounceTimer = setTimeout(() => {
+      this.flushPendingMarkers();
+    }, ERROR_MARKER_DEBOUNCE_MS);
+  }
+
+  private flushPendingMarkers(): void {
+    if (!this.pendingMarkers) {
+      return;
+    }
+    const markers = this.pendingMarkers;
+    const signature = this.pendingSignature;
+    this.pendingMarkers = null;
+    this.pendingSignature = '';
+    this.markerDebounceTimer = null;
+
+    if (this.lastMarkersSignature === signature) {
+      return;
+    }
+    this.lastMarkersSignature = signature;
+
+    this.markersChange.emit(markers);
+  }
+
+  private handleUserInteraction(): void {
+    this.userInteraction.emit();
+    if (this.markerDebounceTimer !== null && this.pendingMarkers !== null) {
+      this.scheduleErrorMarkersDebounce();
+    }
+  }
+
+  /**
+   * Constructs the array of JSON schemas provided to the Monaco Editor's JSON worker
+   * for real-time validation and autocompletion.
+   *
+   * @param layoutSchema The dynamically generated schema representing the full A2UI layout
+   *        structure, including the active catalog's components.
+   * @param galleryExampleSchema The schema for Gallery example drafts (`{components, data}`).
+   * @param catalog The active catalog JSON schema received from the renderer (`A2UI_CATALOG`).
+   * @return An array of schemas configured with URIs that match `$ref` references
+   *          within the component and function schemas. We map the active catalog and
+   *          `COMMON_TYPES_SCHEMA` to both `file:///` and HTTP URIs so the Monaco JSON
+   *          worker can resolve them synchronously without needing an external schema
+   *          request service.
+   */
+  private buildValidationSchemas(
+    layoutSchema: unknown,
+    galleryExampleSchema: unknown,
+    catalog: Catalog,
+  ): monaco.json.DiagnosticsOptions['schemas'] {
+    return [
+      {
+        uri: 'a2ui-catalog-schema',
+        fileMatch: ['inmemory://model/layout-*.json'],
+        schema: structuredClone(layoutSchema),
+      },
+      {
+        uri: 'a2ui-gallery-example-schema',
+        fileMatch: ['inmemory://model/gallery-draft-*.json'],
+        schema: structuredClone(galleryExampleSchema),
+      },
+      {
+        uri: 'file:///common_types.json',
+        schema: structuredClone(COMMON_TYPES_SCHEMA),
+      },
+      {
+        uri: 'file:///catalog.json',
+        schema: structuredClone(catalog),
+      },
+      {
+        uri: 'https://a2ui.org/specification/v0_9/common_types.json',
+        schema: structuredClone(COMMON_TYPES_SCHEMA),
+      },
+      {
+        uri: 'https://a2ui.org/specification/v0_9/catalog.json',
+        schema: structuredClone(catalog),
+      },
+    ];
+  }
+
+  /**
+   * Resets the editor model content directly to `value`, flushing the undo/redo
+   * history stack and cancelling any pending diagnostic marker debounce timers.
+   */
+  resetEditor(value: string): void {
+    if (this.markerDebounceTimer) {
+      clearTimeout(this.markerDebounceTimer);
+      this.markerDebounceTimer = null;
+    }
+    this.pendingMarkers = null;
+    this.pendingSignature = '';
+    this.lastMarkersSignature = '';
+
+    if (!this.editor) {
+      return;
+    }
+
+    const isLocked = this.readOnly();
+    this.isResetting = true;
+    try {
+      if (isLocked) {
+        this.editor.updateOptions({readOnly: false});
+      }
+      const model = this.editor.getModel();
+      if (model) {
+        if (this.editor.getValue() === value) {
+          model.setValue('');
+        }
+        model.setValue(value);
+      } else {
+        this.editor.setValue(value);
+      }
+    } finally {
+      if (isLocked) {
+        this.editor.updateOptions({readOnly: true});
+      }
+      this.isResetting = false;
+    }
+  }
+
+  private updateEditorContent(value: string): void {
+    if (!this.editor || this.editor.getValue() === value) {
+      return;
+    }
+    const model = this.editor.getModel();
+    if (model) {
+      const isLocked = this.readOnly();
+      if (isLocked) {
+        this.editor.updateOptions({readOnly: false});
+      }
+      this.editor.pushUndoStop();
+      this.editor.executeEdits('state-sync', [
+        {
+          range: model.getFullModelRange(),
+          text: value,
+          forceMoveMarkers: true,
+        },
+      ]);
+      this.editor.pushUndoStop();
+      if (isLocked) {
+        this.editor.updateOptions({readOnly: true});
+      }
+    } else {
+      this.editor.setValue(value);
+    }
+  }
+}
