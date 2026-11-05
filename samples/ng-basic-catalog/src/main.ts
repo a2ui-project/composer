@@ -17,7 +17,7 @@
 import {bootstrapApplication} from '@angular/platform-browser';
 import {provideZonelessChangeDetection} from '@angular/core';
 import {AppComponent} from './app/app.component';
-import {BasicWithMcpCatalog} from './app/basic-with-mcp.catalog';
+import {BasicWithMcpCatalog} from './app/sample-basic.catalog';
 import {provideA2uiSandbox} from 'a2ui-bridge/angular';
 import catalogJson from './assets/catalog.json';
 

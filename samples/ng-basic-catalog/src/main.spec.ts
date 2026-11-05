@@ -17,7 +17,7 @@
 // @vitest-environment jsdom
 import {describe, it, expect, vi, beforeEach, afterEach, onTestFinished} from 'vitest';
 import {AppComponent} from './app/app.component';
-import {BasicWithMcpCatalog} from './app/basic-with-mcp.catalog';
+import {BasicWithMcpCatalog} from './app/sample-basic.catalog';
 import {A2uiSandboxConnection, provideA2uiSandbox} from 'a2ui-bridge/angular';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {A2uiRendererService, A2UI_RENDERER_CONFIG, BasicCatalog} from '@a2ui/angular/v0_9';
