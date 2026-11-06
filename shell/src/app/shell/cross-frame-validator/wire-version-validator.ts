@@ -100,6 +100,31 @@ export function hasPrototypePollution(val: unknown, maxDepth = 64): boolean {
 }
 
 /**
+ * Recursively creates a sanitized deep clone of an object or array, omitting any
+ * prototype pollution keys ('__proto__', 'constructor', 'prototype').
+ *
+ * @param value The value to sanitize.
+ * @param maxDepth Maximum recursion depth to guard against circular references.
+ * @returns A sanitized copy of the input value.
+ */
+export function stripPrototypePollutionKeys<T>(value: T, maxDepth = 20): T {
+  if (!value || typeof value !== 'object' || maxDepth <= 0) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => stripPrototypePollutionKeys(item, maxDepth - 1)) as unknown as T;
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
+    result[key] = stripPrototypePollutionKeys(val, maxDepth - 1);
+  }
+  return result as T;
+}
+
+/**
  * Records a validation error message to the logger and errors collection.
  */
 export function recordError(

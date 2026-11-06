@@ -16,11 +16,13 @@
 import {describe, it, expect, vi} from 'vitest';
 import {
   parseAndHealJsonLines,
-  attemptSyntaxHealing,
   isRenderA2uiItem,
   runCatalogComponentSchemaCheck,
   sanitizeComponentObject,
+  getPayloadStrategy,
+  A2uiPayloadParser,
 } from './a2ui-payload-parser';
+import {attemptSyntaxHealing} from './json-stream-healer';
 import {A2uiComponentInstance} from 'a2ui-bridge';
 
 describe('a2ui-payload-parser', () => {
@@ -283,6 +285,89 @@ describe('a2ui-payload-parser', () => {
       const nestedObj = sanitized['nested'] as Record<string, unknown>;
       expect(nestedObj['nestedValid']).toBe('qux');
       expect(Object.keys(nestedObj)).not.toContain('__proto__');
+    });
+  });
+
+  describe('protocol strategy delegation', () => {
+    it('parses and counts v1.0 payload with inline createSurface.components', () => {
+      const payload = JSON.stringify([
+        {
+          createSurface: {
+            surfaceId: 's1',
+            components: [
+              {component: 'Text', id: 't1'},
+              {component: 'Button', id: 'b1'},
+            ],
+          },
+        },
+      ]);
+
+      const result = parseAndHealJsonLines(payload, 'v1.0');
+      expect(result.success).toBe(true);
+      if (result.success && !result.isConversational) {
+        expect(result.count).toBe(2);
+        expect((result.blocks[0] as Record<string, unknown>)['version']).toBe('1.0');
+      }
+    });
+
+    it('heals createSurface components when using v1.0 strategy in runCatalogComponentSchemaCheck', () => {
+      const blocks = [
+        {
+          createSurface: {
+            surfaceId: 's1',
+            components: [{name: 'TextBox', id: 't1'}],
+          },
+        },
+      ];
+
+      const healed = runCatalogComponentSchemaCheck(blocks, {TextField: {}}, 'v1.0');
+      expect(healed).toBe(true);
+      const comps = (blocks[0] as {createSurface: {components: Array<Record<string, unknown>>}})
+        .createSurface.components;
+      expect(comps[0]['component']).toBe('TextField');
+    });
+
+    it('resolves strategies via getPayloadStrategy and A2uiPayloadParser', () => {
+      const v09 = getPayloadStrategy('v0.9');
+      const v10 = getPayloadStrategy('v1.0');
+      expect(v09.version).toBe('v0.9');
+      expect(v10.version).toBe('v1.0');
+      expect(A2uiPayloadParser.getStrategy('v1.0').canonicalWireVersion).toBe('1.0');
+    });
+
+    it('auto-detects v1.0 vs v0.9 when strategyOrVersion is omitted', () => {
+      const v1Payload = JSON.stringify([
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 's1',
+            components: [{component: 'Text', id: 't1'}],
+          },
+        },
+      ]);
+      const v1Result = parseAndHealJsonLines(v1Payload);
+      expect(v1Result.success).toBe(true);
+      if (v1Result.success && !v1Result.isConversational) {
+        expect(v1Result.count).toBe(1);
+        expect((v1Result.blocks[0] as Record<string, unknown>)['version']).toBe('1.0');
+      }
+
+      const v09Payload = JSON.stringify([
+        {version: 'v0.9', createSurface: {surfaceId: 's1'}},
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 's1',
+            components: [{component: 'Text', id: 't1'}],
+          },
+        },
+      ]);
+      const v09Result = parseAndHealJsonLines(v09Payload);
+      expect(v09Result.success).toBe(true);
+      if (v09Result.success && !v09Result.isConversational) {
+        expect(v09Result.count).toBe(2);
+        expect((v09Result.blocks[0] as Record<string, unknown>)['version']).toBe('v0.9');
+      }
     });
   });
 });
