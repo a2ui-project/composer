@@ -38,19 +38,13 @@ function turnPayload(turn: number) {
   const surfaceId = `turn-${turn}`;
   return [
     {
-      version: 'v0.9',
+      version: '1.0',
       createSurface: {
         surfaceId,
-        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-      },
-    },
-    {
-      version: 'v0.9',
-      updateComponents: {
-        surfaceId,
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
         components: [
           {id: 'root', component: 'Column', children: ['inline_text', 'canvas']},
-          {id: 'inline_text', component: 'Text', text: `INLINE SURFACE #${turn}`, variant: 'h3'},
+          {id: 'inline_text', component: 'Text', text: `### INLINE SURFACE #${turn}`},
           {
             id: 'canvas',
             component: {
@@ -62,7 +56,7 @@ function turnPayload(turn: number) {
               },
             },
           },
-          {id: 'canvas_text', component: 'Text', text: `CANVAS CONTENT #${turn}`, variant: 'h3'},
+          {id: 'canvas_text', component: 'Text', text: `### CANVAS CONTENT #${turn}`},
         ],
       },
     },

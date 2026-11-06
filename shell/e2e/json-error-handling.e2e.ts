@@ -151,7 +151,7 @@ test.describe('JSON Error Handling & Diagnostics', () => {
       // The assistant only submits once a renderer has announced a catalog with components;
       // the stub renderer above returns empty components: {}, so switch to a sample renderer here.
       await page.goto('/?renderer=http://localhost:3456');
-      await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+      await expect(page.locator('.header-title')).toContainText('Basic Catalog');
 
       // Navigate to Chat
       await page.getByRole('tab', {name: 'Gemini Assistant'}).click();
