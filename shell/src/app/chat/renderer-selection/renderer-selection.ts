@@ -402,7 +402,7 @@ class CatalogWait {
       envelope.type === PreviewBridgeMessageType.A2UI_CATALOG &&
       this.readySource === envelope.sourceWindow
     ) {
-      this.recordCatalog(envelope.payload as Catalog);
+      this.recordCatalog(envelope.payload);
     }
     this.check();
   }
@@ -425,8 +425,26 @@ class CatalogWait {
    * become the active catalog. The fingerprint is taken after the same
    * sanitizing CatalogManagement applies before it stores a catalog.
    */
-  private recordCatalog(payload: Catalog): void {
-    const catalog = sanitizeCatalog(payload);
+  private recordCatalog(payload: unknown): void {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return;
+    }
+    let unwrapped: unknown = payload;
+    const obj = payload as Record<string, unknown>;
+    if ('catalog' in obj && obj['catalog']) {
+      unwrapped = obj['catalog'];
+    } else if (
+      'catalogs' in obj &&
+      Array.isArray(obj['catalogs']) &&
+      obj['catalogs'].length > 0 &&
+      obj['catalogs'][0]
+    ) {
+      unwrapped = obj['catalogs'][0];
+    }
+    if (!unwrapped || typeof unwrapped !== 'object' || Array.isArray(unwrapped)) {
+      return;
+    }
+    const catalog = sanitizeCatalog(unwrapped as Catalog);
     this.receivedCatalog = {
       previous: this.app.catalog.activeCatalog(),
       id: getCatalogId(catalog),

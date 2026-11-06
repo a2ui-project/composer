@@ -28,7 +28,7 @@ import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, ThemePreference, type A2uiProtocolVersion} from 'a2ui-bridge';
 import type * as monaco from 'monaco-editor';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
@@ -301,6 +301,8 @@ describe('RawFrame JSON Source Editor View', () => {
   let sendRenderErrorMock: ReturnType<typeof vi.fn>;
   let mockActiveCatalog: WritableSignal<Catalog | null>;
   let mockThemePreference: WritableSignal<ThemePreference>;
+  let mockHasReceivedCatalogResponse: WritableSignal<boolean>;
+  let mockActiveProtocolVersion: WritableSignal<A2uiProtocolVersion>;
   let stateSyncMock: MockStateSync;
   let chatStateMock: MockChatState;
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
@@ -316,6 +318,8 @@ describe('RawFrame JSON Source Editor View', () => {
     sendRenderErrorMock = vi.fn();
     mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
     mockThemePreference = signal<ThemePreference>(ThemePreference.LIGHT);
+    mockHasReceivedCatalogResponse = signal(true);
+    mockActiveProtocolVersion = signal<A2uiProtocolVersion>('v0.9');
     snackBarMock = {
       open: vi.fn().mockReturnValue({
         onAction: () => ({
@@ -384,6 +388,8 @@ describe('RawFrame JSON Source Editor View', () => {
           provide: CatalogManagement,
           useValue: {
             activeCatalog: mockActiveCatalog,
+            hasReceivedCatalogResponse: mockHasReceivedCatalogResponse,
+            activeProtocolVersion: mockActiveProtocolVersion,
           },
         },
         {
@@ -677,21 +683,25 @@ describe('RawFrame JSON Source Editor View', () => {
 
   it('dispatches initial layout dynamically when activeCatalog transitions from null to a valid catalog', async () => {
     mockActiveCatalog = signal(null);
+    mockHasReceivedCatalogResponse = signal(false);
     const {fixture} = await setup(false);
     expect(sendRenderA2UIMock).not.toHaveBeenCalled();
 
     mockActiveCatalog.set({title: 'Sample Catalog'});
+    mockHasReceivedCatalogResponse.set(true);
     fixture.detectChanges();
     expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
   });
 
   it('dispatches empty array when layout is an empty string on startup', async () => {
     mockActiveCatalog = signal(null);
+    mockHasReceivedCatalogResponse = signal(false);
     const {fixture, component} = await setup(false);
     expect(sendRenderA2UIMock).not.toHaveBeenCalled();
 
     component.TEST_ONLY.layoutJson().set('   ');
     mockActiveCatalog.set({title: 'Sample Catalog'});
+    mockHasReceivedCatalogResponse.set(true);
     fixture.detectChanges();
 
     expect(sendRenderA2UIMock).toHaveBeenCalledWith([]);
@@ -1474,6 +1484,61 @@ describe('RawFrame JSON Source Editor View', () => {
       // Watchdog should have been armed cleanly (since hasActiveSchemaErrors was cleared) and fire at 15000ms
       vi.advanceTimersByTime(10000);
       expect(errorLoggerMock.warn).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('protocol version mismatch & unsettled handshake', () => {
+    it('blocks dispatch while catalog discovery handshake is unsettled (hasReceivedCatalogResponse is false)', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(false);
+
+      const {harness} = await setup(false);
+      expect(await harness.getJsonText()).toContain('"createSurface"');
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+
+      // Advancing time should not fire watchdog since dispatch was blocked
+      vi.advanceTimersByTime(16000);
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
+    });
+
+    it('blocks dispatch, logs PROTOCOL_VERSION_MISMATCH, and does not fire watchdog when payload mismatches settled catalog version', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      mockActiveProtocolVersion.set('v0.9');
+
+      const v1Payload = JSON.stringify([
+        {
+          version: 'v1.0',
+          createSurface: {
+            surfaceId: 'surf',
+            catalogId: 'cat',
+            components: [],
+          },
+        },
+      ]);
+
+      const {fixture} = await setup(false);
+      sendRenderA2UIMock.mockClear();
+      errorLoggerMock.error.mockClear();
+      errorLoggerMock.warn.mockClear();
+
+      // Set v1 draft into state
+      stateSyncMock.activeDraftSignal.set(v1Payload);
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceTag: '[RawFrame]',
+          code: 'PROTOCOL_VERSION_MISMATCH',
+        }),
+      );
+
+      // Verify watchdog does not fire after timeout
+      vi.advanceTimersByTime(16000);
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
     });
   });
 });

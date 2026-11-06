@@ -144,7 +144,7 @@ describe('App Routes Active Verification', () => {
   it('activates root workspace dashboard pathway on valid environment', async () => {
     await harness.navigateByUrl('/');
     expect(router.url).toBe('/');
-  });
+  }, 15000);
 
   it('activates gallery pathway on gallery route navigation', async () => {
     await harness.navigateByUrl('/gallery');

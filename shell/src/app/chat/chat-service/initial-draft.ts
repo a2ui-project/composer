@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+export const BASIC_CATALOG_ID_V0_9 = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
+export const BASIC_CATALOG_ID_V1_0 =
+  'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json';
+
 export const CAR_BOOKING =
   `[
   {
@@ -111,6 +115,94 @@ export const CAR_BOOKING =
         "location": "",
         "pickupDate": "",
         "dropoffDate": ""
+      }
+    }
+  }
+]`.trim() + '\n';
+
+export const CAR_BOOKING_V1_0 =
+  `[
+  {
+    "version": "1.0",
+    "createSurface": {
+      "surfaceId": "sample-surface",
+      "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "location_input", "pickup_input", "dropoff_input", "book_button"],
+          "justify": "start",
+          "align": "stretch"
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "text": "# Book a Car"
+        },
+        {
+          "id": "location_input",
+          "component": "TextField",
+          "label": "Pick-up Location",
+          "value": {
+            "@path": "/booking/location"
+          },
+          "variant": "shortText"
+        },
+        {
+          "id": "pickup_input",
+          "component": "DateTimeInput",
+          "label": "Pick-up Date",
+          "value": {
+            "@path": "/booking/pickupDate"
+          },
+          "enableDate": true,
+          "enableTime": false
+        },
+        {
+          "id": "dropoff_input",
+          "component": "DateTimeInput",
+          "label": "Drop-off Date",
+          "value": {
+            "@path": "/booking/dropoffDate"
+          },
+          "enableDate": true,
+          "enableTime": false
+        },
+        {
+          "id": "book_button",
+          "component": "Button",
+          "child": "book_button_text",
+          "variant": "primary",
+          "action": {
+            "event": {
+              "name": "searchCars",
+              "context": {
+                "location": {
+                  "@path": "/booking/location"
+                },
+                "pickupDate": {
+                  "@path": "/booking/pickupDate"
+                },
+                "dropoffDate": {
+                  "@path": "/booking/dropoffDate"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "book_button_text",
+          "component": "Text",
+          "text": "Search Cars"
+        }
+      ],
+      "dataModel": {
+        "booking": {
+          "location": "",
+          "pickupDate": "",
+          "dropoffDate": ""
+        }
       }
     }
   }
