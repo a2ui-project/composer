@@ -63,6 +63,10 @@ export class RenderedFrame {
 
   readonly guestFrame = viewChild(GuestFrame);
 
+  get contentWindow(): Window | null {
+    return this.guestFrame()?.contentWindow ?? null;
+  }
+
   /**
    * Automatically rejects incoming agent function calls with NO_AGENT_CONNECTED
    * when no live agent is connected to the session.
