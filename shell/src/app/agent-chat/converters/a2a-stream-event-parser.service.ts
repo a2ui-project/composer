@@ -33,6 +33,11 @@ import {UiToolCall} from '../chat-message/types';
 import {asRecord} from '../../utils/json';
 
 import {isA2uiItem, normalizeA2uiItems} from './surface-partitioner';
+import {V09A2aStrategy} from '../protocol/v0-9-a2a-strategy';
+import {V10A2aStrategy} from '../protocol/v1-0-a2a-strategy';
+
+const defaultV09Strategy = new V09A2aStrategy();
+const defaultV10Strategy = new V10A2aStrategy();
 
 /**
  * Values of the `kind` discriminator on A2A stream events.
@@ -90,12 +95,37 @@ function isThoughtFlagSet(value: unknown): boolean {
 }
 
 /**
+ * Checks whether an item represents an A2UI v1.0 RPC envelope.
+ */
+export function isA2uiRpcEnvelope(item: unknown): boolean {
+  return defaultV09Strategy.isA2uiRpcEnvelope(item) || defaultV10Strategy.isA2uiRpcEnvelope(item);
+}
+
+/**
+ * Normalizes incoming wire version string to the canonical protocol version string.
+ */
+export function normalizeWireVersion(rawVersion?: unknown): string {
+  if (typeof rawVersion === 'string') {
+    const trimmed = rawVersion.trim();
+    if (trimmed === '1.0' || trimmed === 'v1.0') {
+      return defaultV10Strategy.normalizeWireVersion(trimmed);
+    }
+  }
+  return defaultV09Strategy.normalizeWireVersion(rawVersion);
+}
+
+/**
  * Extracts a UiToolCall structure if an object represents a function or tool call invocation.
  */
 export function extractToolCall(item: unknown): UiToolCall | null {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
   const obj = item as Record<string, unknown>;
-  if (typeof obj['name'] === 'string' && obj['name'].length > 0 && !isA2uiItem(obj)) {
+  if (
+    typeof obj['name'] === 'string' &&
+    obj['name'].length > 0 &&
+    !isA2uiItem(obj) &&
+    !isA2uiRpcEnvelope(obj)
+  ) {
     return {
       name: obj['name'],
       args:
@@ -127,6 +157,9 @@ const A2UI_ACTION_WRAPPER_FIELD = 'action';
  * into the transcript.
  */
 function isA2uiActionEcho(data: unknown): boolean {
+  if (Array.isArray(data)) {
+    return data.length > 0 && data.every(item => isA2uiActionEcho(item));
+  }
   const record = asRecord(data);
   if (!record) {
     return false;
@@ -139,6 +172,18 @@ function isA2uiActionEcho(data: unknown): boolean {
     typeof record['name'] === 'string' &&
     A2UI_ACTION_MARKER_FIELDS.some(field => record[field] !== undefined)
   );
+}
+
+/**
+ * Whether a data part is an A2UI client-to-agent RPC call echoed back by the agent.
+ */
+function isA2uiRpcEcho(data: unknown): boolean {
+  if (Array.isArray(data)) {
+    return data.length > 0 && data.every(item => isA2uiRpcEcho(item));
+  }
+  const record = asRecord(data);
+  if (!record) return false;
+  return 'callAgentFunction' in record || 'rendererFunctionResponse' in record;
 }
 
 /**
@@ -572,10 +617,10 @@ export class A2aStreamEventParser {
       result.a2uiItems.push(...a2uiNormalized);
     }
 
-    // An action echo reports what the user did on a surface. It is protocol
+    // An action or client RPC echo reports what the user/client sent. It is protocol
     // traffic rather than agent output, so it is neither a tool call nor
     // something to print, however closely it resembles one.
-    if (isA2uiActionEcho(unwrappedData)) {
+    if (isA2uiActionEcho(unwrappedData) || isA2uiRpcEcho(unwrappedData)) {
       return;
     }
 
@@ -588,6 +633,7 @@ export class A2aStreamEventParser {
     // If data is generic structured data (not A2UI and no tool calls), format as JSON code block
     if (
       a2uiNormalized.length === 0 &&
+      !isA2uiRpcEcho(unwrappedData) &&
       (!result.toolCalls || result.toolCalls.length === 0) &&
       typeof unwrappedData === 'object' &&
       unwrappedData !== null &&
@@ -667,6 +713,9 @@ export class A2aStreamEventParser {
   private extractToolCallsFromItems(items: unknown[]): UiToolCall[] {
     const toolCalls: UiToolCall[] = [];
     for (const item of items) {
+      if (isA2uiRpcEnvelope(item) || isA2uiItem(item)) {
+        continue;
+      }
       const call = extractToolCall(item);
       if (call) {
         toolCalls.push(call);

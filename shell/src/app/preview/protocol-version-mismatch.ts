@@ -62,6 +62,28 @@ export function validatePayloadProtocolVersion(
   return {valid: true};
 }
 
+/**
+ * Detects the protocol version from an array of A2UI messages by inspecting explicit
+ * version fields or unambiguous structural markers. Returns 'v1.0', 'v0.9', or null if indeterminate.
+ */
+export function detectPayloadVersion(
+  messages: unknown[] | null | undefined,
+): A2uiProtocolVersion | null {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return null;
+  }
+  for (const item of messages) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      continue;
+    }
+    const detected = detectItemVersion(item as Record<string, unknown>);
+    if (detected) {
+      return detected;
+    }
+  }
+  return null;
+}
+
 function detectItemVersion(obj: Record<string, unknown>): A2uiProtocolVersion | null {
   // Explicit version field check
   if (typeof obj['version'] === 'string') {
@@ -75,7 +97,11 @@ function detectItemVersion(obj: Record<string, unknown>): A2uiProtocolVersion | 
   }
 
   // Structural v1.0 message-level markers
-  if (obj['callRendererFunction'] !== undefined || obj['agentFunctionResponse'] !== undefined) {
+  if (
+    obj['callRendererFunction'] !== undefined ||
+    obj['agentFunctionResponse'] !== undefined ||
+    obj['callAgentFunctionResponse'] !== undefined
+  ) {
     return 'v1.0';
   }
 
@@ -85,6 +111,12 @@ function detectItemVersion(obj: Record<string, unknown>): A2uiProtocolVersion | 
     !Array.isArray(obj['createSurface'])
   ) {
     const cs = obj['createSurface'] as Record<string, unknown>;
+    if (
+      typeof cs['catalogId'] === 'string' &&
+      (cs['catalogId'].includes('v1_0') || cs['catalogId'].includes('v1.0'))
+    ) {
+      return 'v1.0';
+    }
     if (Array.isArray(cs['components']) && cs['components'].length > 0) {
       return 'v1.0';
     }
@@ -101,13 +133,18 @@ function detectItemVersion(obj: Record<string, unknown>): A2uiProtocolVersion | 
     }
   }
 
+  // Recursive scan for dynamic bindings and expressions (@path/@call vs {path}/{call, returnType})
+  const nested = scanNestedMarkers(obj);
+  if (nested) {
+    return nested;
+  }
+
   // Structural v0.9 message-level markers
   if (obj['beginRendering'] !== undefined) {
     return 'v0.9';
   }
 
-  // Recursive scan for dynamic bindings and expressions (@path/@call vs {path}/{call, returnType})
-  return scanNestedMarkers(obj);
+  return null;
 }
 
 function scanNestedMarkers(val: unknown): A2uiProtocolVersion | null {
