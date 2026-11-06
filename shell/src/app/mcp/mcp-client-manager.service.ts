@@ -14,21 +14,26 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal} from '@angular/core';
+import {Injectable, Injector, Signal, computed, inject, signal} from '@angular/core';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
-import {Catalog, catalogDeclaresFunction} from '../storage/models/catalog-storage.model';
+import {
+  Catalog,
+  CatalogJson,
+  catalogDeclaresFunction,
+} from '../storage/models/catalog-storage.model';
 import {LocalStorageKey} from '../storage/models/local-storage-keys';
 import {MCP_SERVER_CONNECTOR, McpServerConnection} from './mcp-server-connector';
+import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 
-export interface McpToolInfo {
+export declare interface McpToolInfo {
   name: string;
   description?: string;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
 }
 
-export interface McpServerConfig {
+export declare interface McpServerConfig {
   id: string;
   name?: string;
   url: string;
@@ -52,9 +57,29 @@ export class McpClientManagerService {
   private readonly storage = inject(LocalStorageInteractions);
   private readonly errorLogger = inject(ErrorLogger).withTag('[McpClientManager]');
   private readonly connector = inject(MCP_SERVER_CONNECTOR);
+  private readonly injector = inject(Injector);
+  private catalogManagement: CatalogManagement | null = null;
   private readonly connections = new Map<string, McpServerConnection>();
 
   readonly servers = signal<McpServerConfig[]>([]);
+
+  readonly isMcpSupportedByActiveCatalog: Signal<boolean> = computed(() => {
+    if (!this.catalogManagement) {
+      try {
+        this.catalogManagement = this.injector.get(CatalogManagement, null, {optional: true});
+      } catch {
+        this.catalogManagement = null;
+      }
+    }
+    if (!this.catalogManagement) {
+      return false;
+    }
+    const catalogs = this.catalogManagement.activeCatalogs();
+    if (catalogs && catalogs.length > 0) {
+      return this.doesCatalogSupportMcp(catalogs);
+    }
+    return this.doesCatalogSupportMcp(this.catalogManagement.activeCatalog());
+  });
 
   constructor() {
     this.loadFromStorage();
@@ -66,9 +91,29 @@ export class McpClientManagerService {
   }
 
   /**
-   * Checks whether the active catalog includes `callMcpTool` to determine if the renderer supports MCP mode.
+   * Checks whether the active catalog (or any catalog in a list) includes `callMcpTool`
+   * to determine if the renderer supports MCP mode.
    */
-  doesCatalogSupportMcp(catalog: Catalog | null | undefined): boolean {
+  doesCatalogSupportMcp(
+    catalog:
+      | Catalog
+      | CatalogJson
+      | null
+      | undefined
+      | readonly (Catalog | CatalogJson | null | undefined)[],
+  ): boolean {
+    if (!catalog) {
+      return false;
+    }
+    if (Array.isArray(catalog)) {
+      return (catalog as readonly (Catalog | CatalogJson | null | undefined)[]).some(c =>
+        this.doesSingleCatalogSupportMcp(c),
+      );
+    }
+    return this.doesSingleCatalogSupportMcp(catalog as Catalog | CatalogJson | null | undefined);
+  }
+
+  private doesSingleCatalogSupportMcp(catalog: Catalog | CatalogJson | null | undefined): boolean {
     if (!catalog) {
       return false;
     }
@@ -76,8 +121,8 @@ export class McpClientManagerService {
       return true;
     }
     if (
-      catalog.$defs &&
-      ('callMcpTool' in catalog.$defs || 'catalog_callMcpTool' in catalog.$defs)
+      catalog['$defs'] &&
+      ('callMcpTool' in catalog['$defs'] || 'catalog_callMcpTool' in catalog['$defs'])
     ) {
       return true;
     }

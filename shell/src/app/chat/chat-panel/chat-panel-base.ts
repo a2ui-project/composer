@@ -48,9 +48,9 @@ import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {CustomInstructionsDialog} from '../custom-instructions-dialog/custom-instructions-dialog';
 import {
-  ChatPromptFactoryService,
+  ChatPromptFactory,
   CustomInstructionsState,
-} from '../chat-prompt-factory/v0-9-prompt-strategy';
+} from '../chat-prompt-factory/chat-prompt-factory';
 
 /**
  * Directive responsible for automatically scrolling a container to the bottom whenever its inputs change.
@@ -94,7 +94,7 @@ export abstract class ChatPanelBase {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly fileIngestionService = inject(FileIngestionService);
   private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
-  private readonly promptFactory = inject(ChatPromptFactoryService);
+  private readonly promptFactory = inject(ChatPromptFactory);
   private readonly logger = inject(ErrorLogger).withTag('[ChatPanel]');
   protected readonly mcpManager = inject(McpClientManagerService);
 
@@ -102,9 +102,12 @@ export abstract class ChatPanelBase {
     source: this.stateSync.sessionResetNonce,
     computation: () => false,
   });
-  protected readonly isMcpSupported = computed(() =>
-    this.mcpManager.doesCatalogSupportMcp(this.catalogManagement.activeCatalog()),
-  );
+  protected readonly isMcpSupported = computed(() => {
+    const catalogs = this.catalogManagement.activeCatalogs();
+    return this.mcpManager.doesCatalogSupportMcp(
+      catalogs.length > 0 ? catalogs : this.catalogManagement.activeCatalog(),
+    );
+  });
   protected readonly activeMcpServerCount = computed(
     () => this.mcpManager.getActiveServersWithTools().length,
   );

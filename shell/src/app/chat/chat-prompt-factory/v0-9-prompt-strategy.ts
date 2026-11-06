@@ -14,79 +14,29 @@
  * limitations under the License.
  */
 
-import {Injectable, computed, inject, signal} from '@angular/core';
+import {Injectable} from '@angular/core';
 import {RE2JS} from 're2js';
-import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {Catalog, getCatalogId} from '../../storage/models/catalog-storage.model';
+import {Catalog, CatalogJson, getCatalogId} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
-import {
-  McpClientManagerService,
-  McpServerConfig,
-  McpToolInfo,
-} from '../../mcp/mcp-client-manager.service';
-import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
-import {LocalStorageKey} from '../../storage/models/local-storage-keys';
-
-/**
- * Representation of a named custom instruction preset.
- */
-export declare interface CustomInstructionPreset {
-  id: string;
-  name: string;
-  content: string;
-}
-
-/**
- * Persisted state of custom instruction presets and active selection.
- */
-export declare interface CustomInstructionsState {
-  presets: CustomInstructionPreset[];
-  activePresetId: string | null;
-}
+import {McpServerConfig, McpToolInfo} from '../../mcp/mcp-client-manager.service';
+import {PromptProtocolStrategy, PromptStrategyOptions} from './prompt-protocol-strategy';
 
 const MINIFIED_COMMON_TYPES_SCHEMA = JSON.stringify(COMMON_TYPES_SCHEMA);
 
 /**
- * Constructs dynamic system prompts based on the provided LLM intent and active catalog states.
+ * Protocol strategy implementing prompt generation for A2UI v0.9 payloads and schemas.
  */
 @Injectable({
   providedIn: 'root',
 })
-export class ChatPromptFactoryService {
-  private readonly catalogManagement = inject(CatalogManagement);
-  private readonly mcpManager = inject(McpClientManagerService);
-  private readonly localStorageInteractions = inject(LocalStorageInteractions);
+export class V09PromptStrategy implements PromptProtocolStrategy {
+  readonly protocolVersion = 'v0.9' as const;
 
-  readonly customInstructionsState = signal<CustomInstructionsState>(this.loadInitialState());
-  readonly presets = computed(() => this.customInstructionsState().presets);
-  readonly activePresetId = computed(() => this.customInstructionsState().activePresetId);
-  readonly activePreset = computed(() => {
-    const state = this.customInstructionsState();
-    return state.presets.find(p => p.id === state.activePresetId) ?? null;
-  });
-  readonly customInstructions = computed(() => this.activePreset()?.content ?? '');
-  readonly hasCustomInstructions = computed(() => this.customInstructions().trim().length > 0);
-
-  private readonly textOnlySystemPrompt = computed<string>(() => this.composeSystemPrompt(false));
-  private readonly multimodalSystemPrompt = computed<string>(() => this.composeSystemPrompt(true));
-
-  readonly systemPrompt = this.textOnlySystemPrompt;
-
-  /**
-   * Builds the system prompt with optional multimodal image-to-UI guidelines.
-   */
-  buildSystemPrompt(options?: {includeMultimodalGuidelines?: boolean}): string {
-    return options?.includeMultimodalGuidelines
-      ? this.multimodalSystemPrompt()
-      : this.textOnlySystemPrompt();
-  }
-
-  private composeSystemPrompt(includeMultimodalGuidelines: boolean): string {
-    const catalog = this.catalogManagement.activeCatalog();
-    const mcpSupported = this.mcpManager.doesCatalogSupportMcp(catalog);
-    const activeServers = mcpSupported ? this.mcpManager.getActiveServersWithTools() : [];
+  buildSystemPrompt(options: PromptStrategyOptions): string {
+    const catalog = options.activeCatalog ?? options.activeCatalogs?.[0] ?? null;
+    const activeServers = options.activeServers ?? [];
     const mcpInstructions = this.buildMcpInstructions(activeServers);
-    const customInstructionsText = this.customInstructions().trim();
+    const customInstructionsText = options.customInstructions?.trim() ?? '';
     const customPromptSuffix = customInstructionsText
       ? `\n\n## Custom User Instructions\n\n${customInstructionsText}`
       : '';
@@ -107,57 +57,15 @@ export class ChatPromptFactoryService {
 
     return (
       (
-        this.generateSystemPrompt(catalog, includeMultimodalGuidelines) + mcpInstructions
+        this.generateSystemPrompt(
+          catalog as Catalog,
+          options.includeMultimodalGuidelines ?? false,
+        ) + mcpInstructions
       ).trimEnd() + customPromptSuffix
     );
   }
 
-  /**
-   * Updates the custom instruction state and persists it to local storage.
-   */
-  setCustomInstructionsState(state: CustomInstructionsState): void {
-    const validPreset = state.presets.some(p => p.id === state.activePresetId);
-    const normalizedState: CustomInstructionsState = {
-      presets: state.presets,
-      activePresetId: validPreset ? state.activePresetId : null,
-    };
-    this.customInstructionsState.set(normalizedState);
-    this.localStorageInteractions.setItem(
-      LocalStorageKey.CUSTOM_INSTRUCTIONS,
-      JSON.stringify(normalizedState),
-    );
-  }
-
-  private loadInitialState(): CustomInstructionsState {
-    const raw = this.localStorageInteractions.getItem(LocalStorageKey.CUSTOM_INSTRUCTIONS);
-    if (!raw) {
-      return {presets: [], activePresetId: null};
-    }
-    try {
-      const parsed = JSON.parse(raw) as Partial<CustomInstructionsState>;
-      if (!parsed || !Array.isArray(parsed.presets)) {
-        return {presets: [], activePresetId: null};
-      }
-      const presets: CustomInstructionPreset[] = parsed.presets.filter(
-        (p: unknown): p is CustomInstructionPreset =>
-          typeof p === 'object' &&
-          p !== null &&
-          typeof (p as CustomInstructionPreset).id === 'string' &&
-          typeof (p as CustomInstructionPreset).name === 'string' &&
-          typeof (p as CustomInstructionPreset).content === 'string',
-      );
-      const activePresetId =
-        typeof parsed.activePresetId === 'string' &&
-        presets.some(p => p.id === parsed.activePresetId)
-          ? parsed.activePresetId
-          : null;
-      return {presets, activePresetId};
-    } catch {
-      return {presets: [], activePresetId: null};
-    }
-  }
-
-  private buildMcpInstructions(activeServers: McpServerConfig[]): string {
+  buildMcpInstructions(activeServers: readonly McpServerConfig[]): string {
     const toolsMap = new Map<string, McpToolInfo>();
     for (const server of activeServers) {
       for (const tool of server.tools || []) {
@@ -235,53 +143,10 @@ export class ChatPromptFactoryService {
 
   /**
    * Serializes the catalog as compact JSON, pruning `$defs` entries that are not
-   * transitively referenced by `components` or `functions` (such as bundled
-   * duplicate `catalog_*` definitions).
+   * transitively referenced by `components` or `functions`.
    */
-  private serializeCatalogForPrompt(catalog: Catalog): string {
-    if (!catalog.$defs || typeof catalog.$defs !== 'object' || Array.isArray(catalog.$defs)) {
-      return JSON.stringify(catalog);
-    }
-    const defs = catalog.$defs;
-    const referenced = new Set<string>();
-    this.collectLocalDefRefs(
-      {components: catalog.components, functions: catalog.functions},
-      referenced,
-    );
-    for (const currentKey of referenced) {
-      const defNode = defs[currentKey];
-      if (defNode !== undefined) {
-        this.collectLocalDefRefs(defNode, referenced);
-      }
-    }
-    const filteredDefs = Object.fromEntries(
-      Object.entries(defs).filter(([key]) => referenced.has(key)),
-    );
-    const prunedCatalog: Catalog = {...catalog};
-    if (Object.keys(filteredDefs).length > 0) {
-      prunedCatalog.$defs = filteredDefs;
-    } else {
-      delete prunedCatalog.$defs;
-    }
-    return JSON.stringify(prunedCatalog);
-  }
-
-  private collectLocalDefRefs(node: unknown, out: Set<string>): void {
-    if (Array.isArray(node)) {
-      for (const item of node) {
-        this.collectLocalDefRefs(item, out);
-      }
-      return;
-    }
-    if (node !== null && typeof node === 'object') {
-      for (const [key, val] of Object.entries(node)) {
-        if (key === '$ref' && typeof val === 'string' && val.startsWith('#/$defs/')) {
-          out.add(val.slice('#/$defs/'.length));
-        } else {
-          this.collectLocalDefRefs(val, out);
-        }
-      }
-    }
+  serializeCatalogForPrompt(catalog: Catalog | CatalogJson): string {
+    return serializeCatalogForPrompt(catalog);
   }
 
   private generateSystemPrompt(catalog: Catalog, includeMultimodalGuidelines = false): string {
@@ -813,4 +678,59 @@ function findPropertySchema(
     queue.push(localRefTarget(node, defs));
   }
   return undefined;
+}
+
+/**
+ * Recursively collects local definitions references ($ref matching #/$defs/...)
+ * starting from an arbitrary AST node.
+ */
+export function collectLocalDefRefs(node: unknown, out: Set<string>): void {
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      collectLocalDefRefs(item, out);
+    }
+    return;
+  }
+  if (node !== null && typeof node === 'object') {
+    for (const [key, val] of Object.entries(node)) {
+      if (key === '$ref' && typeof val === 'string' && val.startsWith('#/$defs/')) {
+        out.add(val.slice('#/$defs/'.length));
+      } else {
+        collectLocalDefRefs(val, out);
+      }
+    }
+  }
+}
+
+/**
+ * Strips unused `$defs` entries from the catalog so the model prompt only includes definitions
+ * transitively referenced by `components` or `functions`.
+ */
+export function serializeCatalogForPrompt(catalog: Catalog | CatalogJson): string {
+  if (
+    !catalog['$defs'] ||
+    typeof catalog['$defs'] !== 'object' ||
+    Array.isArray(catalog['$defs'])
+  ) {
+    return JSON.stringify(catalog);
+  }
+  const defs = catalog['$defs'];
+  const referenced = new Set<string>();
+  collectLocalDefRefs({components: catalog.components, functions: catalog.functions}, referenced);
+  for (const currentKey of referenced) {
+    const defNode = defs[currentKey];
+    if (defNode !== undefined) {
+      collectLocalDefRefs(defNode, referenced);
+    }
+  }
+  const filteredDefs = Object.fromEntries(
+    Object.entries(defs).filter(([key]) => referenced.has(key)),
+  );
+  const prunedCatalog: Catalog = {...catalog};
+  if (Object.keys(filteredDefs).length > 0) {
+    prunedCatalog['$defs'] = filteredDefs;
+  } else {
+    delete prunedCatalog['$defs'];
+  }
+  return JSON.stringify(prunedCatalog);
 }

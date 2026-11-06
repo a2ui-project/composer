@@ -15,7 +15,7 @@
  */
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {TestBed} from '@angular/core/testing';
-import {ChatPromptFactoryService} from './v0-9-prompt-strategy';
+import {ChatPromptFactory} from './chat-prompt-factory';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
@@ -23,11 +23,13 @@ import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 
-describe('ChatPromptFactoryService', () => {
-  let service: ChatPromptFactoryService;
+describe('ChatPromptFactory', () => {
+  let service: ChatPromptFactory;
   let catalogSpy: {
     activeCatalog: ReturnType<typeof vi.fn>;
     activeCatalogSignal: ReturnType<typeof vi.fn>;
+    activeCatalogs: ReturnType<typeof vi.fn>;
+    activeProtocolVersion: ReturnType<typeof vi.fn>;
   };
   let mcpSpy: {
     getActiveServersWithTools: ReturnType<typeof vi.fn>;
@@ -40,7 +42,12 @@ describe('ChatPromptFactoryService', () => {
   };
 
   beforeEach(() => {
-    catalogSpy = {activeCatalog: vi.fn(), activeCatalogSignal: vi.fn(() => null)};
+    catalogSpy = {
+      activeCatalog: vi.fn(),
+      activeCatalogSignal: vi.fn(() => null),
+      activeCatalogs: vi.fn(() => []),
+      activeProtocolVersion: vi.fn(() => 'v0.9'),
+    };
     mcpSpy = {
       getActiveServersWithTools: vi.fn(() => []),
       doesCatalogSupportMcp: vi.fn(catalog =>
@@ -54,13 +61,13 @@ describe('ChatPromptFactoryService', () => {
     };
     TestBed.configureTestingModule({
       providers: [
-        ChatPromptFactoryService,
+        ChatPromptFactory,
         {provide: CatalogManagement, useValue: catalogSpy},
         {provide: McpClientManagerService, useValue: mcpSpy},
         {provide: LocalStorageInteractions, useValue: localStorageSpy},
       ],
     });
-    service = TestBed.inject(ChatPromptFactoryService);
+    service = TestBed.inject(ChatPromptFactory);
   });
 
   it('generate default prompt when no active catalog', () => {
@@ -436,13 +443,13 @@ describe('ChatPromptFactoryService', () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
         providers: [
-          ChatPromptFactoryService,
+          ChatPromptFactory,
           {provide: CatalogManagement, useValue: catalogSpy},
           {provide: McpClientManagerService, useValue: mcpSpy},
           {provide: LocalStorageInteractions, useValue: localStorageSpy},
         ],
       });
-      const newService = TestBed.inject(ChatPromptFactoryService);
+      const newService = TestBed.inject(ChatPromptFactory);
 
       expect(newService.customInstructionsState()).toEqual(savedState);
       expect(newService.presets()).toEqual(savedState.presets);
@@ -604,15 +611,15 @@ describe('ChatPromptFactoryService', () => {
       expect(prompt).not.toContain('catalog_Button');
       expect(prompt).not.toContain('UnusedDef');
       // Input catalog object must not be mutated
-      expect(catalog.$defs.catalog_Button).toBeDefined();
-      expect(catalog.$defs.UnusedDef).toEqual({type: 'number'});
+      expect(catalog['$defs'].catalog_Button).toBeDefined();
+      expect(catalog['$defs'].UnusedDef).toEqual({type: 'number'});
     });
 
-    it('omits $defs when catalog.$defs contains only unreferenced entries', () => {
+    it("omits $defs when catalog['$defs'] contains only unreferenced entries", () => {
       const unreferencedDefsCatalog = {
         catalogId: 'only-unreferenced-defs',
         components: {Text: {type: 'object'}},
-        $defs: {
+        ['$defs']: {
           catalog_Text: {type: 'object'},
         },
       };
@@ -620,7 +627,7 @@ describe('ChatPromptFactoryService', () => {
       expect(service.systemPrompt()).toContain(
         '{"catalogId":"only-unreferenced-defs","components":{"Text":{"type":"object"}}}',
       );
-      expect(unreferencedDefsCatalog.$defs.catalog_Text).toEqual({type: 'object'});
+      expect(unreferencedDefsCatalog['$defs'].catalog_Text).toEqual({type: 'object'});
     });
   });
 
@@ -737,6 +744,82 @@ describe('ChatPromptFactoryService', () => {
       // Each of the two examples opens and closes a fence, and the note above them
       // mentions one: no more.
       expect(examples.match(/```/g)).toHaveLength(5);
+    });
+  });
+
+  describe('Protocol Version Switching & Multi-Catalog Support', () => {
+    it('delegates to V09PromptStrategy when activeProtocolVersion is v0.9', () => {
+      catalogSpy.activeCatalog.mockReturnValue({components: {Text: {}}});
+      catalogSpy.activeProtocolVersion = vi.fn(() => 'v0.9');
+
+      const prompt = service.systemPrompt();
+      expect(prompt).toContain('"version": "v0.9"');
+      expect(prompt).toContain('createSurface -> updateComponents -> updateDataModel');
+    });
+
+    it('delegates to V10PromptStrategy when activeProtocolVersion is v1.0', () => {
+      const basicCatalog = {
+        $id: 'https://a2ui.org/specification/v1_0/basic_catalog.json',
+        components: {Text: {}, Column: {}, Button: {}},
+      };
+      catalogSpy.activeCatalog.mockReturnValue(basicCatalog);
+      catalogSpy.activeProtocolVersion = vi.fn(() => 'v1.0');
+
+      const prompt = service.systemPrompt();
+      expect(prompt).toContain('"version": "1.0"');
+      expect(prompt).not.toContain('"version": "v1.0"');
+      expect(prompt).not.toContain('"version": "v0.9"');
+      expect(prompt).not.toContain('v0.9');
+      expect(prompt).not.toContain('v0_9');
+      expect(prompt).not.toContain('returnType');
+      expect(prompt).toContain('https://a2ui.org/specification/v1_0/common_types.json');
+      expect(prompt).toContain('sendDataModel');
+      expect(prompt).toContain('{"@path":');
+    });
+
+    it('passes multi-catalogs from CatalogManagement.activeCatalogs to V10PromptStrategy and supports cross-catalog MCP calls without returnType bleed', () => {
+      const basicCatalog = {
+        $id: 'https://a2ui.org/specification/v1_0/basic_catalog.json',
+        components: {Text: {}, Column: {}, Button: {}},
+      };
+      const mcpFunctionsCatalog = {
+        $id: 'https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json',
+        functions: {
+          callMcpTool: {type: 'object', returnType: 'any'},
+          updateDataModel: {type: 'object', returnType: 'any'},
+          jmespath: {type: 'object', returnType: 'any'},
+        },
+      };
+
+      catalogSpy.activeCatalog.mockReturnValue(basicCatalog);
+      catalogSpy.activeCatalogs = vi.fn(() => [basicCatalog, mcpFunctionsCatalog]);
+      catalogSpy.activeProtocolVersion = vi.fn(() => 'v1.0');
+
+      mcpSpy.getActiveServersWithTools.mockReturnValue([
+        {
+          id: 'srv-1',
+          name: 'fs-server',
+          url: 'http://localhost:3001/mcp',
+          enabled: true,
+          status: 'connected',
+          tools: [{name: 'read_file', description: 'Reads a file'}],
+        },
+      ]);
+
+      const prompt = service.systemPrompt();
+      expect(prompt).toContain(basicCatalog['$id']);
+      expect(prompt).toContain(mcpFunctionsCatalog['$id']);
+      expect(prompt).toContain('Available MCP Tools & Catalog Instructions');
+      expect(prompt).toContain('"@call": "callMcpTool"');
+      expect(prompt).toContain(
+        '"catalogId": "https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json"',
+      );
+      expect(prompt).toContain('"@path": "/mcp_arguments"');
+
+      // Negative assertions
+      expect(prompt).not.toContain('returnType');
+      expect(prompt).not.toContain('"v0.9"');
+      expect(prompt).not.toContain('v0.9');
     });
   });
 });
