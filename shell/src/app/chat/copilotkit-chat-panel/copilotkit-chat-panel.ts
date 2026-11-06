@@ -33,7 +33,7 @@ import {MatMenuModule} from '@angular/material/menu';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {RouterLink} from '@angular/router';
 import {AutoScroll, ChatPanelBase} from '../chat-panel/chat-panel-base';
-import {isRenderA2uiItem, parseAndHealJsonLines} from '../a2ui-payload-parser/a2ui-payload-parser';
+import {parseAndHealJsonLines} from '../a2ui-payload-parser/a2ui-payload-parser';
 import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {RendererSelection} from '../renderer-selection/renderer-selection';
 
@@ -178,9 +178,23 @@ export class CopilotKitChatPanel extends ChatPanelBase {
       const isSnapshot = !!isLayout && !parseError;
       const componentCount =
         isSnapshot && parsed?.success
-          ? parsed.blocks
-              .filter(isRenderA2uiItem)
-              .reduce((count, block) => count + (block.updateComponents?.components.length ?? 0), 0)
+          ? parsed.blocks.reduce((count, block) => {
+              if (!block || typeof block !== 'object' || Array.isArray(block)) {
+                return count;
+              }
+              const b = block as Record<string, unknown>;
+              const cs =
+                b['createSurface'] !== null && typeof b['createSurface'] === 'object'
+                  ? (b['createSurface'] as Record<string, unknown>)
+                  : undefined;
+              const uc =
+                b['updateComponents'] !== null && typeof b['updateComponents'] === 'object'
+                  ? (b['updateComponents'] as Record<string, unknown>)
+                  : undefined;
+              const csCount = Array.isArray(cs?.['components']) ? cs['components'].length : 0;
+              const ucCount = Array.isArray(uc?.['components']) ? uc['components'].length : 0;
+              return count + csCount + ucCount;
+            }, 0)
           : null;
       const displayContent = parseError
         ? 'This response could not update the canvas.'

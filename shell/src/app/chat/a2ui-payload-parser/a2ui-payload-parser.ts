@@ -13,8 +13,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {A2uiComponentInstance, RenderA2uiItem} from 'a2ui-bridge';
+import {A2uiComponentInstance, RenderA2uiItem, type A2uiProtocolVersion} from 'a2ui-bridge';
 import {extractErrorDetails, tryParseJsonArray} from '../../utils/json';
+import {stripPrototypePollutionKeys} from '../../shell/cross-frame-validator/wire-version-validator';
+import type {CatalogJson} from '../../storage/models/catalog-storage.model';
+import type {PayloadProtocolStrategy} from './payload-protocol-strategy';
+import {V09PayloadStrategy} from './v0-9-payload-strategy';
+import {V10PayloadStrategy} from './v1-0-payload-strategy';
+import {attemptSyntaxHealing} from './json-stream-healer';
+
+/**
+ * Resolves a protocol strategy instance from an existing strategy or version string.
+ *
+ * @param strategyOrVersion - Existing strategy instance or protocol version string.
+ * @returns An initialized PayloadProtocolStrategy.
+ */
+export function getPayloadStrategy(
+  strategyOrVersion?: PayloadProtocolStrategy | A2uiProtocolVersion | string,
+): PayloadProtocolStrategy {
+  if (
+    strategyOrVersion &&
+    typeof strategyOrVersion === 'object' &&
+    'version' in strategyOrVersion
+  ) {
+    return strategyOrVersion;
+  }
+  if (strategyOrVersion === 'v1.0' || strategyOrVersion === '1.0') {
+    return new V10PayloadStrategy();
+  }
+  return new V09PayloadStrategy();
+}
 
 /**
  * The standardized output structure for JSON Lines payload parsing.
@@ -52,20 +80,32 @@ export type ParseResult =
  * to heal interrupted streaming payloads or minor LLM formatting deviances.
  *
  * @param content - The raw, unformatted LLM generation text buffer.
+ * @param strategyOrVersion - Optional protocol strategy or version discriminator.
  * @returns A structured classification of the payload's content intent and correctness.
  */
-export function parseAndHealJsonLines(content?: string | null): ParseResult {
+export function parseAndHealJsonLines(
+  content?: string | null,
+  strategyOrVersion?: PayloadProtocolStrategy | A2uiProtocolVersion | string,
+): ParseResult {
   if (content == null || content.trim().length === 0) {
     return {success: true, isConversational: true, blocks: [], count: 0};
   }
 
+  const strategy = strategyOrVersion
+    ? getPayloadStrategy(strategyOrVersion)
+    : /"version"\s*:\s*["'](?:1\.0|v1\.0)["']/i.test(content) ||
+        /specification\/v1_0/i.test(content)
+      ? getPayloadStrategy('v1.0')
+      : getPayloadStrategy('v0.9');
+
   const parsedArray = tryParseJsonArray(content);
   if (parsedArray.success) {
+    const blocks = strategy.normalizeBlocks(parsedArray.data as RenderA2uiItem[]);
     return {
       success: true,
       isConversational: false,
-      blocks: parsedArray.data as RenderA2uiItem[],
-      count: resolveComponentCount(parsedArray.data as RenderA2uiItem[]),
+      blocks: blocks as RenderA2uiItem[],
+      count: strategy.resolveComponentCount(blocks),
     };
   }
 
@@ -73,12 +113,13 @@ export function parseAndHealJsonLines(content?: string | null): ParseResult {
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     const healed = attemptSyntaxHealing(content);
     if (healed !== null && typeof healed === 'object') {
-      const blocks = (Array.isArray(healed) ? healed : [healed]) as RenderA2uiItem[];
+      const rawBlocks = (Array.isArray(healed) ? healed : [healed]) as RenderA2uiItem[];
+      const blocks = strategy.normalizeBlocks(rawBlocks) as RenderA2uiItem[];
       return {
         success: true,
         isConversational: false,
-        blocks,
-        count: resolveComponentCount(blocks),
+        blocks: blocks as RenderA2uiItem[],
+        count: strategy.resolveComponentCount(blocks),
       };
     }
   }
@@ -136,62 +177,13 @@ export function parseAndHealJsonLines(content?: string | null): ParseResult {
     return {success: true, isConversational: true, blocks: [], count: 0};
   }
 
+  const blocks = strategy.normalizeBlocks(parsedBlocks) as RenderA2uiItem[];
   return {
     success: true,
     isConversational: false,
-    blocks: parsedBlocks as RenderA2uiItem[],
-    count: resolveComponentCount(parsedBlocks as RenderA2uiItem[]),
+    blocks: blocks as RenderA2uiItem[],
+    count: strategy.resolveComponentCount(blocks),
   };
-}
-
-/**
- * Attempts syntax healing on malformed or truncated JSON strings produced by LLMs.
- * Strips trailing commas and injects balanced closing brackets and braces.
- *
- * @param line - The raw string representation to heal.
- * @returns The parsed JSON object if healed successfully, or null if unrecoverable.
- */
-export function attemptSyntaxHealing(line?: string | null): unknown | null {
-  if (line == null || line.trim().length === 0) {
-    return null;
-  }
-  let patched = line.trim();
-
-  // Guard against excessive payloads to prevent combinatorial parsing overhead
-  if (patched.length > 256 * 1024) {
-    return null;
-  }
-
-  patched = patched.replace(/,\s*([\]}])/g, '$1');
-
-  try {
-    return JSON.parse(patched);
-  } catch (e) {
-    // 1. Try closing open objects (e.g. truncated inner properties)
-    for (let i = 1; i <= 5; i++) {
-      try {
-        return JSON.parse(patched + '}'.repeat(i));
-      } catch (_) {}
-    }
-    // 2. Try closing objects nested within arrays (curly braces followed by square brackets)
-    for (let i = 1; i <= 3; i++) {
-      for (let j = 1; j <= 3; j++) {
-        try {
-          return JSON.parse(patched + '}'.repeat(i) + ']'.repeat(j));
-        } catch (_) {}
-      }
-    }
-    // 3. Try closing arrays nested within objects (square brackets followed by curly braces)
-    for (let i = 1; i <= 3; i++) {
-      for (let j = 1; j <= 3; j++) {
-        try {
-          return JSON.parse(patched + ']'.repeat(i) + '}'.repeat(j));
-        } catch (_) {}
-      }
-    }
-  }
-
-  return null;
 }
 
 /**
@@ -212,106 +204,19 @@ export function isRenderA2uiItem(block: unknown): block is RenderA2uiItem {
  * Inspects parsed A2UI blocks against the catalog schema, healing casing and synonym deviations.
  *
  * @param parsedBlocks - The list of parsed A2UI command blocks.
- * @param componentsObj - Optional dictionary of recognized catalog components.
+ * @param componentsOrCatalog - Optional dictionary of recognized catalog components or full catalog.
+ * @param strategyOrVersion - Optional protocol strategy or version discriminator.
+ * @param catalogObj - Optional secondary catalog object.
  * @returns True if any component type or property was healed in-place.
  */
 export function runCatalogComponentSchemaCheck(
   parsedBlocks: unknown[],
-  componentsObj?: Record<string, unknown>,
+  componentsOrCatalog?: Record<string, unknown> | CatalogJson,
+  strategyOrVersion: PayloadProtocolStrategy | A2uiProtocolVersion | string = 'v0.9',
+  catalogObj?: Record<string, unknown> | CatalogJson,
 ): boolean {
-  let healed = false;
-  const componentHealMap: Record<string, string> = {};
-
-  if (componentsObj) {
-    for (const key of Object.keys(componentsObj)) {
-      const normalizedKey = key.toLowerCase().replace(/[^a-z]/g, '');
-      componentHealMap[normalizedKey] = key;
-    }
-  }
-
-  const SYNONYM_MAP: Record<string, string> = {
-    textbox: 'textfield',
-    textinput: 'textfield',
-    rowlayout: 'row',
-    columnlayout: 'column',
-    choice: 'choicepicker',
-    datepicker: 'datetimeinput',
-    datetimepicker: 'datetimeinput',
-  };
-
-  for (const block of parsedBlocks) {
-    if (!isRenderA2uiItem(block)) {
-      continue;
-    }
-
-    const updateComponents = block.updateComponents!;
-    const cleanedComponents: unknown[] = [];
-
-    for (const comp of updateComponents.components) {
-      if (!comp || typeof comp !== 'object' || Array.isArray(comp)) {
-        cleanedComponents.push(comp);
-        continue;
-      }
-
-      const compObj = comp as A2uiComponentInstance;
-      let compType = compObj.component;
-
-      if ((compObj['name'] as unknown) && !compObj.component) {
-        healed = true;
-        compType = compObj['name'] as string;
-        compObj.component = compType;
-        delete compObj['name'];
-      }
-
-      if (typeof compType !== 'string') {
-        throw new Error('Component declaration is missing component type name string.');
-      }
-
-      let targetType = compType;
-
-      if (componentsObj) {
-        if (!componentsObj[compType]) {
-          const normalized = compType.toLowerCase().replace(/[^a-z]/g, '');
-          let healedType = componentHealMap[normalized];
-
-          if (!healedType) {
-            const synonymTarget = SYNONYM_MAP[normalized];
-            if (synonymTarget) {
-              healedType = componentHealMap[synonymTarget];
-            }
-          }
-
-          if (healedType && componentsObj[healedType]) {
-            healed = true;
-            targetType = healedType;
-          } else {
-            const fuzzyMatch = normalized
-              ? Object.keys(componentsObj).find(
-                  key =>
-                    key.toLowerCase().includes(normalized) ||
-                    normalized.includes(key.toLowerCase()),
-                )
-              : undefined;
-
-            if (fuzzyMatch) {
-              healed = true;
-              targetType = fuzzyMatch;
-            } else {
-              throw new Error(
-                `Validation failure: Component type "${compType}" is not registered in the active custom catalog.`,
-              );
-            }
-          }
-        }
-      }
-
-      const cleanedComp = sanitizeComponentObject(compObj);
-      cleanedComp.component = targetType;
-      cleanedComponents.push(cleanedComp);
-    }
-    updateComponents.components = cleanedComponents as A2uiComponentInstance[];
-  }
-  return healed;
+  const strategy = getPayloadStrategy(strategyOrVersion);
+  return strategy.runCatalogComponentSchemaCheck(parsedBlocks, componentsOrCatalog, catalogObj);
 }
 
 /**
@@ -321,25 +226,7 @@ export function runCatalogComponentSchemaCheck(
  * @returns A safe clone of the value without prototype pollution keys.
  */
 export function sanitizeValue(val: unknown): unknown {
-  if (val === null || typeof val !== 'object') {
-    return val;
-  }
-
-  if (Array.isArray(val)) {
-    return val.map(item => sanitizeValue(item));
-  }
-
-  const obj = val as Record<string, unknown>;
-  const cleaned: Record<string, unknown> = {};
-
-  for (const [key, propVal] of Object.entries(obj)) {
-    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-      continue;
-    }
-    cleaned[key] = sanitizeValue(propVal);
-  }
-
-  return cleaned;
+  return stripPrototypePollutionKeys(val);
 }
 
 /**
@@ -349,16 +236,23 @@ export function sanitizeValue(val: unknown): unknown {
  * @returns A clean A2uiComponentInstance.
  */
 export function sanitizeComponentObject(obj: A2uiComponentInstance): A2uiComponentInstance {
-  return sanitizeValue(obj) as A2uiComponentInstance;
+  return stripPrototypePollutionKeys(obj) as A2uiComponentInstance;
 }
 
-function resolveComponentCount(blocks: RenderA2uiItem[]): number {
-  return blocks.reduce((acc, obj) => {
-    if (!obj || typeof obj !== 'object') return acc;
-    if (obj.updateComponents && Array.isArray(obj.updateComponents.components)) {
-      return acc + obj.updateComponents.components.length;
-    }
-    if (obj.createSurface) return acc + 1;
-    return acc;
-  }, 0);
+/**
+ * Namespace class providing unified access to payload strategies and parsers.
+ */
+export class A2uiPayloadParser {
+  static getStrategy(
+    strategyOrVersion?: PayloadProtocolStrategy | A2uiProtocolVersion | string,
+  ): PayloadProtocolStrategy {
+    return getPayloadStrategy(strategyOrVersion);
+  }
+
+  static parseAndHealJsonLines = parseAndHealJsonLines;
+  static runCatalogComponentSchemaCheck = runCatalogComponentSchemaCheck;
+  static attemptSyntaxHealing = attemptSyntaxHealing;
+  static isRenderA2uiItem = isRenderA2uiItem;
+  static sanitizeValue = sanitizeValue;
+  static sanitizeComponentObject = sanitizeComponentObject;
 }

@@ -617,6 +617,49 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
     expect(bubbles[0]).toBe('1 component in this canvas');
   });
 
+  it('counts inline components in v1.0 createSurface messages', async () => {
+    const v1Payload = JSON.stringify([
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's1',
+          components: [
+            {id: 't1', component: 'Text'},
+            {id: 'b1', component: 'Button'},
+          ],
+        },
+      },
+    ]);
+
+    chatStateMock.chatHistory.set([{role: MessageRole.MODEL, content: v1Payload}]);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    expect(bubbles[0]).toBe('2 components in this canvas');
+  });
+
+  it('handles null, array, and primitive items in parsed JSON arrays safely without throwing', async () => {
+    const mixedPayload = JSON.stringify([
+      null,
+      42,
+      'primitive string',
+      [],
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's1',
+          components: [{id: 'c1', component: 'Button'}],
+        },
+      },
+    ]);
+
+    chatStateMock.chatHistory.set([{role: MessageRole.MODEL, content: mixedPayload}]);
+    expect(() => fixture.detectChanges()).not.toThrow();
+
+    const bubbles = await harness.getBubblesText();
+    expect(bubbles[0]).toBe('1 component in this canvas');
+  });
+
   it('classifies formatted multi-line JSON arrays as layout snapshots and calculates component counts', async () => {
     const formattedArray = JSON.stringify(
       [

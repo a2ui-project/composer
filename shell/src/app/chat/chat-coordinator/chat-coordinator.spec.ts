@@ -15,15 +15,21 @@
  * limitations under the License.
  */
 
-import {ThemePreference} from 'a2ui-bridge';
+import {ThemePreference, type A2uiProtocolVersion} from 'a2ui-bridge';
 import {TestBed} from '@angular/core/testing';
-import {createEnvironmentInjector, EnvironmentInjector, signal} from '@angular/core';
+import {computed, createEnvironmentInjector, EnvironmentInjector, signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {RendererSelection} from '../renderer-selection/renderer-selection';
 import {RendererTool} from '../renderer-selection/renderer-tool';
 import {ChatCoordinator} from './chat-coordinator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {Catalog} from '../../storage/models/catalog-storage.model';
+import {
+  Catalog,
+  CatalogComponentSchema,
+  CatalogJson,
+  getCatalogFunctionEntries,
+} from '../../storage/models/catalog-storage.model';
+import {stripPrototypePollutionKeys} from '../../shell/cross-frame-validator/wire-version-validator';
 import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {
   AppConfigProvider,
@@ -47,6 +53,46 @@ import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);
+  readonly activeCatalogs = signal<CatalogJson[]>([]);
+  readonly activeProtocolVersion = signal<A2uiProtocolVersion>('v0.9');
+  readonly mergedActiveCatalog = computed<Catalog | null>(() => {
+    const primary = this.activeCatalog();
+    const catalogs = this.activeCatalogs();
+    if (!primary && catalogs.length === 0) {
+      return null;
+    }
+    const list: Catalog[] = primary ? [primary, ...catalogs.filter(c => c !== primary)] : catalogs;
+    const mergedComponents: Record<string, CatalogComponentSchema> = {};
+    const mergedFunctions: Record<string, Record<string, unknown>> = {};
+    let firstCatalogId: string | undefined;
+
+    for (const cat of list) {
+      if (!cat) continue;
+      if (!firstCatalogId && cat.catalogId) {
+        firstCatalogId = cat.catalogId;
+      }
+      if (cat.components) {
+        for (const [key, schema] of Object.entries(cat.components)) {
+          if (!Object.hasOwn(mergedComponents, key)) {
+            mergedComponents[key] = schema as CatalogComponentSchema;
+          }
+        }
+      }
+      for (const [key, schema] of getCatalogFunctionEntries(cat)) {
+        if (!Object.hasOwn(mergedFunctions, key)) {
+          mergedFunctions[key] = schema;
+        }
+      }
+    }
+
+    const base = primary ?? list[0] ?? {};
+    return stripPrototypePollutionKeys({
+      ...base,
+      catalogId: primary?.catalogId ?? firstCatalogId,
+      components: mergedComponents,
+      functions: mergedFunctions,
+    });
+  });
 }
 
 class MockAppConfigProvider {
@@ -2213,6 +2259,297 @@ I'll output bad JSON.
           originalPrompt: 'Later failed prompt',
         }),
       );
+    });
+  });
+
+  describe('Multi-Catalog & v1.0 Validation', () => {
+    const getMerged = () =>
+      (service as unknown as {mergedActiveCatalog: () => Catalog | null}).mergedActiveCatalog();
+
+    it('merges component schemas and function schemas across activeCatalogs falling back to activeCatalog', () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'primary-cat',
+        components: {PrimaryWidget: {type: 'object'}},
+        functions: {primaryFn: {description: 'primary'}},
+      });
+
+      catalogManagementMock.activeCatalogs.set([
+        {
+          catalogId: 'primary-cat',
+          components: {PrimaryWidget: {type: 'object'}},
+          functions: {primaryFn: {description: 'primary'}},
+        },
+        {
+          catalogId: 'secondary-mcp',
+          components: {SecondaryWidget: {type: 'object'}},
+          functions: {searchTool: {description: 'search tool'}},
+        },
+      ]);
+
+      const merged = getMerged();
+      expect(merged).not.toBeNull();
+      expect(merged?.catalogId).toBe('primary-cat');
+      expect(merged?.components).toHaveProperty('PrimaryWidget');
+      expect(merged?.components).toHaveProperty('SecondaryWidget');
+      expect(merged?.functions).toHaveProperty('primaryFn');
+      expect(merged?.functions).toHaveProperty('searchTool');
+    });
+
+    it('falls back cleanly to activeCatalog when activeCatalogs is empty', () => {
+      catalogManagementMock.activeCatalogs.set([]);
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'fallback-cat',
+        components: {FallbackWidget: {}},
+        functions: {},
+      });
+
+      const merged = getMerged();
+      expect(merged).not.toBeNull();
+      expect(merged?.catalogId).toBe('fallback-cat');
+      expect(merged?.components).toHaveProperty('FallbackWidget');
+    });
+
+    it('heals and validates components registered only in secondary catalog', async () => {
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalogs.set([
+        {catalogId: 'main-cat', components: {Text: {}}, functions: {}},
+        {catalogId: 'mcp-cat', components: {ToolResultViewer: {}}, functions: {search: {}}},
+      ]);
+
+      const v10Response =
+        '{"version": "1.0", "createSurface": {"surfaceId": "tool-surf", "components": [{"name": "toolresultviewer", "id": "tr1"}]}}';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([v10Response]);
+        return {contentStream, complete: Promise.resolve(v10Response)};
+      });
+
+      await service.submitPrompt('Render secondary catalog widget');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
+      const history = chatStateMock.chatHistory();
+      const lastMsg = history[history.length - 1];
+      expect(lastMsg.role).toBe(MessageRole.MODEL);
+      expect(lastMsg.componentCount).toBe(1);
+      expect(lastMsg.content).toContain('"component":"ToolResultViewer"');
+    });
+
+    it('recognizes single-message createSurface with inline components as creating and populating surfaceId in v1.0', async () => {
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test-cat',
+        components: {Text: {}, Button: {}},
+      });
+
+      const v10InlinePayload =
+        '{"version": "1.0", "createSurface": {"surfaceId": "v1-card", "components": [{"component": "Text", "id": "t1"}, {"component": "Button", "id": "b1"}]}}';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([v10InlinePayload]);
+        return {contentStream, complete: Promise.resolve(v10InlinePayload)};
+      });
+
+      await service.submitPrompt('Create v1.0 card');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
+      const history = chatStateMock.chatHistory();
+      const lastMsg = history[history.length - 1];
+      expect(lastMsg.role).toBe(MessageRole.MODEL);
+      expect(lastMsg.componentCount).toBe(2);
+      expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalled();
+    });
+
+    it('validates callRendererFunction surfaceId and rejects unknown surfaceId', async () => {
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set({catalogId: 'test-cat', components: {}});
+
+      stateSyncMock.activeDraftSignal.set(
+        JSON.stringify([{version: '1.0', createSurface: {surfaceId: 'known-surface'}}]),
+      );
+
+      const invalidCrfPayload =
+        '{"version": "1.0", "callRendererFunction": {"surfaceId": "nonexistent-surface", "functionCallId": "c1", "callFunction": {"catalogId": "test", "call": "fn"}}}';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([invalidCrfPayload]);
+        return {contentStream, complete: Promise.resolve(invalidCrfPayload)};
+      });
+
+      await service.submitPrompt('Execute invalid function call');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
+      const history = chatStateMock.chatHistory();
+      const errorMsg = history[history.length - 1];
+      expect(errorMsg.role).toBe(MessageRole.ERROR);
+      expect(errorMsg.errorDetails).toContain('Surface validation failed');
+      expect(errorMsg.errorDetails).toContain('nonexistent-surface');
+    });
+
+    it('accepts callRendererFunction targeting an active surface or with omitted surfaceId', async () => {
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set({catalogId: 'test-cat', components: {}});
+
+      stateSyncMock.activeDraftSignal.set(
+        JSON.stringify([{version: '1.0', createSurface: {surfaceId: 'known-surface'}}]),
+      );
+
+      const validCrfPayload =
+        '{"version": "1.0", "callRendererFunction": {"surfaceId": "known-surface", "functionCallId": "c1", "callFunction": {"catalogId": "test", "call": "fn"}}}\n' +
+        '{"version": "1.0", "callRendererFunction": {"surfaceId": "known-surface", "functionCallId": "c2", "callFunction": {"catalogId": "test", "call": "rootFn"}}}';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([validCrfPayload]);
+        return {contentStream, complete: Promise.resolve(validCrfPayload)};
+      });
+
+      await service.submitPrompt('Execute valid function calls');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
+      const history = chatStateMock.chatHistory();
+      const lastMsg = history[history.length - 1];
+      expect(lastMsg.role).toBe(MessageRole.MODEL);
+    });
+
+    it('heals missing createSurface.catalogId from mergedActiveCatalog() in v1.0', async () => {
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'auto.healed.catalog',
+        components: {Card: {}},
+      });
+
+      const payload =
+        '{"version": "1.0", "createSurface": {"surfaceId": "card-surf", "components": [{"component": "Card", "id": "c1"}]}}';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([payload]);
+        return {contentStream, complete: Promise.resolve(payload)};
+      });
+
+      await service.submitPrompt('Create card without catalogId');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
+      expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalled();
+      const committedText = vi.mocked(stateSyncMock.commitLayoutFromLlm).mock.calls[0][0];
+      expect(committedText).toContain('"catalogId": "auto.healed.catalog"');
+    });
+
+    it('fails outgoing validation when createSurface lacks catalogId and active catalog is empty', async () => {
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set(null);
+      catalogManagementMock.activeCatalogs.set([]);
+
+      const payload =
+        '{"version": "1.0", "createSurface": {"surfaceId": "orphan-surf", "components": [{"component": "Card", "id": "c1"}]}}';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([payload]);
+        return {contentStream, complete: Promise.resolve(payload)};
+      });
+
+      await service.submitPrompt('Create orphan surface');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
+      const history = chatStateMock.chatHistory();
+      const errorMsg = history[history.length - 1];
+      expect(errorMsg.role).toBe(MessageRole.ERROR);
+      expect(errorMsg.errorDetails).toContain('must contain a non-empty string catalogId');
+    });
+
+    it('normalizes shorthand callRendererFunction with { call, args } into canonical callFunction', async () => {
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'tools.catalog',
+        components: {},
+      });
+
+      stateSyncMock.activeDraftSignal.set(
+        JSON.stringify([
+          {
+            version: '1.0',
+            createSurface: {surfaceId: 'tools-surface', catalogId: 'tools.catalog'},
+          },
+        ]),
+      );
+
+      const payload =
+        '{"version": "1.0", "callRendererFunction": {"surfaceId": "tools-surface", "functionCallId": "call-42", "call": "exportReport", "args": {"format": "pdf"}}}';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([payload]);
+        return {contentStream, complete: Promise.resolve(payload)};
+      });
+
+      await service.submitPrompt('Run shorthand exportReport');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
+      expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalled();
+      const committedText = vi.mocked(stateSyncMock.commitLayoutFromLlm).mock.calls[0][0];
+      expect(committedText).toContain('"@call": "exportReport"');
+      expect(committedText).toContain('"catalogId": "tools.catalog"');
+      expect(committedText).not.toContain('"call": "exportReport"');
+    });
+
+    it('strips prototype pollution keys from mergedActiveCatalog()', () => {
+      const pollutedCatalog = JSON.parse(
+        JSON.stringify({
+          catalogId: 'polluted-cat',
+          __proto__: {polluted: true},
+          components: {
+            Widget: {
+              __proto__: {evil: true},
+              constructor: {polluted: true},
+              properties: {},
+            },
+          },
+          functions: {
+            doAction: {
+              __proto__: {hack: true},
+            },
+          },
+        }),
+      );
+
+      catalogManagementMock.activeCatalogs.set([pollutedCatalog]);
+      const merged = getMerged();
+
+      expect(merged).not.toBeNull();
+      expect(Object.keys(merged!)).not.toContain('__proto__');
+      expect(Object.keys(merged!.components!['Widget'])).not.toContain('__proto__');
+      expect(Object.keys(merged!.components!['Widget'])).not.toContain('constructor');
+      const functionsMap = merged!.functions as Record<string, Record<string, unknown>>;
+      expect(Object.keys(functionsMap['doAction'])).not.toContain('__proto__');
+    });
+
+    it('rejects callRendererFunction targeting a surface that was deleted in the same payload batch', async () => {
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set({catalogId: 'test-cat', components: {}});
+
+      stateSyncMock.activeDraftSignal.set(
+        JSON.stringify([
+          {
+            version: '1.0',
+            createSurface: {surfaceId: 'surf-to-delete', catalogId: 'test-cat'},
+          },
+        ]),
+      );
+
+      const deleteThenCallPayload =
+        '{"version": "1.0", "deleteSurface": {"surfaceId": "surf-to-delete"}}\n' +
+        '{"version": "1.0", "callRendererFunction": {"surfaceId": "surf-to-delete", "functionCallId": "c1", "callFunction": {"catalogId": "test-cat", "@call": "refresh"}}}';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([deleteThenCallPayload]);
+        return {contentStream, complete: Promise.resolve(deleteThenCallPayload)};
+      });
+
+      await service.submitPrompt('Delete surface then call function on it');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
+      const history = chatStateMock.chatHistory();
+      const errorMsg = history[history.length - 1];
+      expect(errorMsg.role).toBe(MessageRole.ERROR);
+      expect(errorMsg.errorDetails).toContain('Surface validation failed');
+      expect(errorMsg.errorDetails).toContain('surf-to-delete');
     });
   });
 });
