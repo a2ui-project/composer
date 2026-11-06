@@ -23,4 +23,26 @@ import {BaseBridgeProtocolStrategy} from './bridge-protocol-strategy.js';
 export class V10BridgeProtocolStrategy extends BaseBridgeProtocolStrategy {
   /** The protocol version identifier managed by this strategy ('v1.0'). */
   readonly version: A2uiProtocolVersion = 'v1.0';
+
+  /**
+   * Returns canonical wire version '1.0' for A2UI v1.0 protocol messages.
+   */
+  protected override get wireVersion(): string {
+    return '1.0';
+  }
+
+  /**
+   * Normalizes version: 'v1.0' -> '1.0' for canonical v1.0 message processor.
+   *
+   * @param messages Incoming layout command messages.
+   * @returns Normalized messages array.
+   */
+  override normalizeIncomingMessages(messages: unknown[]): unknown[] {
+    for (const item of messages) {
+      if (item && typeof item === 'object' && (item as {version?: unknown}).version === 'v1.0') {
+        (item as {version: string}).version = '1.0';
+      }
+    }
+    return messages;
+  }
 }

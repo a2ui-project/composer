@@ -675,4 +675,86 @@ describe('React Hook Adapter Spec', () => {
     });
     container.remove();
   });
+
+  it('passes catalogs to attachRenderer and resolves v1.0 multi-catalog handshake without HTTP fetch', async () => {
+    const {basicCatalog: basicV10} = await import('@a2ui/web_core/v1_0');
+    const {createMcpFunctionsCatalog, MCP_FUNCTIONS_CATALOG_ID} =
+      await import('../mcp/v1-0-mcp-catalog');
+    const mcpCatalog = createMcpFunctionsCatalog();
+
+    function TestV10Component() {
+      useA2uiSandbox([
+        basicV10 as unknown as Catalog<ComponentApi>,
+        mcpCatalog as unknown as Catalog<ComponentApi>,
+      ]);
+      return null;
+    }
+
+    const sendSpy = vi.spyOn(a2uiBridge, 'sendMessage');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(React.createElement(TestV10Component));
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window.parent,
+        origin: window.location.origin,
+        data: {type: 'GET_CATALOG'},
+      }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 25));
+
+    const catalogMsg = sendSpy.mock.calls
+      .map(c => c[0] as {type?: string; payload?: Record<string, unknown>})
+      .find(m => m.type === 'A2UI_CATALOG');
+    expect(catalogMsg).toBeDefined();
+    expect(catalogMsg?.payload?.['protocolVersion']).toBe('1.0');
+    const catalogsPayload = catalogMsg?.payload?.['catalogs'] as Array<Record<string, unknown>>;
+    expect(catalogsPayload).toHaveLength(2);
+    expect(catalogsPayload[1]?.['catalogId']).toBe(MCP_FUNCTIONS_CATALOG_ID);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('disposes processor.model on unmount', async () => {
+    let capturedProcessor: {model: {dispose: () => void}} | undefined;
+    const disposeSpy = vi.fn();
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer').mockImplementation((proc, cfg) => {
+      capturedProcessor = proc as unknown as typeof capturedProcessor;
+      if (capturedProcessor?.model) {
+        capturedProcessor.model.dispose = disposeSpy;
+      }
+      return {unsubscribe: vi.fn()};
+    });
+
+    function TestCleanupComponent() {
+      useA2uiSandbox([]);
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(React.createElement(TestCleanupComponent));
+    });
+
+    expect(capturedProcessor).toBeDefined();
+
+    await act(async () => {
+      root.unmount();
+    });
+
+    expect(disposeSpy).toHaveBeenCalled();
+    attachSpy.mockRestore();
+    container.remove();
+  });
 });

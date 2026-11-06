@@ -22,7 +22,7 @@ import {
   ComponentApi,
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
-import {a2uiBridge, ThemePreference, CatalogDetails, ComponentUsages, Demo} from '../index.js';
+import {a2uiBridge, ThemePreference, ComponentUsages, Demo} from '../index.js';
 
 export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
   /** The reactive dynamic surface drawing model representing the active canvas. */
@@ -93,6 +93,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     // Connects the renderer stack and establishes inter-frame callbacks
     const connection = a2uiBridge.attachRenderer(processor, {
       surfaceGroup: processor.model,
+      catalogs: catalogsRef.current,
       catalogJson: options?.catalogJson,
       // Each optional callback is installed only when the host supplied one at mount, because
       // `PreviewBridge` reads an absent config property as "this renderer does not implement it"
@@ -112,13 +113,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
         ? theme => optionsRef.current?.onThemeChange?.(theme)
         : undefined,
       onCatalogResolved: catalogId => {
-        const cats = catalogsRef.current;
-        if (cats && cats.length === 1 && !cats.some(c => (c as {id?: string})?.id === catalogId)) {
-          const firstCatalog = cats[0];
-          if (firstCatalog) {
-            (firstCatalog as unknown as CatalogDetails).id = catalogId;
-          }
-        }
+        a2uiBridge.aliasSingleCatalogId(catalogId, catalogsRef.current);
       },
       onSurfaceReady: surfaceId => {
         const nextSurface = processor.model.getSurface(surfaceId) as SurfaceModel<C> | undefined;
@@ -144,7 +139,9 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     return () => {
       connection.unsubscribe();
       for (const resolve of contentRenderWaiters.current.splice(0)) resolve();
+      processor.model.dispose();
     };
+
     // Intentionally empty: `catalogs` and `options` are expected to be fresh array/object
     // literals (and fresh arrow function callbacks) on every render from typical call sites.
     // Listing them as dependencies would tear down and re-attach the renderer on every render,

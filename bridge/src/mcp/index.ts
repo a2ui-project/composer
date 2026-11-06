@@ -25,12 +25,11 @@ import {
   type McpClientResolver,
   type McpMessageProcessor,
 } from './functions/callMcpTool.js';
-import type {FunctionApiDefinition} from './functions/common.js';
-import {JmespathApi, JmespathImplementation} from './functions/jmespath.js';
-import {RegexCaptureApi, RegexCaptureImplementation} from './functions/regexCapture.js';
-import {RegexReplaceApi, RegexReplaceImplementation} from './functions/regexReplace.js';
-import {SplitApi, SplitImplementation} from './functions/split.js';
-import {UpdateDataModelApi, UpdateDataModelImplementation} from './functions/updateDataModel.js';
+import {JmespathImplementation} from './functions/jmespath.js';
+import {RegexCaptureImplementation} from './functions/regexCapture.js';
+import {RegexReplaceImplementation} from './functions/regexReplace.js';
+import {SplitImplementation} from './functions/split.js';
+import {UpdateDataModelImplementation} from './functions/updateDataModel.js';
 
 /** Identifier of the catalog these functions implement. */
 export const MCP_CATALOG_ID = 'https://a2ui.org/specification/v0_9/catalogs/mcp/mcp_catalog.json';
@@ -93,6 +92,12 @@ export {UpdateDataModelApi, UpdateDataModelImplementation} from './functions/upd
 export {isThenable} from './functions/common.js';
 
 export * from './dynamic-value-strategy.js';
-export * from './v0-9-dynamic-value-strategy.js';
+export {
+  type V09DataBinding,
+  type V09DynamicExpression,
+  type V09FunctionCall,
+  v09DynamicValueStrategy,
+  V09DynamicValueStrategy,
+} from './v0-9-dynamic-value-strategy.js';
 export * from './v1-0-dynamic-value-strategy.js';
 export * from './v1-0-mcp-catalog.js';
