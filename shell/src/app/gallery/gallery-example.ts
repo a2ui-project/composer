@@ -18,6 +18,7 @@ import {ComponentUsage} from 'a2ui-bridge';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {Catalog, CatalogComponentSchema} from '../storage/models/catalog-storage.model';
 import {CatalogSchemaResolver} from './schema/catalog-schema-resolver';
+import {describeAnyDynamicValue, isAnyDynamicValue} from './protocol/gallery-protocol-strategy';
 
 type Literal = string | number | boolean;
 
@@ -239,7 +240,7 @@ export function describeUneditableValue(
     return null;
   }
   // Object field controls can edit plain objects, excluding data bindings and function calls.
-  if (control.kind === 'object' && isRecord(value) && !isBindingOrCallValue(value)) {
+  if (control.kind === 'object' && isRecord(value) && !isAnyDynamicValue(value)) {
     return null;
   }
   // Primitive controls ('string', 'number', 'boolean') can edit values of the matching JS typeof.
@@ -250,11 +251,9 @@ export function describeUneditableValue(
     return null;
   }
   // Otherwise, the control cannot edit this value—explain why in a read-only note.
-  if (isRecord(value) && isDataBindingValue(value)) {
-    return `Bound to ${value['path']} — edit in the JSON editor.`;
-  }
-  if (isRecord(value) && isFunctionCallValue(value)) {
-    return `Computed by ${value['call']}() — edit in the JSON editor.`;
+  const dynamicDescription = describeAnyDynamicValue(value);
+  if (dynamicDescription !== null) {
+    return dynamicDescription;
   }
   return 'This value can only be edited in the JSON editor.';
 }
@@ -278,7 +277,7 @@ function inferControlFromValue(
           : {kind: 'string', options: []},
     };
   }
-  if (isRecord(value) && !isBindingOrCallValue(value) && Object.keys(value).length > 0) {
+  if (isRecord(value) && !isAnyDynamicValue(value) && Object.keys(value).length > 0) {
     return {
       kind: 'object',
       options: [],
@@ -354,38 +353,13 @@ function isBindingOrCallSchema(schema: CatalogComponentSchema): boolean {
     return false;
   }
   const keys = Object.keys(props);
-  if (keys.length === 1 && keys[0] === 'path') {
+  if (keys.length === 1 && (keys[0] === 'path' || keys[0] === '@path')) {
+    return true;
+  }
+  if ('@call' in props) {
     return true;
   }
   return 'call' in props && keys.every(key => FUNCTION_CALL_KEYS.has(key));
-}
-
-/**
- * Returns true if value represents a data binding value, false otherwise.
- */
-function isDataBindingValue(value: Record<string, unknown>): boolean {
-  const keys = Object.keys(value);
-  return keys.length === 1 && keys[0] === 'path' && typeof value['path'] === 'string';
-}
-
-/**
- * Returns true if value represents a function call value, false otherwise.
- */
-function isFunctionCallValue(value: Record<string, unknown>): boolean {
-  const keys = Object.keys(value);
-  return (
-    typeof value['call'] === 'string' &&
-    keys.every(key => FUNCTION_CALL_KEYS.has(key)) &&
-    (value['args'] === undefined || isRecord(value['args'])) &&
-    (value['returnType'] === undefined || typeof value['returnType'] === 'string')
-  );
-}
-
-/**
- * Returns true if value represents a data binding or function call value, false otherwise.
- */
-function isBindingOrCallValue(value: Record<string, unknown>): boolean {
-  return isDataBindingValue(value) || isFunctionCallValue(value);
 }
 
 /**

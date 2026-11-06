@@ -225,7 +225,8 @@ export class GuestFrame implements OnInit {
 
     effect(() => {
       this.payload();
-      this.catalogManagement?.hasReceivedCatalogResponse?.();
+      this.catalogManagement?.hasReceivedCatalogResponse();
+      this.catalogManagement?.activeProtocolVersion();
       untracked(() => this.syncPayload());
     });
   }
@@ -382,7 +383,6 @@ export class GuestFrame implements OnInit {
     if (
       this.defaultTarget() === DefaultTarget.REPLACE &&
       this.catalogManagement &&
-      typeof this.catalogManagement.hasReceivedCatalogResponse === 'function' &&
       !this.catalogManagement.hasReceivedCatalogResponse()
     ) {
       // Defer render until catalog discovery handshake settles
@@ -390,18 +390,20 @@ export class GuestFrame implements OnInit {
     }
 
     const activeVersion =
-      this.catalogManagement && typeof this.catalogManagement.activeProtocolVersion === 'function'
+      this.catalogManagement && this.catalogManagement.hasReceivedCatalogResponse()
         ? this.catalogManagement.activeProtocolVersion()
-        : 'v0.9';
+        : null;
 
-    const validation = validatePayloadProtocolVersion(payload, activeVersion);
-    if (!validation.valid) {
-      this.errorLogger.error({
-        sourceTag: '[GuestFrame]',
-        code: 'PROTOCOL_VERSION_MISMATCH',
-        message: validation.message,
-      });
-      return;
+    if (activeVersion !== null) {
+      const validation = validatePayloadProtocolVersion(payload, activeVersion);
+      if (!validation.valid) {
+        this.errorLogger.error({
+          sourceTag: '[GuestFrame]',
+          code: 'PROTOCOL_VERSION_MISMATCH',
+          message: validation.message,
+        });
+        return;
+      }
     }
 
     const content = stableStringify(payload);

@@ -165,6 +165,11 @@ const call: CatalogComponentSchema = {type: 'object', properties: {call: {type: 
 const dynamic = (literal: CatalogComponentSchema): CatalogComponentSchema => ({
   oneOf: [literal, binding, call],
 });
+const v1Binding: CatalogComponentSchema = {type: 'object', properties: {'@path': {type: 'string'}}};
+const v1Call: CatalogComponentSchema = {type: 'object', properties: {'@call': {type: 'string'}}};
+const dynamicV1 = (literal: CatalogComponentSchema): CatalogComponentSchema => ({
+  anyOf: [literal, v1Binding, v1Call],
+});
 
 describe('galleryPropertyControl', () => {
   it.each([
@@ -173,8 +178,11 @@ describe('galleryPropertyControl', () => {
     ['an integer', {type: 'integer'}, 'number'],
     ['a string', {type: 'string'}, 'string'],
     ['a DynamicString', dynamic({type: 'string'}), 'string'],
+    ['a v1.0 DynamicString', dynamicV1({type: 'string'}), 'string'],
     ['a DynamicBoolean', dynamic({type: 'boolean'}), 'boolean'],
+    ['a v1.0 DynamicBoolean', dynamicV1({type: 'boolean'}), 'boolean'],
     ['a DynamicNumber', dynamic({type: 'number'}), 'number'],
+    ['a v1.0 DynamicNumber', dynamicV1({type: 'number'}), 'number'],
     ['an enum inside a union', {anyOf: [{type: 'string', enum: ['a', 'b']}, binding]}, 'enum'],
     ['an array of options', {type: 'array', items: {type: 'object'}}, 'array'],
     ['a DynamicStringList', dynamic({type: 'array', items: {type: 'string'}}), 'array'],
@@ -295,9 +303,13 @@ describe('describeUneditableValue', () => {
 
   it('protects bindings, function calls and values outside the control', () => {
     expect(describeUneditableValue({path: '/user/name'}, text)).toContain('Bound to /user/name');
+    expect(describeUneditableValue({'@path': '/user/name'}, text)).toContain('Bound to /user/name');
     expect(describeUneditableValue({path: '/items'}, list)).toContain('Bound to /items');
+    expect(describeUneditableValue({'@path': '/items'}, list)).toContain('Bound to /items');
     expect(describeUneditableValue({path: '/group'}, group)).toContain('Bound to /group');
+    expect(describeUneditableValue({'@path': '/group'}, group)).toContain('Bound to /group');
     expect(describeUneditableValue({call: 'formatDate'}, text)).toContain('formatDate()');
+    expect(describeUneditableValue({'@call': 'formatDate'}, text)).toContain('formatDate()');
     expect(describeUneditableValue(3, text)).toContain('JSON editor');
     expect(describeUneditableValue('other', {kind: 'enum', options: ['a']})).toContain(
       'JSON editor',
