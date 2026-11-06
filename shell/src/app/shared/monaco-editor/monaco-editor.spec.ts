@@ -19,11 +19,9 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal, WritableSignal} from '@angular/core';
 import {MonacoEditor} from './monaco-editor';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {Catalog} from '../../storage/models/catalog-storage.model';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
+import {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {ThemePreference, type A2uiProtocolVersion} from 'a2ui-bridge';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {MonacoEditorHarness} from './test/monaco-editor.harness';
 import type * as monaco from 'monaco-editor';
@@ -165,6 +163,9 @@ vi.mock('@monaco-editor/loader', () => ({
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);
+  readonly activeCatalogs = signal<CatalogJson[]>([]);
+  readonly activeProtocolVersion = signal<A2uiProtocolVersion>('v0.9');
+  readonly hasReceivedCatalogResponse = signal(true);
 }
 
 class MockAppConfigProvider {
@@ -967,6 +968,103 @@ describe('MonacoEditor component', () => {
     for (const entry of catalogSchemas) {
       expect(entry.schema).toEqual(activeCatalogSchema);
     }
+  });
+
+  it('switches between V09MonacoSchemaStrategy and V10MonacoSchemaStrategy reactively when activeProtocolVersion and activeCatalogs update', async () => {
+    fixture = TestBed.createComponent(MonacoEditor);
+    const catalogService = TestBed.inject(CatalogManagement) as unknown as MockCatalogManagement;
+
+    const v09Catalog: Catalog = {
+      $id: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+      catalogId: 'basic-v0-9',
+      components: {
+        OldText: {type: 'object'},
+      },
+    };
+
+    const v10BasicCatalog: Catalog = {
+      $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+      catalogId: 'basic-v1-0',
+      protocolVersion: '1.0',
+      components: {
+        Text: {type: 'object', properties: {component: {const: 'Text'}}},
+      },
+    };
+
+    const v10McpCatalog: Catalog = {
+      $id: 'https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json',
+      catalogId: 'mcp-functions-v1-0',
+      protocolVersion: '1.0',
+      components: {
+        McpWidget: {type: 'object', properties: {component: {const: 'McpWidget'}}},
+      },
+    };
+
+    catalogService.activeProtocolVersion.set('v0.9');
+    catalogService.activeCatalog.set(v09Catalog);
+    catalogService.activeCatalogs.set([v09Catalog]);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    let lastCall = mockSetDiagnosticsOptions.mock.calls.at(-1)?.[0] as {
+      schemas: Array<{uri: string; schema: Record<string, unknown>}>;
+    };
+    expect(lastCall.schemas.map(s => s.uri)).toContain(
+      'https://a2ui.org/specification/v0_9/common_types.json',
+    );
+    expect(lastCall.schemas.map(s => s.uri)).not.toContain(
+      'https://a2ui.org/specification/v1_0/common_types.json',
+    );
+
+    catalogService.activeProtocolVersion.set('v1.0');
+    catalogService.activeCatalog.set(v10BasicCatalog);
+    catalogService.activeCatalogs.set([v10BasicCatalog, v10McpCatalog]);
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    lastCall = mockSetDiagnosticsOptions.mock.calls.at(-1)?.[0] as {
+      schemas: Array<{uri: string; schema: Record<string, unknown>}>;
+    };
+    const uris = lastCall.schemas.map(s => s.uri);
+    expect(uris).toContain('https://a2ui.org/specification/v1_0/common_types.json');
+    expect(uris).toContain('https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json');
+    expect(uris).toContain('https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json');
+  });
+
+  it('configures empty-catalog v1.0 schemas when catalog is empty but settled, and clears schemas when unsettled', async () => {
+    fixture = TestBed.createComponent(MonacoEditor);
+    const catalogService = TestBed.inject(CatalogManagement) as unknown as MockCatalogManagement;
+
+    catalogService.activeProtocolVersion.set('v1.0');
+    catalogService.activeCatalog.set(null);
+    catalogService.activeCatalogs.set([]);
+    catalogService.hasReceivedCatalogResponse.set(true);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    let lastCall = mockSetDiagnosticsOptions.mock.calls.at(-1)?.[0] as {
+      schemas: Array<{uri: string; schema: Record<string, unknown>}>;
+    };
+    expect(lastCall.schemas.map(s => s.uri)).toContain(
+      'https://a2ui.org/specification/v1_0/common_types.json',
+    );
+
+    catalogService.hasReceivedCatalogResponse.set(false);
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    lastCall = mockSetDiagnosticsOptions.mock.calls.at(-1)?.[0] as {
+      schemas: Array<{uri: string; schema: Record<string, unknown>}>;
+    };
+    expect(lastCall.schemas).toEqual([]);
   });
 
   it('returns line and column from getFirstErrorMarker when diagnostics are present', async () => {

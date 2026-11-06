@@ -32,12 +32,10 @@ import loader from '@monaco-editor/loader';
 import type * as monaco from 'monaco-editor';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {generateUuid} from '../../utils/uuid';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
-import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
-import {Catalog} from '../../storage/models/catalog-storage.model';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {ThemePreference} from 'a2ui-bridge';
+import {V09MonacoSchemaStrategy} from './schemas/v0-9-monaco-schema-strategy';
+import {V10MonacoSchemaStrategy} from './schemas/v1-0-monaco-schema-strategy';
 
 /**
  * A standalone Angular component that wraps the Monaco Editor.
@@ -129,6 +127,8 @@ export class MonacoEditor {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly v09SchemaStrategy = inject(V09MonacoSchemaStrategy);
+  private readonly v10SchemaStrategy = inject(V10MonacoSchemaStrategy);
 
   private markerDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingMarkers: monaco.editor.IMarker[] | null = null;
@@ -422,93 +422,51 @@ export class MonacoEditor {
     });
 
     // Dynamically register and update the JSON schema validation for Monaco
-    // based on the currently active A2UI catalog to provide real-time linting.
+    // based on the currently active A2UI catalog, catalogs, and protocol version.
     effect(() => {
       const catalog = this.catalogManagement.activeCatalog();
+      const catalogs = this.catalogManagement.activeCatalogs();
+      const protocolVersion = this.catalogManagement.activeProtocolVersion();
+      const hasSettled = this.catalogManagement.hasReceivedCatalogResponse();
       const monacoInstance = this.monacoInstance();
 
-      if (!catalog || !monacoInstance) {
+      if (!monacoInstance) {
         return;
       }
 
-      const componentSchemas = Object.values(catalog.components || {});
-      const layoutSchema = {
-        ...catalog,
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            version: {type: 'string'},
-            createSurface: {
-              type: 'object',
-              properties: {
-                surfaceId: {type: 'string'},
-                catalogId: {type: 'string'},
-                sendDataModel: {type: 'boolean'},
-              },
-              required: ['surfaceId', 'catalogId'],
-            },
-            deleteSurface: {
-              type: 'object',
-              properties: {
-                surfaceId: {type: 'string'},
-              },
-              required: ['surfaceId'],
-            },
-            updateComponents: {
-              type: 'object',
-              properties: {
-                surfaceId: {type: 'string'},
-                components: {
-                  type: 'array',
-                  items: {
-                    anyOf: componentSchemas,
-                  },
-                },
-              },
-              required: ['surfaceId', 'components'],
-            },
-            updateDataModel: {
-              type: 'object',
-              properties: {
-                surfaceId: {type: 'string'},
-                path: {type: 'string'},
-                value: {},
-              },
-              required: ['surfaceId'],
-            },
-          },
-          additionalProperties: false,
-        },
-      };
+      const jsonContrib = (monacoInstance.languages as unknown as {json: typeof monaco.json}).json;
+      if (!catalog && (!catalogs || catalogs.length === 0)) {
+        if (hasSettled && protocolVersion === 'v1.0') {
+          const schemas = this.v10SchemaStrategy.buildSchemas({catalog: null, catalogs: []});
+          jsonContrib.jsonDefaults.setDiagnosticsOptions({
+            validate: true,
+            schemaValidation: 'error',
+            schemas,
+          });
+          return;
+        }
+        jsonContrib.jsonDefaults.setDiagnosticsOptions({
+          validate: true,
+          schemaValidation: 'error',
+          schemas: [],
+        });
+        return;
+      }
 
-      const galleryExampleSchema = {
-        ...catalog,
-        type: 'object',
-        properties: {
-          components: {
-            type: 'array',
-            items: {
-              anyOf: componentSchemas,
-            },
-          },
-          data: {
-            type: 'object',
-          },
-        },
-        required: ['components'],
-        additionalProperties: false,
-      };
+      const strategy = protocolVersion === 'v1.0' ? this.v10SchemaStrategy : this.v09SchemaStrategy;
+      const schemas = strategy.buildSchemas({
+        catalog,
+        catalogs: catalogs || [],
+      });
 
       // @types/monaco-editor deprecates `monaco.languages.json` in favor of `monaco.json`,
       // but our AMD loader still attaches the JSON API to `monaco.languages.json`.
       // We safely cast through `unknown` to the modern ESM type, as the runtime structures
       // match and no alternative AMD interfaces exist for `jsonDefaults`.
-      const jsonContrib = (monacoInstance.languages as unknown as {json: typeof monaco.json}).json;
       jsonContrib.jsonDefaults.setDiagnosticsOptions({
         validate: true,
         schemaValidation: 'error',
-        schemas: this.buildValidationSchemas(layoutSchema, galleryExampleSchema, catalog),
+        schemas,
       });
     });
 
@@ -754,55 +712,6 @@ export class MonacoEditor {
     if (this.markerDebounceTimer !== null && this.pendingMarkers !== null) {
       this.scheduleErrorMarkersDebounce();
     }
-  }
-
-  /**
-   * Constructs the array of JSON schemas provided to the Monaco Editor's JSON worker
-   * for real-time validation and autocompletion.
-   *
-   * @param layoutSchema The dynamically generated schema representing the full A2UI layout
-   *        structure, including the active catalog's components.
-   * @param galleryExampleSchema The schema for Gallery example drafts (`{components, data}`).
-   * @param catalog The active catalog JSON schema received from the renderer (`A2UI_CATALOG`).
-   * @return An array of schemas configured with URIs that match `$ref` references
-   *          within the component and function schemas. We map the active catalog and
-   *          `COMMON_TYPES_SCHEMA` to both `file:///` and HTTP URIs so the Monaco JSON
-   *          worker can resolve them synchronously without needing an external schema
-   *          request service.
-   */
-  private buildValidationSchemas(
-    layoutSchema: unknown,
-    galleryExampleSchema: unknown,
-    catalog: Catalog,
-  ): monaco.json.DiagnosticsOptions['schemas'] {
-    return [
-      {
-        uri: 'a2ui-catalog-schema',
-        fileMatch: ['inmemory://model/layout-*.json'],
-        schema: structuredClone(layoutSchema),
-      },
-      {
-        uri: 'a2ui-gallery-example-schema',
-        fileMatch: ['inmemory://model/gallery-draft-*.json'],
-        schema: structuredClone(galleryExampleSchema),
-      },
-      {
-        uri: 'file:///common_types.json',
-        schema: structuredClone(COMMON_TYPES_SCHEMA),
-      },
-      {
-        uri: 'file:///catalog.json',
-        schema: structuredClone(catalog),
-      },
-      {
-        uri: 'https://a2ui.org/specification/v0_9/common_types.json',
-        schema: structuredClone(COMMON_TYPES_SCHEMA),
-      },
-      {
-        uri: 'https://a2ui.org/specification/v0_9/catalog.json',
-        schema: structuredClone(catalog),
-      },
-    ];
   }
 
   /**

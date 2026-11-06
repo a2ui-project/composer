@@ -1387,4 +1387,39 @@ describe('CatalogSchemaResolver', () => {
 
     expect(errorLogger.warn).not.toHaveBeenCalled();
   });
+
+  it('resolves canonical v1.0 common_types.json references correctly', () => {
+    const mockSchema = {
+      protocolVersion: '1.0',
+      functions: (BASIC_CATALOG_SCHEMA as Catalog).functions,
+      components: {
+        TestComp: {
+          properties: {
+            label: {
+              $ref: 'https://a2ui.org/specification/v1_0/common_types.json#/$defs/DynamicString',
+            },
+            status: {
+              $ref: 'common_types.json#/$defs/DynamicBoolean',
+            },
+          },
+        },
+      },
+    };
+    const resolver = new CatalogSchemaResolver(mockSchema as Catalog, errorLogger);
+    const properties = resolver.resolveComponentProperties('TestComp');
+    expect(properties).toContainEqual({
+      name: 'label',
+      description: 'Represents a string',
+      type: 'string | object',
+      required: false,
+    });
+    expect(properties).toContainEqual({
+      name: 'status',
+      description:
+        "A boolean value that can be a literal, a path, or a function call returning a boolean or a validation result object (coerced to its 'valid' boolean).",
+      type: 'boolean | object',
+      required: false,
+    });
+    expect(errorLogger.warn).not.toHaveBeenCalled();
+  });
 });

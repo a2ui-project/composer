@@ -303,6 +303,7 @@ describe('RawFrame JSON Source Editor View', () => {
   let mockThemePreference: WritableSignal<ThemePreference>;
   let mockHasReceivedCatalogResponse: WritableSignal<boolean>;
   let mockActiveProtocolVersion: WritableSignal<A2uiProtocolVersion>;
+  let mockActiveCatalogs: WritableSignal<Catalog[]>;
   let stateSyncMock: MockStateSync;
   let chatStateMock: MockChatState;
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
@@ -320,6 +321,7 @@ describe('RawFrame JSON Source Editor View', () => {
     mockThemePreference = signal<ThemePreference>(ThemePreference.LIGHT);
     mockHasReceivedCatalogResponse = signal(true);
     mockActiveProtocolVersion = signal<A2uiProtocolVersion>('v0.9');
+    mockActiveCatalogs = signal<Catalog[]>([]);
     snackBarMock = {
       open: vi.fn().mockReturnValue({
         onAction: () => ({
@@ -388,6 +390,7 @@ describe('RawFrame JSON Source Editor View', () => {
           provide: CatalogManagement,
           useValue: {
             activeCatalog: mockActiveCatalog,
+            activeCatalogs: mockActiveCatalogs,
             hasReceivedCatalogResponse: mockHasReceivedCatalogResponse,
             activeProtocolVersion: mockActiveProtocolVersion,
           },
