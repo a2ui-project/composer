@@ -15,29 +15,46 @@
  */
 
 /**
- * Heading variants render plain text, so a matching Markdown heading marker
- * would appear literally. Only remove that redundant marker from static Text
- * components; Markdown bodies, bindings, and source messages stay untouched.
+ * Normalizes heading text across A2UI demo messages.
+ *
+ * Heading variants (e.g. legacy `variant: 'h1'..'h6'`) render plain text, so a
+ * matching Markdown heading marker would appear literally. Only remove that
+ * redundant marker from static Text components that specify a heading variant;
+ * standard Markdown headings (`#`..`######`) on Text components without a
+ * heading variant, Markdown bodies, bindings, and source messages stay untouched.
  */
 export function normalizeDemoHeadings(messages) {
   return messages.map(message => {
-    if (!message.updateComponents) return message;
-    return {
-      ...message,
-      updateComponents: {
-        ...message.updateComponents,
-        components: message.updateComponents.components.map(component => {
-          if (
-            component.component !== 'Text' ||
-            !/^h[1-6]$/.test(component.variant) ||
-            typeof component.text !== 'string'
-          ) {
-            return component;
-          }
-          const marker = new RegExp(`^#{${component.variant.slice(1)}}[ \\t]+`);
-          return {...component, text: component.text.replace(marker, '')};
-        }),
-      },
-    };
+    if (message.createSurface?.components) {
+      return {
+        ...message,
+        createSurface: {
+          ...message.createSurface,
+          components: message.createSurface.components.map(normalizeComponent),
+        },
+      };
+    }
+    if (message.updateComponents?.components) {
+      return {
+        ...message,
+        updateComponents: {
+          ...message.updateComponents,
+          components: message.updateComponents.components.map(normalizeComponent),
+        },
+      };
+    }
+    return message;
   });
+}
+
+function normalizeComponent(component) {
+  if (
+    component.component !== 'Text' ||
+    !/^h[1-6]$/.test(component.variant) ||
+    typeof component.text !== 'string'
+  ) {
+    return component;
+  }
+  const marker = new RegExp(`^#{${component.variant.slice(1)}}[ \\t]+`);
+  return {...component, text: component.text.replace(marker, '')};
 }
