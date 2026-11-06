@@ -339,4 +339,27 @@ describe('ErrorLogger Service Tests', () => {
     expect(infoArg && typeof infoArg === 'object' && 'level' in infoArg).toBe(false);
     expect(logArg && typeof logArg === 'object' && 'level' in logArg).toBe(false);
   });
+
+  it('preserves code in partial ErrorLogItem and error-like objects', () => {
+    const emitted: ErrorLogItem[] = [];
+    service.errorStream$.subscribe(item => emitted.push(item));
+
+    service.error({
+      code: 'PROTOCOL_VERSION_MISMATCH',
+      message: 'Client and server protocol versions do not align',
+      sourceTag: '[Handshake]',
+    });
+
+    const errorWithCode = new Error('No agent found');
+    (errorWithCode as unknown as {code: string}).code = 'NO_AGENT_CONNECTED';
+    service.error(errorWithCode);
+
+    expect(emitted.length).toBe(2);
+    expect(emitted[0].code).toBe('PROTOCOL_VERSION_MISMATCH');
+    expect(emitted[0].message).toBe('Client and server protocol versions do not align');
+    expect(emitted[0].sourceTag).toBe('[Handshake]');
+
+    expect(emitted[1].code).toBe('NO_AGENT_CONNECTED');
+    expect(emitted[1].message).toContain('No agent found');
+  });
 });

@@ -36,6 +36,8 @@ export interface ErrorLogItem {
   readonly message: string;
   /** Identifier of the system or subsystem that generated the log. */
   readonly sourceTag: string;
+  /** Optional error code identifying the category or error type. */
+  readonly code?: string;
   /** Optional line number associated with the log, typically 1-indexed. */
   readonly line?: number;
   /** Optional column number associated with the log, typically 1-indexed. */
@@ -190,6 +192,7 @@ export class ErrorLogger {
       level: partialObj.level ?? defaultLevel,
       message,
       sourceTag: partialObj.sourceTag ?? sourceTag,
+      code: partialObj.code !== undefined ? String(partialObj.code) : undefined,
       line: partialObj.line,
       column: partialObj.column,
       stack: partialObj.stack,
@@ -206,12 +209,16 @@ export class ErrorLogger {
   ): ErrorLogItem {
     let message = '';
     let stack: string | undefined = undefined;
+    let code: string | undefined = undefined;
     const sourceTag = '[Shell]';
 
     if (isErrorLike(arg1)) {
       const name = String(arg1.name || 'Error').slice(0, 100);
       message = arg1.message ? `${name}: ${arg1.message}` : name;
       stack = arg1.stack;
+      if ('code' in arg1 && typeof (arg1 as {code: unknown}).code === 'string') {
+        code = (arg1 as {code: string}).code;
+      }
     } else if (typeof arg1 === 'string') {
       message = arg1;
     } else {
@@ -229,6 +236,7 @@ export class ErrorLogger {
       level: defaultLevel,
       message,
       sourceTag,
+      code,
       stack,
     };
   }
@@ -256,6 +264,7 @@ export class ErrorLogger {
       'level',
       'message',
       'sourceTag',
+      'code',
       'line',
       'column',
       'stack',

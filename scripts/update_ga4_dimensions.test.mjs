@@ -74,6 +74,13 @@ describe('update_ga4_dimensions', () => {
         displayName: 'Error Invalid Property',
         description: 'Schema property failing validation',
       });
+
+      assert.ok(dimensions.has('protocol_version'));
+      assert.deepEqual(dimensions.get('protocol_version'), {
+        paramName: 'protocol_version',
+        displayName: 'Protocol Version',
+        description: 'Active A2UI protocol version (v0.9 or v1.0)',
+      });
     });
 
     it('extracts existing custom metrics with measurement units and descriptions', () => {
@@ -114,6 +121,7 @@ describe('update_ga4_dimensions', () => {
       assert.ok(params.has('env_mode'), 'Expected env_mode');
       assert.ok(params.has('active_renderer_id'), 'Expected active_renderer_id');
       assert.ok(params.has('catalog_id'), 'Expected catalog_id');
+      assert.ok(params.has('protocol_version'), 'Expected protocol_version');
 
       // Event parameters
       assert.ok(params.has('prompt_id'), 'Expected prompt_id');

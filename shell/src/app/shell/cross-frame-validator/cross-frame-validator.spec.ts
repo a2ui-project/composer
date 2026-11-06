@@ -590,7 +590,7 @@ describe('CrossFrameValidator', () => {
       );
     });
 
-    it('rejects RENDER_A2UI when an item lacks version v0.9', () => {
+    it('rejects RENDER_A2UI when an item lacks version v0.9 or 1.0', () => {
       const payload = [{updateComponents: {surfaceId: 's-1', components: []}}];
       expect(
         CrossFrameValidator.validateOutgoingMessage(
@@ -603,8 +603,50 @@ describe('CrossFrameValidator', () => {
         ),
       ).toBe(false);
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'Malformed payload for RENDER_A2UI: array items must specify version "v0.9".',
+        'Malformed payload for RENDER_A2UI: array items must specify version "v0.9" or "1.0".',
       );
+    });
+
+    it('rejects RENDER_A2UI when an item specifies version "v1.0"', () => {
+      const payload = [
+        {
+          version: 'v1.0',
+          createSurface: {surfaceId: 's-1', catalogId: 'cat-1'},
+        },
+      ];
+      const errors: string[] = [];
+      expect(
+        CrossFrameValidator.validateOutgoingMessage(
+          {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload,
+          },
+          errors,
+          mockLogger,
+        ),
+      ).toBe(false);
+      expect(errors).toContain(
+        "Invalid wire message: A2UI v1.0 messages must specify version: '1.0' (got 'v1.0')",
+      );
+    });
+
+    it('accepts RENDER_A2UI when an item specifies version "1.0"', () => {
+      const payload = [
+        {
+          version: '1.0',
+          createSurface: {surfaceId: 's-1', catalogId: 'cat-1'},
+        },
+      ];
+      expect(
+        CrossFrameValidator.validateOutgoingMessage(
+          {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(true);
     });
 
     it('rejects RENDER_A2UI when an item lacks any update property', () => {
@@ -1248,10 +1290,10 @@ describe('CrossFrameValidator', () => {
       expect(result).toBe(false);
       expect(errors.length).toBe(1);
       expect(errors[0]).toBe(
-        'Malformed payload for RENDER_A2UI: array items must specify version "v0.9".',
+        'Malformed payload for RENDER_A2UI: array items must specify version "v0.9" or "1.0".',
       );
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'Malformed payload for RENDER_A2UI: array items must specify version "v0.9".',
+        'Malformed payload for RENDER_A2UI: array items must specify version "v0.9" or "1.0".',
       );
     });
 
@@ -1366,6 +1408,274 @@ describe('CrossFrameValidator', () => {
         'Malformed message: message must be an object.',
       );
       expect(mockLogger.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('A2UI_CATALOG (Incoming)', () => {
+    it('accepts valid flat catalog payload', () => {
+      const payload = {
+        catalogId: 'test-catalog',
+        title: 'Test Catalog',
+        components: {
+          button: {component: 'button'},
+        },
+      };
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(true);
+      expect(mockLogger.error).not.toHaveBeenCalled();
+    });
+
+    it('accepts valid handshake payload with catalog and catalogs array', () => {
+      const payload = {
+        catalog: {catalogId: 'primary-cat', components: {}},
+        catalogs: [
+          {catalogId: 'cat-1', components: {}},
+          {catalogId: 'cat-2', components: {}},
+        ],
+      };
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(true);
+      expect(mockLogger.error).not.toHaveBeenCalled();
+    });
+
+    it('accepts empty or null settled catalog responses', () => {
+      for (const payload of [null, undefined, {}, {catalog: null}, {catalog: {}}]) {
+        expect(
+          CrossFrameValidator.validateIncomingMessage(
+            {
+              type: PreviewBridgeMessageType.A2UI_CATALOG,
+              payload,
+            },
+            undefined,
+            mockLogger,
+          ),
+        ).toBe(true);
+      }
+    });
+
+    it('accepts handshake error payload', () => {
+      const payload = {
+        error: {message: 'Catalog build failed'},
+      };
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(true);
+    });
+
+    it('rejects primitive non-object payload for A2UI_CATALOG', () => {
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload: 'invalid-string',
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(false);
+      expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    it('rejects array payload for A2UI_CATALOG', () => {
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload: ['invalid'],
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(false);
+    });
+
+    it('rejects catalogs property when it is not an array', () => {
+      const payload = {
+        catalog: {catalogId: 'cat-1'},
+        catalogs: 'not-an-array',
+      };
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(false);
+    });
+
+    it('rejects catalogs entries that are not objects', () => {
+      const payload = {
+        catalogs: ['not-an-object'],
+      };
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(false);
+    });
+
+    it('rejects prototype pollution in catalog payloads', () => {
+      const payload = JSON.parse('{"catalogId":"safe","__proto__":{"polluted":true}}');
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(false);
+    });
+  });
+
+  describe('SEND_TO_SERVER (Incoming & Delegation)', () => {
+    it('rejects v1.0 wire message with version "v1.0"', () => {
+      const payload = {
+        version: 'v1.0',
+        action: {name: 'submit', userMessage: 'Submitting'},
+      };
+      const errors: string[] = [];
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.SEND_TO_SERVER,
+            payload,
+          },
+          errors,
+          mockLogger,
+        ),
+      ).toBe(false);
+      expect(errors).toContain(
+        "Invalid wire message: A2UI v1.0 messages must specify version: '1.0' (got 'v1.0')",
+      );
+    });
+
+    it('delegates version "1.0" payload to V10WireValidator', () => {
+      const payload = {
+        version: '1.0',
+        callAgentFunction: {
+          surfaceId: 's1',
+          functionCallId: 'fn-1',
+          call: 'doSomething',
+        },
+      };
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.SEND_TO_SERVER,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(true);
+    });
+
+    it('delegates v0.9 payload to V09WireValidator', () => {
+      const payload = {
+        version: 'v0.9',
+        action: {name: 'click'},
+      };
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.SEND_TO_SERVER,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(true);
+    });
+
+    it('delegates omitted version to V09WireValidator by default', () => {
+      const payload = {
+        action: {name: 'click'},
+      };
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.SEND_TO_SERVER,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(true);
+    });
+
+    it('rejects unsupported version strings', () => {
+      const payload = {
+        version: 'v9.9',
+        action: {name: 'click'},
+      };
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.SEND_TO_SERVER,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(false);
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('v9.9'));
+    });
+
+    it('rejects null or non-object SEND_TO_SERVER payload', () => {
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.SEND_TO_SERVER,
+            payload: null,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(false);
+
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.SEND_TO_SERVER,
+            payload: 'invalid',
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(false);
     });
   });
 });

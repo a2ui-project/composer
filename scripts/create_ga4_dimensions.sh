@@ -217,6 +217,7 @@ create_dimension "open_file_status" "Open File Status" "Status of opening A2UI f
 create_dimension "open_file_reason" "Open File Failure Reason" "Categorized failure reason for failure to open an A2UI file"
 create_dimension "create_cl_status" "Create CL Status" "Status of creating a CL"
 create_dimension "create_cl_reason" "Create CL Failure Reason" "Categorized failure reason for failure to create a CL"
+create_dimension "protocol_version" "Protocol Version" "Active A2UI protocol version (v0.9 or v1.0)"
 #### END DIMENSIONS
 
 echo ""

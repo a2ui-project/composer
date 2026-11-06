@@ -27,9 +27,9 @@ import {MessageRole} from './llm-client';
 import {
   EnvMode,
   AuthType,
-  ThemePreference,
   A2aBackendMode,
 } from '../../settings/app-config-provider/app-config-provider';
+import {ThemePreference} from 'a2ui-bridge';
 import {appConfig} from '../../app.config';
 
 // TS Types matching official GenAI SDK (ensures zero 'any' type escapes)

@@ -18,6 +18,7 @@
     "lib": ["ES2022", "DOM"]
   },
   "exclude": [
+    "dist",
     "**/*.spec.ts",
     "playwright.config.ts",
     "src/test-setup.ts",

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import {ThemePreference} from 'a2ui-bridge';
 import {TestBed} from '@angular/core/testing';
 import {createEnvironmentInjector, EnvironmentInjector, signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
@@ -28,7 +29,6 @@ import {
   AppConfigProvider,
   EnvMode,
   AuthType,
-  ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {StateSync} from '../state-sync/state-sync';
 import {
@@ -1371,7 +1371,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(history[1].errorTitle).toBe('Validation Failure');
     expect(history[1].errorDetails).toContain('Outgoing message envelope validation failed');
     expect(history[1].errorDetails).toContain(
-      'Malformed payload for RENDER_A2UI: array items must specify version "v0.9".',
+      'Malformed payload for RENDER_A2UI: array items must specify version "v0.9" or "1.0".',
     );
   });
 

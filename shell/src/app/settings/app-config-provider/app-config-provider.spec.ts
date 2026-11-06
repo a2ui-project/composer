@@ -14,15 +14,10 @@
  * limitations under the License.
  */
 
+import {ThemePreference} from 'a2ui-bridge';
 import {signal, Signal, WritableSignal} from '@angular/core';
 import {describe, it, expect} from 'vitest';
-import {
-  AppConfigProvider,
-  EnvMode,
-  AuthType,
-  ThemePreference,
-  A2aBackendMode,
-} from './app-config-provider';
+import {AppConfigProvider, EnvMode, AuthType, A2aBackendMode} from './app-config-provider';
 
 /**
  * Concrete implementation of AppConfigProvider used solely for testing type bounds.

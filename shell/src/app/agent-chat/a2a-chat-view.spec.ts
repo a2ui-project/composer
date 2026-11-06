@@ -18,14 +18,13 @@ import {signal, WritableSignal} from '@angular/core';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {Subject} from 'rxjs';
-import {PreviewBridgeMessageType, RenderA2uiItem} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, RenderA2uiItem, ThemePreference} from 'a2ui-bridge';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {HostCommunication, MessageEnvelope} from '../shell/host-communication/host-communication';
 import {
   AppConfigProvider,
   A2aBackendMode,
-  ThemePreference,
 } from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
 import {A2A_TRANSPORT} from '../chat/a2a/a2a-transport.token';
