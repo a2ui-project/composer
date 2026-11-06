@@ -1543,5 +1543,64 @@ describe('RawFrame JSON Source Editor View', () => {
       vi.advanceTimersByTime(16000);
       expect(errorLoggerMock.warn).not.toHaveBeenCalled();
     });
+
+    it('gates v0.9 and mixed-version payloads under v1.0 and recovers on valid edit or protocol switch', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      mockActiveProtocolVersion.set('v1.0');
+
+      const {fixture, harness} = await setup(false);
+      // Initial MockStateSync draft is v0.9, so under v1.0 it is gated immediately
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceTag: '[RawFrame]',
+          code: 'PROTOCOL_VERSION_MISMATCH',
+        }),
+      );
+
+      // Mixed-version array is also gated
+      errorLoggerMock.error.mockClear();
+      await harness.setJsonText(
+        JSON.stringify([
+          {version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'c1', components: []}},
+          {version: 'v0.9', updateDataModel: {surfaceId: 's1', value: {}}},
+        ]),
+      );
+      fixture.detectChanges();
+      vi.advanceTimersByTime(300);
+
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceTag: '[RawFrame]',
+          code: 'PROTOCOL_VERSION_MISMATCH',
+        }),
+      );
+
+      // Editing back to a valid v1.0 payload recovers immediately after 300ms debounce
+      const validV10 = [
+        {version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'c1', components: []}},
+      ];
+      await harness.setJsonText(JSON.stringify(validV10));
+      fixture.detectChanges();
+      vi.advanceTimersByTime(300);
+
+      expect(sendRenderA2UIMock).toHaveBeenCalledWith(validV10);
+
+      // Switching activeProtocolVersion to v0.9 gates the v1.0 draft, and switching back to v1.0 recovers reactively
+      sendRenderA2UIMock.mockClear();
+      errorLoggerMock.error.mockClear();
+      mockActiveProtocolVersion.set('v0.9');
+      fixture.detectChanges();
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+        expect.objectContaining({code: 'PROTOCOL_VERSION_MISMATCH'}),
+      );
+
+      mockActiveProtocolVersion.set('v1.0');
+      fixture.detectChanges();
+      expect(sendRenderA2UIMock).toHaveBeenCalledWith(validV10);
+    });
   });
 });

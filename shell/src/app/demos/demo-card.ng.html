@@ -48,6 +48,7 @@
           class="demo-card-frame"
           [payload]="demo().a2ui"
           [defaultTarget]="frameDefaultTarget"
+          [autoRejectAgentFunctions]="true"
           [frameTitle]="demo().name + ' live demo'"
           (rendererReady)="onRendererReady()"
           (surfaceResize)="onSurfaceResize($event)"

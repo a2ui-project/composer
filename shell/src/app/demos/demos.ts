@@ -36,6 +36,8 @@ import {DemosCatalog} from './services/demos-catalog';
 import {DemoCard} from './demo-card';
 import {BentoGrid, bentoLayout} from './bento-layout';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
+import {GUEST_FRAME_CATALOG_MANAGEMENT} from '../preview/guest-frame/guest-frame';
+import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {DefaultTarget} from '../shell/host-communication/host-communication';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 
@@ -171,6 +173,12 @@ const DEMO_KEY_ATTRIBUTE = 'data-demo-key';
   selector: 'a2ui-composer-demos',
   standalone: true,
   imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, RenderedFrame, DemoCard],
+  providers: [
+    {
+      provide: GUEST_FRAME_CATALOG_MANAGEMENT,
+      useFactory: () => inject(CatalogManagement, {optional: true}),
+    },
+  ],
   templateUrl: './demos.ng.html',
   styleUrl: './demos.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -233,6 +241,7 @@ export class Demos implements OnInit, OnDestroy {
   );
 
   private readonly coordinatorHost = viewChild.required<ElementRef<HTMLElement>>('coordinatorHost');
+  readonly coordinatorFrame = viewChild(RenderedFrame);
 
   private readonly wallScroller = viewChild<ElementRef<HTMLElement>>('wallScroller');
 
