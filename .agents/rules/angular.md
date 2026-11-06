@@ -1,9 +1,6 @@
 ---
 trigger: glob
-globs:
-  - '**/*.ts'
-  - '**/*.html'
-  - '**/*.scss'
+globs: '**/*.ts,**/*.html,**/*.scss'
 description: Guidelines for Angular development, covering component structure, templates, styles, and reactivity.
 ---
 

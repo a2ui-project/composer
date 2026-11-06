@@ -1,7 +1,6 @@
 ---
 trigger: glob
-globs:
-  - '**/*.ts'
+globs: '**/*.ts'
 description: TypeScript standards, type safety, comments, and clean code guidelines (DRY, file cohesion, no generic utilities).
 ---
 
