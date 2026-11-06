@@ -29,6 +29,7 @@ import {
 } from './helpers/gemini-fixture';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
+import {mockLocalRenderersConfig} from './helpers';
 
 const DRAFT_TEXT = 'Ready to use from my selected catalog';
 const MODEL_TEXT = 'Updated by deterministic Gemini fixture';
@@ -36,7 +37,8 @@ const RECOVERY_TEXT = 'Recovered by deterministic Gemini fixture';
 
 const pageErrors = new WeakMap<Page, string[]>();
 
-test.beforeEach(async ({page}) => {
+test.beforeEach(async ({page, context}) => {
+  await mockLocalRenderersConfig(context);
   pageErrors.set(page, []);
   page.on('pageerror', err => {
     pageErrors.get(page)?.push(err.message);
@@ -67,10 +69,12 @@ test.beforeEach(async ({page}) => {
     });
   });
   await page.addInitScript(() => {
-    localStorage.clear();
-    sessionStorage.clear();
-    localStorage.setItem('a2ui_composer_force_3p', 'true');
-    localStorage.removeItem('a2ui_composer_force_1p');
+    if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
+      sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
+      localStorage.clear();
+      localStorage.setItem('a2ui_composer_force_3p', 'true');
+      localStorage.removeItem('a2ui_composer_force_1p');
+    }
   });
 });
 

@@ -15,9 +15,13 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {mockLocalRenderersConfig} from '../../../../e2e/helpers';
 import {connectMockAgent} from '../test/mock-a2a-agent';
 
 test.describe('A2aAgentHeader Visual Regression & Layout', () => {
+  test.beforeEach(async ({context}) => {
+    await mockLocalRenderersConfig(context);
+  });
   test('renders connected agent header with metadata pills and actions', async ({page}) => {
     await connectMockAgent(page);
 

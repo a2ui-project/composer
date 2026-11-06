@@ -26,6 +26,11 @@ import {
   guestContentHeight,
   revealCard,
 } from './demo-wall-helpers';
+import {mockLocalRenderersConfig} from './helpers';
+
+test.beforeEach(async ({context}) => {
+  await mockLocalRenderersConfig(context);
+});
 
 /**
  * User journeys for demo cards that commit their height once and then lock it:

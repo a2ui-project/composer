@@ -18,8 +18,13 @@ import {expect, test, type Page} from '@playwright/test';
 import {connectMockAgent} from '../src/app/agent-chat/test/mock-a2a-agent';
 import {inlineSurfaceFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
+import {mockLocalRenderersConfig} from './helpers';
 
 const AGENT_URL = 'http://mock-agent.local';
+
+test.beforeEach(async ({context}) => {
+  await mockLocalRenderersConfig(context);
+});
 
 /** Budget for a guest frame to finish its handshake and draw a surface. */
 const SURFACE_RENDER_TIMEOUT_MS = 15_000;

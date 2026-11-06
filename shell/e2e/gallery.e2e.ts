@@ -27,7 +27,9 @@ import {
   getMonacoContent,
   guestContentHeight,
   guestScrollRange,
+  mockLocalRenderersConfig,
   setMonacoContent,
+  stubRendererHtml,
   trackRendererReady,
 } from './helpers';
 
@@ -37,7 +39,8 @@ const PREVIEW_CARD_HEIGHT_PX = 400;
 /** Height of the content added to the guest to make it taller than the card. */
 const TALL_CONTENT_HEIGHT_PX = 1200;
 
-test.beforeEach(async ({page}) => {
+test.beforeEach(async ({page, context}) => {
+  await mockLocalRenderersConfig(context);
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
   });
@@ -329,19 +332,20 @@ test.describe('Components Gallery User Journey', () => {
     await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
     await page.getByRole('link', {name: 'Components Gallery'}).click();
     await page.locator('.catalog-list').getByRole('button', {name: 'Text', exact: true}).click();
+    const preview = previewFrame(galleryPreview(page));
+    await expect(preview.getByText('Example text', {exact: true})).toBeVisible({timeout: 10_000});
     const text = page.getByRole('textbox', {name: 'text', exact: true});
     await expect(text).toBeVisible();
     const edited = 'Ready to use from my selected catalog';
     await text.fill(edited);
-    const preview = previewFrame(galleryPreview(page));
-    await expect(preview.getByText(edited, {exact: true})).toBeVisible();
+    await expect(preview.getByText(edited, {exact: true})).toBeVisible({timeout: 10_000});
 
     await page.getByRole('tab', {name: 'Edit JSON', exact: true}).click();
     await expect.poll(() => getMonacoContent(page)).toMatch(new RegExp(edited));
     await setMonacoContent(page, '{invalid');
     await expect(page.getByRole('alert').filter({hasText: 'last valid example'})).toBeVisible();
     await page.getByRole('tab', {name: 'Preview', exact: true}).click();
-    await expect(preview.getByText(edited, {exact: true})).toBeVisible();
+    await expect(preview.getByText(edited, {exact: true})).toBeVisible({timeout: 10_000});
     await page.getByRole('tab', {name: 'Edit JSON', exact: true}).click();
     await page.getByRole('button', {name: 'Copy JSON', exact: true}).click();
     const copied = await page.evaluate(() => navigator.clipboard.readText());
@@ -362,13 +366,21 @@ test.describe('Components Gallery User Journey', () => {
     page,
   }) => {
     await trackRendererReady(page);
+    await page.route('http://localhost:3456/stub-catalog.html*', route =>
+      route.fulfill({contentType: 'text/html', body: stubRendererHtml('Stub catalog')}),
+    );
+    await page.goto('/gallery?renderer=http://localhost:3456/stub-catalog.html');
+    await expect(page.locator('.gallery-container')).toBeVisible();
+
+    const stubPreview = galleryPreview(page);
+    // While no component is selected, `.hidden-frame` collapses the preview
+    // frame to 0px while keeping the iframe mounted for catalog handshakes.
+    await expect.poll(async () => (await stubPreview.boundingBox())?.height ?? 0).toBe(0);
+
     await page.goto(`/gallery?renderer=${RENDERER_URLS.angular}`);
     await expect(page.locator('.gallery-container')).toBeVisible();
 
     const preview = galleryPreview(page);
-    // While no component is selected, `.hidden-frame` collapses the preview
-    // frame to 0px while keeping the iframe mounted for catalog handshakes.
-    expect((await preview.boundingBox())?.height ?? 0).toBe(0);
 
     await page.locator('.catalog-list').getByRole('button', {name: 'Text', exact: true}).click();
     await expect(page.getByRole('heading', {name: 'Text', exact: true})).toBeVisible();

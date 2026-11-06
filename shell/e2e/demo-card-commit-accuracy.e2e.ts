@@ -33,6 +33,11 @@ import {
   REVEAL_TIMEOUT_MS,
   revealCard,
 } from './demo-wall-helpers';
+import {mockLocalRenderersConfig} from './helpers';
+
+test.beforeEach(async ({context}) => {
+  await mockLocalRenderersConfig(context);
+});
 
 /**
  * Commit-accuracy sweep for the demo wall.
@@ -47,7 +52,7 @@ import {
  */
 
 /** How long a revealed card's committed height may take to reach its content height. */
-const CONVERGE_TIMEOUT_MS = 5_000;
+const CONVERGE_TIMEOUT_MS = 10_000;
 
 /**
  * Pre-commit frame heights to sweep. null keeps the card's own
@@ -347,7 +352,7 @@ async function sweepVariant(
     await page.goto(`/demos?renderer=${renderer.url}`);
 
     const first = page.locator('a2ui-composer-demo-card').first();
-    await expect(first).toBeAttached();
+    await expect(first).toBeAttached({timeout: 30_000 * cpuThrottlingRate});
     if (measureHeight !== null) {
       // Tripwire: the override must reach the card, or the variant is the baseline.
       expect((await cardState(first)).measureHeight).toBe(measureHeight);

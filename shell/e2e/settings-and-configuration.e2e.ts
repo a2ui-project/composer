@@ -16,8 +16,10 @@
 
 import {test, expect} from '@playwright/test';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
+import {mockLocalRenderersConfig} from './helpers';
 
-test.beforeEach(async ({page}) => {
+test.beforeEach(async ({page, context}) => {
+  await mockLocalRenderersConfig(context);
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
   });
@@ -284,7 +286,8 @@ test.describe('Settings and Client Configuration', () => {
       page,
     }) => {
       await page.addInitScript(() => {
-        if (window === window.top) {
+        if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
+          sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
           localStorage.clear();
         }
       });
