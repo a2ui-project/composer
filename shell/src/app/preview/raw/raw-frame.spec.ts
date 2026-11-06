@@ -1166,7 +1166,7 @@ describe('RawFrame JSON Source Editor View', () => {
 
     expect(snackBarMock.open).toHaveBeenCalledWith(
       'Invalid JSON syntax detected.',
-      'Go to line 2',
+      'Go to line 2, col 18',
       expect.any(Object),
     );
     expect(dispatchSpy).toHaveBeenCalledWith(
@@ -1175,7 +1175,7 @@ describe('RawFrame JSON Source Editor View', () => {
         detail: {panelId: ComposerPanelId.Raw},
       }),
     );
-    expect(navigateSpy).toHaveBeenCalledWith(2, 1);
+    expect(navigateSpy).toHaveBeenCalledWith(2, 18);
     dispatchSpy.mockRestore();
   });
 
@@ -1205,6 +1205,178 @@ describe('RawFrame JSON Source Editor View', () => {
     );
     expect(navigateSpy).toHaveBeenCalledWith(5, 12);
     dispatchSpy.mockRestore();
+  });
+
+  it('suppresses schema error notifications and keeps hasActiveSchemaErrors false when layoutJson has invalid syntax', async () => {
+    const {fixture, harness, component} = await setup(false);
+    vi.useFakeTimers();
+
+    await harness.setJsonText('{\n  "version": "v0.9",\n  "invalid": \n}');
+    fixture.detectChanges();
+
+    const schemaMarker = {
+      severity: 8,
+      message: 'Incorrect type. Expected array',
+      startLineNumber: 1,
+      startColumn: 1,
+    };
+
+    component['onMarkersChange']([schemaMarker as monaco.editor.IMarker]);
+    vi.advanceTimersByTime(3100);
+    fixture.detectChanges();
+
+    expect(component['hasActiveSchemaErrors']).toBe(false);
+    expect(snackBarMock.open).not.toHaveBeenCalledWith(
+      expect.stringContaining('Schema error'),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('backfills coordinates from getFirstErrorMarker(true) and refreshes syntax snackbar when onMarkersChange arrives with invalid JSON', async () => {
+    const {fixture, harness, component} = await setup(false);
+    vi.useFakeTimers();
+
+    const editor = component.monacoEditor();
+    expect(editor).toBeTruthy();
+    const getFirstErrorMarkerSpy = vi.spyOn(editor!, 'getFirstErrorMarker').mockReturnValue(null);
+
+    // Incomplete JSON with no resolvable coordinates from V8
+    await harness.setJsonText('{"a": ');
+    fixture.detectChanges();
+
+    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(3000);
+    fixture.detectChanges();
+
+    // Initial syntax error without line coordinates
+    expect(component['isJsonInvalid']()).toBe(true);
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Invalid JSON syntax detected.',
+      undefined,
+      expect.any(Object),
+    );
+
+    snackBarMock.open.mockClear();
+    getFirstErrorMarkerSpy.mockReturnValue({line: 3, column: 7});
+
+    // Monaco syntax markers now arrive
+    const syntaxMarker = {
+      severity: 8,
+      message: 'Value expected',
+      startLineNumber: 3,
+      startColumn: 7,
+      source: 'json',
+    };
+    component['onMarkersChange']([syntaxMarker as monaco.editor.IMarker]);
+    fixture.detectChanges();
+
+    expect(component['lastSyntaxError']).toEqual({line: 3, column: 7});
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Invalid JSON syntax detected.',
+      'Go to line 3, col 7',
+      expect.any(Object),
+    );
+  });
+
+  it('re-surfaces active schema error snackbar after a valid -> syntax-invalid -> valid cycle', async () => {
+    const {fixture, harness, component} = await setup(false);
+    vi.useFakeTimers();
+
+    const schemaMarker = {
+      severity: 8,
+      message: 'Property unknownProp is not allowed',
+      startLineNumber: 1,
+      startColumn: 15,
+    } as monaco.editor.IMarker;
+
+    // 1. Initial syntactically valid payload with schema error
+    await harness.setJsonText('[{"version": "v0.9", "unknownProp": 1}]');
+    fixture.detectChanges();
+    vi.advanceTimersByTime(300);
+
+    component['onMarkersChange']([schemaMarker]);
+    vi.advanceTimersByTime(100);
+    fixture.detectChanges();
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Schema error: Property unknownProp is not allowed',
+      'Go to line 1, col 15',
+      expect.any(Object),
+    );
+    expect(snackBarMock.open).toHaveBeenCalledTimes(1);
+
+    // 2. User introduces syntax error (trailing comma)
+    await harness.setJsonText('[{"version": "v0.9", "unknownProp": 1},]');
+    fixture.detectChanges();
+    vi.advanceTimersByTime(300);
+
+    // onMarkersChange during syntax invalid state clears lastErrorSignature
+    component['onMarkersChange']([schemaMarker]);
+    vi.advanceTimersByTime(3000);
+    fixture.detectChanges();
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Invalid JSON syntax detected.',
+      expect.anything(),
+      expect.any(Object),
+    );
+
+    // 3. User fixes syntax error (restores valid JSON with same schema error)
+    await harness.setJsonText('[{"version": "v0.9", "unknownProp": 1}]');
+    fixture.detectChanges();
+    vi.advanceTimersByTime(300);
+
+    // Monaco emits same schema error marker again
+    component['onMarkersChange']([schemaMarker]);
+    vi.advanceTimersByTime(100);
+    fixture.detectChanges();
+
+    expect(snackBarMock.open).toHaveBeenLastCalledWith(
+      'Schema error: Property unknownProp is not allowed',
+      'Go to line 1, col 15',
+      expect.any(Object),
+    );
+  });
+
+  it('does not re-open syntax snackbar when onMarkersChange arrives with identical coordinates already resolved by showJsonSyntaxError', async () => {
+    const {fixture, harness, component} = await setup(false);
+    vi.useFakeTimers();
+
+    const editor = component.monacoEditor();
+    expect(editor).toBeTruthy();
+    vi.spyOn(editor!, 'getFirstErrorMarker').mockReturnValue({line: 3, column: 7});
+
+    // Incomplete JSON with no coordinates from V8
+    await harness.setJsonText('{"a": ');
+    fixture.detectChanges();
+
+    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(3000);
+    fixture.detectChanges();
+
+    // showJsonSyntaxError fetched coordinates from getFirstErrorMarker and persisted lastSyntaxError
+    expect(component['lastSyntaxError']).toEqual({line: 3, column: 7});
+    expect(snackBarMock.open).toHaveBeenCalledTimes(1);
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Invalid JSON syntax detected.',
+      'Go to line 3, col 7',
+      expect.any(Object),
+    );
+
+    // Later onMarkersChange arrives with same coordinates
+    const syntaxMarker = {
+      severity: 8,
+      message: 'Value expected',
+      startLineNumber: 3,
+      startColumn: 7,
+      source: 'json',
+    } as monaco.editor.IMarker;
+    component['onMarkersChange']([syntaxMarker]);
+    fixture.detectChanges();
+
+    // snackBar.open was not called a second time
+    expect(snackBarMock.open).toHaveBeenCalledTimes(1);
   });
 
   describe('sessionResetNonce handling', () => {
