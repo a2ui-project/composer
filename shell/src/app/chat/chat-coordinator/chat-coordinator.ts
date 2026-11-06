@@ -40,7 +40,7 @@ import {
   getPayloadStrategy,
   parseAndHealJsonLines,
 } from '../a2ui-payload-parser/a2ui-payload-parser';
-import {ChatPromptFactoryService} from '../chat-prompt-factory/v0-9-prompt-strategy';
+import {ChatPromptFactory} from '../chat-prompt-factory/chat-prompt-factory';
 import {ChatErrorFormatterService} from '../chat-error-formatter/chat-error-formatter.service';
 import {cleanErrorMessage, redactApiKey} from '../chat-service/error-utils';
 import {RendererSelection} from '../renderer-selection/renderer-selection';
@@ -126,7 +126,7 @@ export class ChatCoordinator {
   private readonly logger = inject(ErrorLogger).withTag('[ChatCoordinator]');
   private readonly chatCleaner = inject(ChatCleaner);
   private readonly usageTrackingService = inject(UsageTrackingService);
-  private readonly promptFactory = inject(ChatPromptFactoryService);
+  private readonly promptFactory = inject(ChatPromptFactory);
   private readonly errorPresenter = inject(ChatErrorFormatterService);
 
   /** Reactively mapped rendering pipeline execution milestones. */
@@ -767,7 +767,7 @@ export class ChatCoordinator {
    */
   private async processRawLlmPayload(rawText: string, promptId?: string): Promise<void> {
     if (promptId && this.activePromptId !== promptId) return;
-    const protocolVersion = this.catalogManagement.activeProtocolVersion?.() ?? 'v0.9';
+    const protocolVersion = this.catalogManagement.activeProtocolVersion();
     const strategy = getPayloadStrategy(protocolVersion);
 
     // Stage 1: Parse and Syntax Healing

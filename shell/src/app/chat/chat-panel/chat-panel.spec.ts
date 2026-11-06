@@ -29,17 +29,17 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {MatDialogHarness} from '@angular/material/dialog/testing';
 import {AppConfigProvider, AuthType} from '../../settings/app-config-provider/app-config-provider';
 import {MatInputHarness} from '@angular/material/input/testing';
-import {Catalog} from '../../storage/models/catalog-storage.model';
+import {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
 import {FailureParseResult} from '../a2ui-payload-parser/a2ui-payload-parser';
 import {ComposerPanelId} from '../../shell/composer-workspace/composer-panel-id';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {
-  ChatPromptFactoryService,
+  ChatPromptFactory,
   CustomInstructionPreset,
   CustomInstructionsState,
-} from '../chat-prompt-factory/v0-9-prompt-strategy';
+} from '../chat-prompt-factory/chat-prompt-factory';
 import {CustomInstructionsDialogHarness} from '../custom-instructions-dialog/test/custom-instructions-dialog.harness';
 import {StateSync} from '../state-sync/state-sync';
 import {FileIngestionService} from '../file-ingestion/file-ingestion.service';
@@ -128,6 +128,7 @@ class MockChatPromptFactoryService {
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>({}); // non-null by default
+  readonly activeCatalogs = signal<CatalogJson[]>([]);
 }
 
 class MockAppConfigProvider {
@@ -163,7 +164,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
         },
         provideRouter([]),
         {provide: ChatCoordinator, useClass: MockChatCoordinator},
-        {provide: ChatPromptFactoryService, useClass: MockChatPromptFactoryService},
+        {provide: ChatPromptFactory, useClass: MockChatPromptFactoryService},
         {provide: ChatState, useClass: MockChatState},
         {provide: CatalogManagement, useClass: MockCatalogManagement},
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
@@ -174,7 +175,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     chatServiceMock = TestBed.inject(ChatCoordinator) as unknown as MockChatCoordinator;
     promptFactoryMock = TestBed.inject(
-      ChatPromptFactoryService,
+      ChatPromptFactory,
     ) as unknown as MockChatPromptFactoryService;
     chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
     catalogManagementServiceMock = TestBed.inject(
@@ -1287,6 +1288,28 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
       expect(await harness.getSystemInstructionsLinkText()).toBe(
         'Instructions (includes 2 MCP Servers)',
+      );
+    });
+
+    it('shows "Instructions (includes X MCP Servers)" when callMcpTool is provided via multi-catalog activeCatalogs', async () => {
+      catalogManagementServiceMock.activeCatalog.set({
+        title: 'Basic Catalog',
+        components: {},
+      });
+      catalogManagementServiceMock.activeCatalogs.set([
+        {
+          ['$id']: 'https://a2ui.org/catalogs/basic.json',
+          components: {},
+        },
+        {
+          ['$id']: 'https://a2ui.org/catalogs/mcp.json',
+          functions: {callMcpTool: {type: 'object'}},
+        },
+      ]);
+      fixture.detectChanges();
+
+      expect(await harness.getSystemInstructionsLinkText()).toBe(
+        'Instructions (includes 0 MCP Servers)',
       );
     });
   });
