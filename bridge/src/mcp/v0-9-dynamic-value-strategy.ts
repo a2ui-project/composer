@@ -25,119 +25,143 @@
  */
 
 import type {DataBinding, DataContext, FunctionCall} from '@a2ui/web_core/v0_9';
+import {
+  type DynamicValueContext,
+  type DynamicValueStrategy,
+  isPrototypePollutionKey,
+  resolveDynamicTree,
+} from './dynamic-value-strategy.js';
+
+/** Representation of an A2UI v0.9 data binding. */
+export type V09DataBinding = DataBinding;
+
+/** Representation of an A2UI v0.9 function call. */
+export type V09FunctionCall = FunctionCall;
 
 /** Union of dynamic expression types (`DataBinding` or `FunctionCall`) that require runtime evaluation. */
 export type DynamicExpression = DataBinding | FunctionCall;
-
-/** Maximum recursion depth when resolving nested dynamic values to prevent infinite loops. */
-const MAX_RESOLUTION_DEPTH = 100;
+export type V09DynamicExpression = DynamicExpression;
 
 /** Checks whether a value is a non-null, non-array object. */
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
- * Checks whether `value` is a `DataBinding` (`{path: string}`).
- *
- * Objects with additional properties alongside `path` are treated as literal objects.
+ * Checks whether `value` is an A2UI `DataBinding` (an object with a string `path` property).
  */
 export function isDataBinding(value: unknown): value is DataBinding {
-  return isRecord(value) && typeof value['path'] === 'string' && Object.keys(value).length === 1;
+  return isRecord(value) && typeof value['path'] === 'string';
 }
 
 /**
- * Checks whether `value` is a `FunctionCall` (`{call: string, args?, returnType?}`).
+ * Checks whether `value` is an A2UI `FunctionCall` (an object with a string `call` property).
  */
 export function isFunctionCall(value: unknown): value is FunctionCall {
-  if (!isRecord(value) || typeof value['call'] !== 'string') {
-    return false;
-  }
-  const args = value['args'];
-  const returnType = value['returnType'];
-  return (
-    (args === undefined || isRecord(args)) &&
-    (returnType === undefined || typeof returnType === 'string')
-  );
-}
-
-/** Checks whether `value` is a `DataBinding` or a `FunctionCall`. */
-export function isDynamicExpression(value: unknown): value is DynamicExpression {
-  return isDataBinding(value) || isFunctionCall(value);
+  return isRecord(value) && typeof value['call'] === 'string';
 }
 
 /**
- * Recursively resolves all dynamic expressions (`DataBinding` and `FunctionCall`)
- * nested within `value`.
- *
- * Traverses arrays and plain objects while preserving their structure, and
- * repeatedly resolves chained expressions until a concrete value is reached or
- * `MAX_RESOLUTION_DEPTH` is hit. Pending Promises from async functions are
- * passed through as-is.
- *
- * @param value The value or container to resolve.
- * @param context The data context used for evaluation.
- * @param depth Internal recursion depth counter.
+ * Recursively resolves dynamic values within arrays, objects, or primitive nodes.
  */
 export function resolveDynamicValueDeep<T = unknown>(
   value: unknown,
-  context: DataContext,
+  context: DataContext | DynamicValueContext,
   depth = 0,
 ): T {
-  if (depth >= MAX_RESOLUTION_DEPTH) {
-    return value as T;
-  }
-  if (!isRecord(value) && !Array.isArray(value)) {
-    return value as T;
-  }
-  if (typeof (value as {then?: unknown}).then === 'function') {
-    return value as T;
-  }
-  if (Array.isArray(value)) {
-    return value.map(item => resolveDynamicValueDeep(item, context, depth + 1)) as unknown as T;
-  }
-  if (isDataBinding(value)) {
-    const resolved = context.resolveDynamicValue(value);
-    // Stop if the binding could not be resolved to avoid an infinite loop.
-    if (resolved === value) {
-      return resolved as unknown as T;
-    }
-    return resolveDynamicValueDeep(resolved, context, depth + 1);
-  }
-  if (isFunctionCall(value)) {
-    // Supply default values for optional `args` and `returnType` fields before resolving.
-    const dynamicCall =
-      value.args !== undefined && value.returnType !== undefined
-        ? value
-        : {
-            call: value.call,
-            args: value.args ?? {},
-            returnType: value.returnType ?? 'any',
-          };
-    const resolved = context.resolveDynamicValue(dynamicCall);
-    if (resolved === value || resolved === dynamicCall) {
-      return resolved as unknown as T;
-    }
-    return resolveDynamicValueDeep(resolved, context, depth + 1);
-  }
-  return resolveDynamicRecord(value, context, depth) as T;
+  return resolveDynamicTree<T>(
+    value,
+    node => {
+      if (isDataBinding(node)) {
+        const resolved = (context as DataContext).resolveDynamicValue(node);
+        return {resolved: true, value: resolved};
+      }
+      if (isFunctionCall(node)) {
+        const dynamicCall: FunctionCall =
+          node.args !== undefined && node.returnType !== undefined
+            ? node
+            : {
+                call: node.call,
+                args: node.args ?? {},
+                returnType: node.returnType ?? 'any',
+              };
+        const resolved = (context as DataContext).resolveDynamicValue(dynamicCall);
+        return {resolved: true, value: resolved};
+      }
+      return {resolved: false};
+    },
+    depth,
+  );
 }
 
 /**
  * Resolves each property value in a key-value record (such as function arguments).
- *
- * Resolves entries individually rather than evaluating the record itself as a
- * dynamic expression, so records containing `path` or `call` keys are preserved
- * as plain objects.
  */
 export function resolveDynamicRecord(
   record: Record<string, unknown>,
-  context: DataContext,
+  context: DataContext | DynamicValueContext,
   depth = 0,
 ): Record<string, unknown> {
   const resolved: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(record)) {
+    if (isPrototypePollutionKey(key)) {
+      continue;
+    }
     resolved[key] = resolveDynamicValueDeep(value, context, depth + 1);
   }
   return resolved;
 }
+
+/**
+ * Strategy implementing A2UI v0.9 dynamic value evaluation and normalization.
+ */
+export class V09DynamicValueStrategy implements DynamicValueStrategy<
+  DataBinding,
+  FunctionCall,
+  DynamicExpression
+> {
+  readonly version = 'v0.9' as const;
+
+  isDataBinding(value: unknown): value is DataBinding {
+    return isDataBinding(value) && Object.keys(value).length === 1;
+  }
+
+  isFunctionCall(value: unknown): value is FunctionCall {
+    if (!isFunctionCall(value)) {
+      return false;
+    }
+    const args = value['args'];
+    const returnType = value['returnType'];
+    return (
+      (args === undefined || isRecord(args)) &&
+      (returnType === undefined || typeof returnType === 'string')
+    );
+  }
+
+  normalizeFunctionCall(call: FunctionCall): FunctionCall {
+    if (call.args !== undefined && call.returnType !== undefined) {
+      return call;
+    }
+    return {
+      call: call.call,
+      args: call.args ?? {},
+      returnType: call.returnType ?? 'any',
+    };
+  }
+
+  resolveDynamicValueDeep<T = unknown>(value: unknown, context: DynamicValueContext, depth = 0): T {
+    return resolveDynamicValueDeep<T>(value, context, depth);
+  }
+
+  resolveDynamicRecord(
+    record: Record<string, unknown>,
+    context: DynamicValueContext,
+    depth = 0,
+  ): Record<string, unknown> {
+    return resolveDynamicRecord(record, context, depth);
+  }
+}
+
+/** Singleton instance of V09DynamicValueStrategy. */
+export const v09DynamicValueStrategy = new V09DynamicValueStrategy();
