@@ -19,10 +19,9 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {AppComponent} from './app.component';
 import {A2uiSandboxConnection, provideA2uiSandbox} from 'a2ui-bridge/angular';
 import {A2uiRendererService, A2UI_RENDERER_CONFIG, BasicCatalog} from '@a2ui/angular';
-import {CreateSurfaceMessageSchema} from '@a2ui/web_core/v1_0';
-import {BASIC_COMPONENTS} from '@a2ui/web_core/catalogs/basic/v1';
 import {createMcpFunctionsCatalog, MCP_FUNCTIONS_CATALOG_ID} from 'a2ui-bridge';
 import {COMPONENT_USAGES} from '../../../shared/usages.js';
+import {assertValidV10ComponentUsages} from '../../../shared/usages-test-helper.js';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ANIMATION_MODULE_TYPE, provideZonelessChangeDetection, WritableSignal} from '@angular/core';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
@@ -182,43 +181,7 @@ describe('AppComponent', () => {
 
   describe('A2UI v1.0 COMPONENT_USAGES validation', () => {
     it('validates every usage entry in usages.ts against v1.0 CreateSurfaceMessageSchema and BASIC_COMPONENTS', () => {
-      const basicComponentsMap = new Map(BASIC_COMPONENTS.map(c => [c.name, c]));
-      expect(Object.keys(COMPONENT_USAGES).length).toBeGreaterThan(0);
-
-      for (const [componentName, usageEntry] of Object.entries(COMPONENT_USAGES)) {
-        const message = {
-          version: '1.0',
-          createSurface: {
-            surfaceId: `test-${componentName}`,
-            catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
-            components: usageEntry.usage,
-            ...(usageEntry.data ? {dataModel: usageEntry.data} : {}),
-          },
-        };
-
-        const messageResult = CreateSurfaceMessageSchema.safeParse(message);
-        expect(
-          messageResult.success,
-          `Usage envelope failed CreateSurfaceMessageSchema for ${componentName}: ${messageResult.error?.message}`,
-        ).toBe(true);
-
-        for (const compDef of usageEntry.usage) {
-          const compName = (compDef as Record<string, unknown>)['component'] as string;
-          const compId = (compDef as Record<string, unknown>)['id'] as string;
-          const compApi = basicComponentsMap.get(compName);
-          expect(
-            compApi,
-            `Component "${compName}" in ${componentName} is not a valid v1.0 Basic component`,
-          ).toBeDefined();
-
-          const {id: _id, component: _component, ...props} = compDef as Record<string, unknown>;
-          const compResult = compApi!.schema.safeParse(props);
-          expect(
-            compResult.success,
-            `Component "${compName}" (id: "${compId}") in ${componentName} failed schema validation: ${compResult.error?.message}`,
-          ).toBe(true);
-        }
-      }
+      assertValidV10ComponentUsages(COMPONENT_USAGES);
     });
   });
 });

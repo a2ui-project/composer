@@ -17,7 +17,9 @@
 // @vitest-environment jsdom
 import {describe, it, expect, beforeEach, afterEach, vi, onTestFinished} from 'vitest';
 import {AppRoot} from './main';
-import {a2uiBridge, PreviewBridgeMessageType} from 'a2ui-bridge';
+import {a2uiBridge, PreviewBridgeMessageType, MCP_FUNCTIONS_CATALOG_ID} from 'a2ui-bridge';
+import {COMPONENT_USAGES} from '../../shared/usages.js';
+import {assertValidV10ComponentUsages} from '../../shared/usages-test-helper.js';
 
 describe('AppRoot Lit Element', () => {
   let element: AppRoot;
@@ -37,23 +39,27 @@ describe('AppRoot Lit Element', () => {
     expect(element).toBeTruthy();
   });
 
-  it('processes RENDER_A2UI array payloads correctly', async () => {
+  it('registers multi-catalog handshake with v1.0 basicCatalog and McpFunctionsCatalog', () => {
+    expect(AppRoot.catalogs).toHaveLength(2);
+    const [basic, mcp] = AppRoot.catalogs as Array<{id?: string; protocolVersion?: string}>;
+    expect(basic?.id).toBe('https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json');
+    expect(basic?.protocolVersion).toBe('1.0');
+    expect(mcp?.id).toBe(MCP_FUNCTIONS_CATALOG_ID);
+    expect(mcp?.protocolVersion).toBe('1.0');
+  });
+
+  it('processes RENDER_A2UI v1.0 createSurface payload correctly', async () => {
     const mockPayload = [
       {
-        version: 'v0.9',
+        version: '1.0',
         createSurface: {
           surfaceId: 'dynamic-surface-123',
-          catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-        },
-      },
-      {
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId: 'dynamic-surface-123',
+          catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
           components: [
             {
-              component: 'BasicColumn',
-              id: 'col-1',
+              id: 'root',
+              component: 'Column',
+              children: [],
             },
           ],
         },
@@ -102,20 +108,14 @@ describe('AppRoot Lit Element', () => {
     const warnSpy = vi.spyOn(console, 'warn');
     const mockPayload = [
       {
-        version: 'v0.9',
+        version: '1.0',
         createSurface: {
           surfaceId: 'markdown-surface-123',
-          catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-        },
-      },
-      {
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId: 'markdown-surface-123',
+          catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
           components: [
             {
-              component: 'Text',
               id: 'root',
+              component: 'Text',
               text: '**bold text**',
             },
           ],
@@ -150,10 +150,17 @@ describe('AppRoot Lit Element', () => {
   it('slots an empty loading element when surface has no root component', async () => {
     const mockPayload = [
       {
-        version: 'v0.9',
+        version: '1.0',
         createSurface: {
           surfaceId: 'blank-surface-123',
-          catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+          catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+          components: [
+            {
+              id: 'sidebar',
+              component: 'Text',
+              text: 'Not the root',
+            },
+          ],
         },
       },
     ];
@@ -185,18 +192,13 @@ describe('AppRoot Lit Element', () => {
       expect(demo.description).toBeTruthy();
       expect(Array.isArray(demo.a2ui)).toBe(true);
       expect(demo.a2ui.length).toBeGreaterThan(0);
-      expect(demo.a2ui[0].version).toBe('v0.9');
+      expect(demo.a2ui[0].version).toBe('1.0');
     }
     expect(new Set(DEMOS.map(d => d.id)).size).toBe(DEMOS.length);
   });
 
   it('wires getDemos from the bootstrap options through to the bridge', async () => {
     const {DEMOS} = await import('../../shared/demos');
-    // Capture the sandbox options the element actually hands the bridge on
-    // connect: `bootstrapLitSandbox` in main.ts copies `getDemos` onto the
-    // element class, and `connectedCallback` forwards it here. Reading the
-    // callback off this call (rather than off a locally built options object)
-    // is what makes deleting `getDemos` from main.ts fail this test.
     const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
     const bootstrapped = new AppRoot();
     onTestFinished(() => {
@@ -214,5 +216,11 @@ describe('AppRoot Lit Element', () => {
     const served = await rendererConfig.getDemos!();
     expect(served).toHaveLength(46);
     expect(served).toBe(DEMOS);
+  });
+
+  describe('A2UI v1.0 COMPONENT_USAGES validation', () => {
+    it('validates every usage entry in usages.ts against v1.0 CreateSurfaceMessageSchema and BASIC_COMPONENTS', () => {
+      assertValidV10ComponentUsages(COMPONENT_USAGES);
+    });
   });
 });
