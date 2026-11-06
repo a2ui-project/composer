@@ -37,6 +37,161 @@ export type JsonParseResult<T> =
   | {readonly success: false; readonly data: null; readonly error: JsonParseError};
 
 /**
+ * V8's JsonParser::ReportUnexpectedCharacter centers error snippets with up to
+ * 10 UTF-16 code units of context before and after the offending token.
+ */
+const V8_SNIPPET_CONTEXT_RADIUS = 10;
+
+function offsetToLineColumn(text: string, offset: number): {line: number; column: number} {
+  const clamped = Math.max(0, Math.min(offset, text.length));
+  const lines = text.slice(0, clamped).split('\n');
+  return {line: lines.length, column: lines[lines.length - 1].length + 1};
+}
+
+/**
+ * Finds the offset of the first syntactically invalid token matching `rawToken`
+ * by scanning tokens from index 0 with minimal structural state expectations.
+ */
+function findFirstInvalidTokenOffset(jsonText: string, rawToken: string): number {
+  let i = 0;
+  const len = jsonText.length;
+  const stack: Array<'{' | '['> = [];
+  let state: 'value' | 'after_value' | 'prop_or_end' | 'colon' | 'prop' = 'value';
+
+  function skipWhitespace(): void {
+    while (
+      i < len &&
+      (jsonText[i] === ' ' || jsonText[i] === '\t' || jsonText[i] === '\n' || jsonText[i] === '\r')
+    ) {
+      i++;
+    }
+  }
+
+  function readString(): boolean {
+    if (jsonText[i] !== '"') return false;
+    i++;
+    while (i < len) {
+      if (jsonText[i] === '\\') {
+        i += 2;
+      } else if (jsonText[i] === '"') {
+        i++;
+        return true;
+      } else {
+        i++;
+      }
+    }
+    return true;
+  }
+
+  function readNumber(): boolean {
+    const start = i;
+    if (jsonText[i] === '-') i++;
+    if (i < len && jsonText[i] >= '0' && jsonText[i] <= '9') {
+      while (i < len && jsonText[i] >= '0' && jsonText[i] <= '9') i++;
+      if (i < len && jsonText[i] === '.') {
+        i++;
+        while (i < len && jsonText[i] >= '0' && jsonText[i] <= '9') i++;
+      }
+      if (i < len && (jsonText[i] === 'e' || jsonText[i] === 'E')) {
+        i++;
+        if (i < len && (jsonText[i] === '+' || jsonText[i] === '-')) i++;
+        while (i < len && jsonText[i] >= '0' && jsonText[i] <= '9') i++;
+      }
+      return true;
+    }
+    i = start;
+    return false;
+  }
+
+  while (i < len) {
+    skipWhitespace();
+    if (i >= len) break;
+    const tokenStart = i;
+    const ch = jsonText[i];
+
+    if (state === 'value') {
+      if (ch === '{') {
+        i++;
+        stack.push('{');
+        state = 'prop_or_end';
+      } else if (ch === '[') {
+        i++;
+        stack.push('[');
+        state = 'value';
+      } else if (ch === ']' && stack[stack.length - 1] === '[') {
+        i++;
+        stack.pop();
+        state = 'after_value';
+      } else if (
+        readString() ||
+        readNumber() ||
+        jsonText.startsWith('true', i) ||
+        jsonText.startsWith('false', i) ||
+        jsonText.startsWith('null', i)
+      ) {
+        if (jsonText.startsWith('true', tokenStart)) i += 4;
+        else if (jsonText.startsWith('false', tokenStart)) i += 5;
+        else if (jsonText.startsWith('null', tokenStart)) i += 4;
+        state = 'after_value';
+      } else {
+        return jsonText.startsWith(rawToken, tokenStart) ? tokenStart : -1;
+      }
+    } else if (state === 'prop_or_end') {
+      if (ch === '}') {
+        i++;
+        stack.pop();
+        state = 'after_value';
+      } else if (readString()) {
+        state = 'colon';
+      } else {
+        return jsonText.startsWith(rawToken, tokenStart) ? tokenStart : -1;
+      }
+    } else if (state === 'colon') {
+      if (ch === ':') {
+        i++;
+        state = 'value';
+      } else {
+        return jsonText.startsWith(rawToken, tokenStart) ? tokenStart : -1;
+      }
+    } else if (state === 'prop') {
+      if (readString()) {
+        state = 'colon';
+      } else {
+        return jsonText.startsWith(rawToken, tokenStart) ? tokenStart : -1;
+      }
+    } else if (state === 'after_value') {
+      const top = stack[stack.length - 1];
+      if (top === '{') {
+        if (ch === ',') {
+          i++;
+          state = 'prop';
+        } else if (ch === '}') {
+          i++;
+          stack.pop();
+          state = 'after_value';
+        } else {
+          return jsonText.startsWith(rawToken, tokenStart) ? tokenStart : -1;
+        }
+      } else if (top === '[') {
+        if (ch === ',') {
+          i++;
+          state = 'value';
+        } else if (ch === ']') {
+          i++;
+          stack.pop();
+          state = 'after_value';
+        } else {
+          return jsonText.startsWith(rawToken, tokenStart) ? tokenStart : -1;
+        }
+      } else {
+        return jsonText.startsWith(rawToken, tokenStart) ? tokenStart : -1;
+      }
+    }
+  }
+  return -1;
+}
+
+/**
  * Extracts line and column coordinates from heterogeneous JS engine SyntaxError messages.
  *
  * @param error - The trapped JSON syntax error.
@@ -60,14 +215,44 @@ export function extractErrorDetails(
   const positionMatch = message.match(/at position (\d+)/i);
   if (positionMatch) {
     const rawPos = parseInt(positionMatch[1], 10);
-    const text = rawText ?? '';
-    const pos = Math.max(0, Math.min(rawPos, text.length));
-    const textBefore = text.slice(0, pos);
-    const lines = textBefore.split('\n');
-    return {
-      line: lines.length,
-      column: lines[lines.length - 1].length + 1,
-    };
+    return offsetToLineColumn(rawText, rawPos);
+  }
+
+  // Handle modern V8 error format:
+  // Unexpected token <token>, [...]"<snippet>"[...] is not valid JSON
+  const tokenSnippetMatch = message.match(
+    /^Unexpected token (.+?), (\.\.\.)?"([\s\S]+)"(\.\.\.)? is not valid JSON$/,
+  );
+  if (tokenSnippetMatch) {
+    const rawToken = tokenSnippetMatch[1].replace(/^'|'$/g, '');
+    const hasLeadingDots = Boolean(tokenSnippetMatch[2]);
+    const snippet = tokenSnippetMatch[3];
+    const hasTrailingDots = Boolean(tokenSnippetMatch[4]);
+    const text = rawText;
+
+    if (hasLeadingDots) {
+      if (snippet.startsWith(rawToken, V8_SNIPPET_CONTEXT_RADIUS)) {
+        const snippetIdx = hasTrailingDots ? text.indexOf(snippet) : text.lastIndexOf(snippet);
+        if (snippetIdx !== -1) {
+          return offsetToLineColumn(text, snippetIdx + V8_SNIPPET_CONTEXT_RADIUS);
+        }
+      }
+      return {};
+    } else if (
+      hasTrailingDots &&
+      snippet.length >= V8_SNIPPET_CONTEXT_RADIUS &&
+      snippet.startsWith(rawToken, snippet.length - V8_SNIPPET_CONTEXT_RADIUS)
+    ) {
+      const snippetIdx = text.indexOf(snippet);
+      if (snippetIdx !== -1) {
+        return offsetToLineColumn(text, snippetIdx + snippet.length - V8_SNIPPET_CONTEXT_RADIUS);
+      }
+    } else {
+      const offset = findFirstInvalidTokenOffset(text, rawToken);
+      if (offset !== -1) {
+        return offsetToLineColumn(text, offset);
+      }
+    }
   }
 
   return {};

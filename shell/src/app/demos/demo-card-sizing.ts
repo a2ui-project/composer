@@ -111,11 +111,11 @@ export const SIZING_WINDOW_MS = {
   legacySettling: 300,
   /**
    * The frame's width has changed after the commit: how long a visible card waits for
-   * a report laid out at the new width before it keeps its height. A frame that is
-   * visible re-lays out and reports within a few frames; the window only runs while
-   * the card is visible, since a hidden frame doesn't render.
+   * a report laid out at the new width before it keeps its height. In the guest bridge,
+   * CONTENT_SETTLE_MAX_MS is 1000ms; under 4x CPU throttling plus parallel workers, a
+   * visible guest re-layout + settle can take up to 6000ms (4 * 1000ms + postMessage/CD).
    */
-  freshCommit: 1000,
+  freshCommit: 6000,
 } as const;
 
 /**
@@ -516,7 +516,7 @@ function onResizeUncommitted(
       return widening({...next, frame: recordHeight(next.frame, report, height)}, widened);
     }
   }
-  if (next.kind === 'widening' && laidOutElsewhere(next.width, report)) return next;
+  if (laidOutElsewhere(next.width, report)) return next;
   next = {...next, frame: recordHeight(next.frame, report, height)};
   if (next.kind === 'fallbackWindow' && next.reason === 'becameVisible') return next;
   // An older bridge can't say when its content has settled: wait for its reports to stop.
@@ -633,7 +633,15 @@ function onAvailableWidthChanged(state: CardSizing, available: number): CardSizi
     };
   }
   if (state.width.available > 0 && frameWidth(next.width) !== frameWidth(state.width)) {
-    return {...next, width: restartConvergence(next.width)};
+    const clearedFrame = {...next.frame, latest: null, latestReady: null};
+    const restartedWidth = restartConvergence(next.width);
+    if (next.kind === 'awaiting') {
+      return {...next, frame: clearedFrame, width: restartedWidth, pending: false};
+    }
+    if (next.kind === 'fallbackWindow' && next.reason === 'becameVisible') {
+      return awaiting({...next, frame: clearedFrame, width: restartedWidth}, false);
+    }
+    return {...next, frame: clearedFrame, width: restartedWidth};
   }
   return next;
 }
