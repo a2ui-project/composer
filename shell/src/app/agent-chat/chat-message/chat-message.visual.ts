@@ -31,21 +31,15 @@ const SURFACE_RENDER_TIMEOUT_MS = 15_000;
 function inlineSurfacePart(surfaceId: string, title: string, caption: string) {
   const payload = [
     {
-      version: 'v0.9',
+      version: '1.0',
       createSurface: {
         surfaceId,
-        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-      },
-    },
-    {
-      version: 'v0.9',
-      updateComponents: {
-        surfaceId,
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
         components: [
           {id: 'root', component: 'Card', child: 'body'},
           {id: 'body', component: 'Column', children: ['title', 'caption']},
-          {id: 'title', component: 'Text', text: title, variant: 'h3'},
-          {id: 'caption', component: 'Text', text: caption, variant: 'caption'},
+          {id: 'title', component: 'Text', text: `### ${title}`},
+          {id: 'caption', component: 'Text', text: caption},
         ],
       },
     },

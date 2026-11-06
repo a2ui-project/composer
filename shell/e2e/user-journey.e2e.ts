@@ -121,7 +121,7 @@ test.describe('E2E Workspace User Journey', () => {
     // 9. Correct JSON and verify snackbar disappears
     await setMonacoContent(
       page,
-      '{"version": "v0.9", "createSurface": {"surfaceId": "test", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}',
+      '{"version": "1.0", "createSurface": {"surfaceId": "test", "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"}}',
     );
     // With dismissal logic, it should disappear immediately
     await expect(page.locator('.mat-mdc-snack-bar-label')).toHaveCount(0, {

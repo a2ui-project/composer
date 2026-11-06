@@ -71,7 +71,7 @@ test.describe('Components Gallery User Journey', () => {
     await expect(workspaceIframe).toBeVisible();
 
     // Wait for the catalog handshake to complete (indicated by header title updating)
-    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await expect(page.locator('.header-title')).toContainText('Basic Catalog');
 
     // 2. Click on the gallery link in the sidebar
     const galleryLink = page.getByRole('link', {name: 'Components Gallery'});
@@ -201,14 +201,12 @@ test.describe('Components Gallery User Journey', () => {
           if (!Array.isArray(commands)) {
             return {error: 'Expected a JSON array'};
           }
-          if (commands.length !== 2) {
-            return {error: `Expected 2 commands, got ${commands.length}`};
+          if (commands.length !== 1) {
+            return {error: `Expected 1 command, got ${commands.length}`};
           }
           const cmd1 = commands[0] as Record<string, unknown>;
-          const cmd2 = commands[1] as Record<string, unknown>;
           const createSurface = cmd1['createSurface'] as Record<string, unknown> | undefined;
-          const updateComponents = cmd2['updateComponents'] as Record<string, unknown> | undefined;
-          const components = updateComponents?.['components'] as
+          const components = createSurface?.['components'] as
             Array<Record<string, unknown>> | undefined;
           const hasComponent =
             Array.isArray(components) &&
@@ -217,8 +215,6 @@ test.describe('Components Gallery User Journey', () => {
             cmd1Version: cmd1['version'],
             hasCreateSurface: typeof createSurface === 'object' && createSurface !== null,
             hasCatalogId: typeof createSurface?.['catalogId'] === 'string',
-            cmd2Version: cmd2['version'],
-            hasUpdateComponents: typeof updateComponents === 'object' && updateComponents !== null,
             componentsArray: Array.isArray(components),
             hasComponent,
           };
@@ -227,11 +223,9 @@ test.describe('Components Gallery User Journey', () => {
         }
       })
       .toEqual({
-        cmd1Version: 'v0.9',
+        cmd1Version: '1.0',
         hasCreateSurface: true,
         hasCatalogId: true,
-        cmd2Version: 'v0.9',
-        hasUpdateComponents: true,
         componentsArray: true,
         hasComponent: true,
       });
@@ -283,7 +277,7 @@ test.describe('Components Gallery User Journey', () => {
   }) => {
     await page.setViewportSize({width: 820, height: 800});
     await page.goto('/?renderer=http://localhost:3456');
-    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await expect(page.locator('.header-title')).toContainText('Basic Catalog');
     await page.getByRole('link', {name: 'Components Gallery'}).click();
     const toggle = page.getByRole('button', {name: 'Toggle sidenav'});
     await toggle.click();
@@ -301,26 +295,28 @@ test.describe('Components Gallery User Journey', () => {
     page,
   }) => {
     await page.goto('/?renderer=http://localhost:3456');
-    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await expect(page.locator('.header-title')).toContainText('Basic Catalog');
     await page.getByRole('link', {name: 'Components Gallery'}).click();
-    await page.locator('.catalog-list').getByRole('button', {name: 'Modal', exact: true}).click();
-    await expect(page.locator('[data-property-row="accessibility"]')).toBeVisible();
+    await page.locator('.catalog-list').getByRole('button', {name: 'Button', exact: true}).click();
+    await expect(page.locator('[data-property-row="action"]')).toBeVisible();
 
-    const rows = await page.locator('[data-property-row]').evaluateAll(elements =>
-      elements.map(row => {
-        const name = row.querySelector('.property-name')!.getBoundingClientRect();
-        const control = row.querySelector('.property-control')!.getBoundingClientRect();
-        return {
-          property: row.getAttribute('data-property-row'),
-          nameBottom: name.bottom,
-          controlTop: control.top,
-        };
-      }),
-    );
-    expect(rows.map(row => row.property)).toContain('accessibility');
-    for (const row of rows) {
-      expect(row.nameBottom, row.property ?? '').toBeLessThanOrEqual(row.controlTop + 1);
-    }
+    await expect
+      .poll(async () => {
+        const rows = await page.locator('[data-property-row]').evaluateAll(elements =>
+          elements.map(row => {
+            const name = row.querySelector('.property-name')?.getBoundingClientRect();
+            const control = row.querySelector('.property-control')?.getBoundingClientRect();
+            return {
+              property: row.getAttribute('data-property-row'),
+              valid: Boolean(name && control && name.bottom <= control.top + 1),
+            };
+          }),
+        );
+        const hasAction = rows.some(r => r.property === 'action');
+        const allValid = rows.length > 0 && rows.every(r => r.valid);
+        return hasAction && allValid;
+      })
+      .toBe(true);
   });
 
   test('edits selected-catalog Text and opens the same valid example with its renderer', async ({
@@ -329,7 +325,7 @@ test.describe('Components Gallery User Journey', () => {
   }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.goto('/?renderer=http://localhost:3456');
-    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await expect(page.locator('.header-title')).toContainText('Basic Catalog');
     await page.getByRole('link', {name: 'Components Gallery'}).click();
     await page.locator('.catalog-list').getByRole('button', {name: 'Text', exact: true}).click();
     const preview = previewFrame(galleryPreview(page));
@@ -346,7 +342,9 @@ test.describe('Components Gallery User Journey', () => {
     await expect(page.getByRole('alert').filter({hasText: 'last valid example'})).toBeVisible();
     await page.getByRole('tab', {name: 'Preview', exact: true}).click();
     await expect(preview.getByText(edited, {exact: true})).toBeVisible({timeout: 10_000});
-    await page.getByRole('tab', {name: 'Edit JSON', exact: true}).click();
+    const editJsonTab = page.getByRole('tab', {name: 'Edit JSON', exact: true});
+    await editJsonTab.scrollIntoViewIfNeeded();
+    await editJsonTab.click();
     await page.getByRole('button', {name: 'Copy JSON', exact: true}).click();
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     expect(copied).toContain(edited);

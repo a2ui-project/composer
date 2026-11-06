@@ -18,6 +18,7 @@ import {test, expect, type Page, type BrowserContext, type Route} from '@playwri
 import {CAR_BOOKING_V1_0} from '../src/app/chat/chat-service/initial-draft';
 import {CATALOG_WATCHDOG_MESSAGE} from '../src/app/storage/catalog-management/catalog-watchdog';
 import {inlineSurfaceFrame, previewFrame} from '../src/app/preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 import {connectMockAgent, sseEvent} from '../src/app/agent-chat/test/mock-a2a-agent';
 import {getMonacoContent, setMonacoContent, waitForMonacoEditor} from './helpers';
 
@@ -111,6 +112,10 @@ async function setupMockRenderers(context: BrowserContext | Page): Promise<void>
         rendererUrl: V10_RENDERER_URL,
         displayName: 'Mock V10',
       },
+      liveAngular: {
+        rendererUrl: RENDERER_URLS.angular,
+        displayName: 'Angular Basic',
+      },
     },
     apiKeys: {
       fake: {
@@ -163,6 +168,7 @@ test.describe('v0.9 Compatibility Regression Suite', () => {
             'http://mock-v09-renderer.local',
             'http://mock-v10-renderer.local',
             'http://mock-agent.local',
+            'http://localhost:3456',
           ]),
         );
       }
@@ -479,5 +485,74 @@ test.describe('v0.9 Compatibility Regression Suite', () => {
     await expect(page.locator('.chat-history-container')).toContainText(
       'Your flight selection is confirmed!',
     );
+  });
+
+  test('switching between live v1.0 sample renderer and hermetic v0.9 renderer auto-swaps starter draft when unedited, preserves user-edited v0.9 draft, flags PROTOCOL_VERSION_MISMATCH on live v1.0, and recovers cleanly', async ({
+    page,
+  }) => {
+    // 1. Navigate to live v1.0 sample renderer on /workspace
+    await page.goto(`/?renderer=${encodeURIComponent(RENDERER_URLS.angular)}`);
+    await waitForMonacoEditor(page);
+
+    // Initial draft is CAR_BOOKING_V1_0
+    let draft = await getMonacoContent(page);
+    expect(draft).toContain('"version": "1.0"');
+
+    // 2. Switch to v0.9 renderer while draft is unedited -> starter draft auto-swaps to CAR_BOOKING (v0.9)
+    await switchRenderer(page, 'Mock V09');
+
+    draft = await getMonacoContent(page);
+    expect(draft).toContain('"version": "v0.9"');
+    expect(draft).toContain('Book a Car');
+
+    // 3. User edits the draft while on v0.9
+    const userEditedV09Draft = draft.replace('Book a Car', 'User Customised Car Booking');
+    await setMonacoContent(page, userEditedV09Draft);
+
+    const editedDraftCheck = await getMonacoContent(page);
+    expect(editedDraftCheck).toContain('User Customised Car Booking');
+
+    // 4. Switch to live v1.0 sample renderer -> user-edited draft is preserved, but PROTOCOL_VERSION_MISMATCH is logged
+    await switchRenderer(page, 'Angular Basic');
+
+    // User draft is preserved (not overwritten by v1.0 starter)
+    const preservedDraft = await getMonacoContent(page);
+    expect(preservedDraft).toContain('User Customised Car Booking');
+    expect(preservedDraft).toContain('"version": "v0.9"');
+
+    // Immediate PROTOCOL_VERSION_MISMATCH error is logged without waiting for 15s watchdog
+    await expect
+      .poll(async () => {
+        return page.evaluate(() => {
+          const ng = (window as unknown as {ng?: {getComponent(el: Element): unknown}}).ng;
+          const shell = document.querySelector('a2ui-composer-shell');
+          const comp =
+            ng && shell
+              ? (ng.getComponent(shell) as {
+                  errorLogger?: {
+                    getHistory(): Array<{code?: string; message?: string; level?: string}>;
+                  };
+                })
+              : null;
+          const history = comp?.errorLogger?.getHistory() ?? [];
+          return history.some(
+            item =>
+              item.code === 'PROTOCOL_VERSION_MISMATCH' ||
+              item.message?.includes('PROTOCOL_VERSION_MISMATCH') ||
+              item.message?.includes('Protocol version mismatch'),
+          );
+        });
+      })
+      .toBe(true);
+
+    // 5. Clean recovery: switch back to v0.9 renderer
+    await switchRenderer(page, 'Mock V09');
+
+    const recoveredDraft = await getMonacoContent(page);
+    expect(recoveredDraft).toContain('User Customised Car Booking');
+
+    // Verify v0.9 renderer displays without PROTOCOL_VERSION_MISMATCH
+    const iframe = previewFrame(page);
+    await expect(iframe.locator('body')).toBeVisible();
   });
 });

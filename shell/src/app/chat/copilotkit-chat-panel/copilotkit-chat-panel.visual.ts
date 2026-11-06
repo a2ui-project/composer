@@ -53,7 +53,7 @@ test.describe('CopilotKitChatPanel Visual Regression', () => {
     page,
   }) => {
     await page.goto(`/?renderer=${RENDERER_URL}`);
-    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await expect(page.locator('.header-title')).toContainText('Basic Catalog');
 
     const panel = page.locator('a2ui-composer-chat-panel');
     await setGeminiScenarios(page, [

@@ -151,7 +151,6 @@ function generateSurfacePayload(rowCount: number): string {
       id: rowId,
       component: 'Text',
       text: `Row item index ${i} with substantial content line to verify natural surface expansion`,
-      variant: 'body',
     });
   }
 
@@ -163,16 +162,10 @@ function generateSurfacePayload(rowCount: number): string {
 
   return JSON.stringify([
     {
-      version: 'v0.9',
+      version: '1.0',
       createSurface: {
         surfaceId: 'resize_surface',
-        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-      },
-    },
-    {
-      version: 'v0.9',
-      updateComponents: {
-        surfaceId: 'resize_surface',
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
         components,
       },
     },
@@ -190,30 +183,23 @@ function growableSurfacePayload(lineCount = GROWABLE_LINE_COUNT): unknown[] {
   const lineIds = Array.from({length: lineCount}, (_, i) => `line_${i}`);
   return [
     {
-      version: 'v0.9',
+      version: '1.0',
       createSurface: {
         surfaceId: 'growable_surface',
-        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-      },
-    },
-    {
-      version: 'v0.9',
-      updateComponents: {
-        surfaceId: 'growable_surface',
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
         components: [
           {id: 'root', component: 'Column', children: ['fill_input', ...lineIds]},
           {
             id: 'fill_input',
             component: 'TextField',
             label: 'Fill lines',
-            value: {path: '/fill'},
-            variant: 'shortText',
+            value: {'@path': '/fill'},
           },
-          ...lineIds.map(id => ({id, component: 'Text', text: {path: '/fill'}, variant: 'body'})),
+          ...lineIds.map(id => ({id, component: 'Text', text: {'@path': '/fill'}})),
         ],
+        dataModel: {fill: ''},
       },
     },
-    {version: 'v0.9', updateDataModel: {surfaceId: 'growable_surface', path: '/fill', value: ''}},
   ];
 }
 

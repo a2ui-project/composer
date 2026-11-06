@@ -41,6 +41,108 @@ export const mockAgentCard = {
 
 export const flightA2uiPayload = [
   {
+    version: '1.0',
+    createSurface: {
+      surfaceId: 'flight-options',
+      catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+      components: [
+        {
+          id: 'root',
+          component: {
+            Canvas: {
+              cardTitle: 'Flight Options',
+              cardDescription: 'Review and select non-stop flights',
+              cardIcon: 'flight',
+              autoOpen: true,
+              children: ['header_text', 'flight_card_ana', 'flight_card_jal', 'confirm_btn'],
+            },
+          },
+        },
+        {
+          id: 'header_text',
+          component: 'Text',
+          text: '## Available Non-Stop Flights (SFO ➔ NRT)',
+        },
+        {
+          id: 'flight_card_ana',
+          component: 'Card',
+          child: 'flight_col_ana',
+        },
+        {
+          id: 'flight_col_ana',
+          component: 'Column',
+          children: ['ana_title', 'ana_route', 'ana_meta'],
+        },
+        {
+          id: 'ana_title',
+          component: 'Text',
+          text: '### ✈️ All Nippon Airways (ANA NH007)',
+        },
+        {
+          id: 'ana_route',
+          component: 'Text',
+          text: 'Depart 11:30 AM (SFO) ➔ Arrive 3:45 PM (+1 day, NRT)',
+        },
+        {
+          id: 'ana_meta',
+          component: 'Text',
+          text: 'Duration: 11h 15m (Non-stop) • Fare: $1,180 (Economy)',
+        },
+        {
+          id: 'flight_card_jal',
+          component: 'Card',
+          child: 'flight_col_jal',
+        },
+        {
+          id: 'flight_col_jal',
+          component: 'Column',
+          children: ['jal_title', 'jal_route', 'jal_meta'],
+        },
+        {
+          id: 'jal_title',
+          component: 'Text',
+          text: '### ✈️ Japan Airlines (JAL JL001)',
+        },
+        {
+          id: 'jal_route',
+          component: 'Text',
+          text: 'Depart 1:15 PM (SFO) ➔ Arrive 5:30 PM (+1 day, NRT)',
+        },
+        {
+          id: 'jal_meta',
+          component: 'Text',
+          text: 'Duration: 11h 15m (Non-stop) • Fare: $1,240 (Economy)',
+        },
+        {
+          id: 'confirm_btn',
+          component: 'Button',
+          child: 'confirm_btn_text',
+          variant: 'primary',
+          action: {
+            event: {
+              name: 'selectFlight',
+              context: {
+                flightNumber: 'NH007',
+              },
+            },
+          },
+        },
+        {
+          id: 'confirm_btn_text',
+          component: 'Text',
+          text: 'Select ANA NH007 & Continue',
+        },
+      ],
+      dataModel: {
+        selectedFlight: 'NH007',
+        tripType: 'RoundTrip',
+      },
+    },
+  },
+];
+
+export const flightA2uiPayloadV09 = [
+  {
     version: 'v0.9',
     createSurface: {
       surfaceId: 'flight-options',

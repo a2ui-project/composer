@@ -30,7 +30,7 @@ import {
   previewFrame,
 } from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
-import {CAR_BOOKING} from '../src/app/chat/chat-service/initial-draft';
+import {CAR_BOOKING_V1_0} from '../src/app/chat/chat-service/initial-draft';
 import {MAX_CONTENT_HEIGHT_PX} from '../src/app/preview/content-height';
 
 /** A single SURFACE_RESIZE message observed on the postMessage wire. */
@@ -166,9 +166,13 @@ const CONFIGS: IntegrationConfig[] = [
     name: 'Angular',
     rendererUrl: RENDERER_URLS.angular,
     pickupDateLocator: iframe =>
-      iframe.locator('.a2ui-date-time-container:has-text("Pick-up Date") input'),
+      iframe.locator(
+        '.a2ui-date-time-container:has-text("Pick-up Date") input, a2ui-datetimeinput:has-text("Pick-up Date") input',
+      ),
     pickupLocationLocator: iframe =>
-      iframe.locator('.a2ui-text-field-container:has-text("Pick-up Location") input'),
+      iframe.locator(
+        '.a2ui-text-field-container:has-text("Pick-up Location") input, a2ui-basic-textfield:has-text("Pick-up Location") input',
+      ),
     fillDate: fillDateInput,
   },
   {
@@ -642,7 +646,7 @@ for (const config of CONFIGS) {
           }
         });
       });
-      const iframe = await showInlineSurface(page, config.rendererUrl, CAR_BOOKING);
+      const iframe = await showInlineSurface(page, config.rendererUrl, CAR_BOOKING_V1_0);
       const historyHandle = await page.evaluateHandle(
         () =>
           (window as unknown as {__inlineBridgeLog: CapturedBridgeEnvelope[]}).__inlineBridgeLog,
