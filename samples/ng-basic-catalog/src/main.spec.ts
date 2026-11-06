@@ -17,18 +17,17 @@
 // @vitest-environment jsdom
 import {describe, it, expect, vi, beforeEach, afterEach, onTestFinished} from 'vitest';
 import {AppComponent} from './app/app.component';
-import {BasicWithMcpCatalog} from './app/sample-basic.catalog';
+import {SampleBasicCatalog} from './app/sample-basic.catalog';
 import {A2uiSandboxConnection, provideA2uiSandbox} from 'a2ui-bridge/angular';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {A2uiRendererService, A2UI_RENDERER_CONFIG, BasicCatalog} from '@a2ui/angular/v0_9';
-import {A2uiClientAction} from '@a2ui/web_core/v0_9';
+import {A2uiRendererService, A2UI_RENDERER_CONFIG, BasicCatalog} from '@a2ui/angular';
 import {
   provideZonelessChangeDetection,
   createEnvironmentInjector,
   EnvironmentInjector,
   type ApplicationConfig,
 } from '@angular/core';
-import {a2uiBridge} from 'a2ui-bridge';
+import {a2uiBridge, createMcpFunctionsCatalog, MCP_FUNCTIONS_CATALOG_ID} from 'a2ui-bridge';
 
 // Mocks core bridge singleton variables for clean telemetry spy verification
 vi.mock('a2ui-bridge', () => ({
@@ -39,9 +38,15 @@ vi.mock('a2ui-bridge', () => ({
     getMcpClient: vi.fn(),
   },
   ERROR_OVERLAY_DEBOUNCE_MS: 350,
+  MCP_FUNCTIONS_CATALOG_ID: 'https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json',
   isV1ProtocolVersion: (v: unknown) =>
     typeof v === 'string' && (v.trim().startsWith('1.') || v.trim().startsWith('v1.')),
-  createMcpCatalogFunctions: vi.fn().mockReturnValue([]),
+  createMcpFunctionsCatalog: () => ({
+    id: 'https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json',
+    protocolVersion: '1.0',
+    components: new Map(),
+    functions: [],
+  }),
 }));
 
 describe('A2uiSandbox', () => {
@@ -61,7 +66,7 @@ describe('A2uiSandbox', () => {
       imports: [AppComponent],
       providers: [
         provideZonelessChangeDetection(),
-        provideA2uiSandbox([BasicWithMcpCatalog], {catalogJson: {items: ['Grid']}}), // Injects dynamically linked dynamic manager
+        provideA2uiSandbox([SampleBasicCatalog, createMcpFunctionsCatalog()]),
       ],
     }).compileComponents();
 
@@ -88,7 +93,6 @@ describe('A2uiSandbox', () => {
         surfaceGroup: expect.any(Object),
         onSurfaceReady: expect.any(Function),
         onSurfaceCleared: expect.any(Function),
-        catalogJson: {items: ['Grid']},
       }),
     );
   });
@@ -123,9 +127,9 @@ describe('A2uiSandbox', () => {
     expect(sandbox.surfaceId()).toBe('');
   });
 
-  it('dispatches actions wrapped in version v0.9 envelope to SEND_TO_SERVER', () => {
+  it('dispatches actions wrapped in version 1.0 envelope to SEND_TO_SERVER', () => {
     const config = TestBed.inject(A2UI_RENDERER_CONFIG);
-    const dummyAction: A2uiClientAction = {
+    const dummyAction = {
       name: 'CLICK',
       surfaceId: 'surface-1',
       sourceComponentId: 'button-1',
@@ -137,17 +141,24 @@ describe('A2uiSandbox', () => {
     expect(a2uiBridge.sendAction).toHaveBeenCalledWith(dummyAction);
   });
 
-  it('provides and registers correct DI providers list', () => {
+  it('provides and registers correct DI providers list with v1.0 catalogs', () => {
     const parentInjector = TestBed.inject(EnvironmentInjector);
     const environmentInjector = createEnvironmentInjector(
-      [provideA2uiSandbox([BasicCatalog], {catalogJson: {items: ['Grid']}})],
+      [provideA2uiSandbox([BasicCatalog, createMcpFunctionsCatalog()])],
       parentInjector,
     );
 
     expect(environmentInjector.get(A2uiRendererService)).toBeDefined();
     expect(environmentInjector.get(A2uiSandboxConnection)).toBeDefined();
     expect(environmentInjector.get(BasicCatalog)).toBeDefined();
-    expect(environmentInjector.get(A2UI_RENDERER_CONFIG)).toBeDefined();
+    const config = environmentInjector.get(A2UI_RENDERER_CONFIG);
+    expect(config).toBeDefined();
+    expect(config.catalogs).toHaveLength(2);
+    const [basic, mcp] = config.catalogs as Array<{id?: string; protocolVersion?: string}>;
+    expect(basic?.id).toBe('https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json');
+    expect(basic?.protocolVersion).toBe('1.0');
+    expect(mcp?.id).toBe(MCP_FUNCTIONS_CATALOG_ID);
+    expect(mcp?.protocolVersion).toBe('1.0');
   });
 
   it('serves the full basic-catalog demo set', async () => {
@@ -159,7 +170,7 @@ describe('A2uiSandbox', () => {
       expect(demo.description).toBeTruthy();
       expect(Array.isArray(demo.a2ui)).toBe(true);
       expect(demo.a2ui.length).toBeGreaterThan(0);
-      expect(demo.a2ui[0].version).toBe('v0.9');
+      expect(demo.a2ui[0].version).toBe('1.0');
     }
     expect(new Set(DEMOS.map(d => d.id)).size).toBe(DEMOS.length);
   });

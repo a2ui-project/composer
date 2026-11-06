@@ -16,7 +16,7 @@
 
 import {type ComponentUsages} from 'a2ui-bridge';
 
-/** Component usages dictionary matching the A2UiComponentV09 usage spec. */
+/** Component usages dictionary matching the A2UI v1.0 basic catalog specification. */
 export const COMPONENT_USAGES: ComponentUsages = {
   AudioPlayer: {
     usage: [
@@ -33,7 +33,7 @@ export const COMPONENT_USAGES: ComponentUsages = {
       {
         id: 'root',
         component: 'Button',
-        child: 'demo-button-child',
+        child: 'demo_button_child',
         action: {
           event: {
             name: 'submit',
@@ -45,7 +45,7 @@ export const COMPONENT_USAGES: ComponentUsages = {
         variant: 'primary',
       },
       {
-        id: 'demo-button-child',
+        id: 'demo_button_child',
         component: 'Text',
         text: 'Submit',
       },
@@ -56,21 +56,20 @@ export const COMPONENT_USAGES: ComponentUsages = {
       {
         id: 'root',
         component: 'Card',
-        child: 'demo-card-contents',
+        child: 'demo_card_contents',
       },
       {
-        id: 'demo-card-contents',
+        id: 'demo_card_contents',
         component: 'Column',
-        children: ['demo-card-title', 'demo-card-content'],
+        children: ['demo_card_title', 'demo_card_content'],
       },
       {
-        id: 'demo-card-title',
+        id: 'demo_card_title',
         component: 'Text',
-        text: 'Card Title',
-        variant: 'h3',
+        text: '### Card Title',
       },
       {
-        id: 'demo-card-content',
+        id: 'demo_card_content',
         component: 'Text',
         text: 'This is the card with some text',
       },
@@ -106,24 +105,23 @@ export const COMPONENT_USAGES: ComponentUsages = {
       {
         id: 'root',
         component: 'Column',
-        children: ['demo-column-header', 'demo-column-content', 'demo-column-footer'],
+        children: ['demo_column_header', 'demo_column_content', 'demo_column_footer'],
         justify: 'start',
         align: 'stretch',
       },
       {
-        id: 'demo-column-header',
+        id: 'demo_column_header',
         component: 'Text',
-        text: 'Header',
-        variant: 'h2',
+        text: '## Header',
       },
       {
-        id: 'demo-column-content',
+        id: 'demo_column_content',
         component: 'Text',
         text: 'Content goes here',
         variant: 'body',
       },
       {
-        id: 'demo-column-footer',
+        id: 'demo_column_footer',
         component: 'Text',
         text: 'Footer',
         variant: 'caption',
@@ -175,21 +173,21 @@ export const COMPONENT_USAGES: ComponentUsages = {
       {
         id: 'root',
         component: 'List',
-        children: ['demo-list-item-1', 'demo-list-item-2', 'demo-list-item-3'],
+        children: ['demo_list_item_1', 'demo_list_item_2', 'demo_list_item_3'],
         direction: 'vertical',
       },
       {
-        id: 'demo-list-item-1',
+        id: 'demo_list_item_1',
         component: 'Text',
         text: 'List Item 1',
       },
       {
-        id: 'demo-list-item-2',
+        id: 'demo_list_item_2',
         component: 'Text',
         text: 'List Item 2',
       },
       {
-        id: 'demo-list-item-3',
+        id: 'demo_list_item_3',
         component: 'Text',
         text: 'List Item 3',
       },
@@ -202,31 +200,32 @@ export const COMPONENT_USAGES: ComponentUsages = {
         component: 'Column',
         align: 'center',
         justify: 'center',
-        children: ['demo-modal'],
+        children: ['demo_modal'],
       },
       {
-        id: 'demo-modal',
+        id: 'demo_modal',
         component: 'Modal',
-        trigger: 'demo-modal-button',
-        content: 'demo-modal-content',
+        trigger: 'demo_modal_button',
+        content: 'demo_modal_content',
       },
       {
-        id: 'demo-modal-button',
+        id: 'demo_modal_button',
         component: 'Button',
-        child: 'demo-modal-button-label',
+        child: 'demo_modal_button_label',
         action: {
           event: {
             name: 'open',
+            context: {},
           },
         },
       },
       {
-        id: 'demo-modal-button-label',
+        id: 'demo_modal_button_label',
         component: 'Text',
         text: 'Open Modal',
       },
       {
-        id: 'demo-modal-content',
+        id: 'demo_modal_content',
         component: 'Text',
         text: 'Modal Content',
       },
@@ -237,22 +236,22 @@ export const COMPONENT_USAGES: ComponentUsages = {
       {
         id: 'root',
         component: 'Row',
-        children: ['demo-row-left', 'demo-row-center', 'demo-row-right'],
+        children: ['demo_row_left', 'demo_row_center', 'demo_row_right'],
         justify: 'spaceBetween',
         align: 'center',
       },
       {
-        id: 'demo-row-left',
+        id: 'demo_row_left',
         component: 'Text',
         text: 'Left',
       },
       {
-        id: 'demo-row-center',
+        id: 'demo_row_center',
         component: 'Text',
         text: 'Center',
       },
       {
-        id: 'demo-row-right',
+        id: 'demo_row_right',
         component: 'Text',
         text: 'Right',
       },
@@ -266,6 +265,34 @@ export const COMPONENT_USAGES: ComponentUsages = {
         value: 50,
         min: 0,
         max: 100,
+      },
+    ],
+  },
+  Tabs: {
+    usage: [
+      {
+        id: 'root',
+        component: 'Tabs',
+        tabs: [
+          {
+            title: 'Tab 1',
+            child: 'demo_tab_1',
+          },
+          {
+            title: 'Tab 2',
+            child: 'demo_tab_2',
+          },
+        ],
+      },
+      {
+        id: 'demo_tab_1',
+        component: 'Text',
+        text: 'Content of Tab 1',
+      },
+      {
+        id: 'demo_tab_2',
+        component: 'Text',
+        text: 'Content of Tab 2',
       },
     ],
   },
@@ -285,9 +312,8 @@ export const COMPONENT_USAGES: ComponentUsages = {
         component: 'TextField',
         label: 'Your name',
         variant: 'shortText',
-        validationRegexp: '^[a-zA-Z]+$',
         value: {
-          path: '/user/name',
+          '@path': '/user/name',
         },
       },
     ],
