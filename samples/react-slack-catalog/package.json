@@ -24,7 +24,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "slack-blocks-to-jsx": "1.1.2",
-    "zod": "4.4.3",
+    "zod": "4.6.6",
     "zod-to-json-schema": "3.25.2"
   },
   "devDependencies": {
