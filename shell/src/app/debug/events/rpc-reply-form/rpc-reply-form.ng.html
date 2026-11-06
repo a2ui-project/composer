@@ -1,0 +1,77 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div class="rpc-form-container" role="region" aria-label="RPC Reply Form">
+  <div class="rpc-header">
+    <div class="rpc-metadata">
+      <span>RPC: {{ rpc().functionCallId }}</span>
+    </div>
+    @if (isPending()) {
+      <span class="rpc-remaining-time" aria-label="Remaining time"
+        >Expires in: {{ remainingSeconds() }}s</span
+      >
+    } @else {
+      <span class="rpc-status-badge status-{{ status() }}" aria-label="RPC Status">{{
+        badgeLabel()
+      }}</span>
+    }
+  </div>
+
+  @if (isPending()) {
+    <form class="rpc-actions-section" (submit)="$event.preventDefault()" role="form">
+      <div class="rpc-value-row">
+        <textarea
+          class="rpc-value-input"
+          [value]="valueInput()"
+          (input)="onValueInput($event)"
+          placeholder="Reply value (JSON or plain text)..."
+          aria-label="Reply value"
+        ></textarea>
+        @if (validationError()) {
+          <div class="rpc-validation-error" role="alert">{{ validationError() }}</div>
+        }
+      </div>
+
+      <div class="rpc-error-row">
+        <input
+          type="text"
+          class="rpc-error-code-input"
+          [value]="errorCodeInput()"
+          (input)="onErrorCodeInput($event)"
+          placeholder="Error code (e.g. USER_REJECTED)"
+          aria-label="Error code"
+        />
+        <input
+          type="text"
+          class="rpc-error-message-input"
+          [value]="errorMessageInput()"
+          (input)="onErrorMessageInput($event)"
+          placeholder="Error message..."
+          aria-label="Error message"
+        />
+      </div>
+
+      <div class="rpc-button-row">
+        <button type="button" class="rpc-reply-value-btn" (click)="onReplyValue()">
+          Reply Value
+        </button>
+        <button type="button" class="rpc-reply-error-btn" (click)="onReplyError()">
+          Reply Error
+        </button>
+      </div>
+    </form>
+  }
+</div>

@@ -124,6 +124,7 @@ export class ComposerDockview {
   private rawMessagesInstance?: RawMessages;
   private eventsInstance?: Events;
   private errorsInstance?: Errors;
+  private renderedFrameInstance?: RenderedFrame;
 
   private resizeObserver?: ResizeObserver;
   private animationFrameId?: number;
@@ -395,6 +396,7 @@ export class ComposerDockview {
     if (type === RenderedFrame) {
       componentRef.setInput('sizing', 'fill' satisfies RenderedFrameSizing);
       componentRef.setInput('defaultTarget', DefaultTarget.REPLACE);
+      this.renderedFrameInstance = componentRef.instance as RenderedFrame;
     }
     if (type === DataModel) this.dataModelInstance = componentRef.instance as DataModel;
     if (type === RawMessages) this.rawMessagesInstance = componentRef.instance as RawMessages;
@@ -419,10 +421,20 @@ export class ComposerDockview {
         if (componentRef.instance === this.errorsInstance) {
           this.errorsInstance = undefined;
         }
+        if (componentRef.instance === this.renderedFrameInstance) {
+          this.renderedFrameInstance = undefined;
+        }
         componentRef.destroy();
         this.componentRefs = this.componentRefs.filter(r => r !== componentRef);
       },
     };
+  }
+
+  /**
+   * Retrieves the active RenderedFrame preview component instance if currently mounted.
+   */
+  getRenderedFrame(): RenderedFrame | undefined {
+    return this.renderedFrameInstance;
   }
 
   /**
