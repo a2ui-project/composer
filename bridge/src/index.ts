@@ -25,3 +25,6 @@ export * from './preview-bridge.js';
 export * from './render-config.js';
 export * from './surface-resize-observer.js';
 export * from './protocol/protocol-strategy-registry.js';
+export * from './protocol/bridge-protocol-strategy.js';
+export * from './protocol/v0-9-bridge-protocol-strategy.js';
+export * from './protocol/v1-0-bridge-protocol-strategy.js';

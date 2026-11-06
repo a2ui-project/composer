@@ -561,4 +561,44 @@ describe('Lit Framework Adapter Spec', () => {
 
     element.remove();
   });
+
+  it('passes catalogs to attachRenderer and resolves v1.0 multi-catalog handshake without HTTP fetch', async () => {
+    const {basicCatalog: basicV10} = await import('@a2ui/web_core/v1_0');
+    const {createMcpFunctionsCatalog, MCP_FUNCTIONS_CATALOG_ID} =
+      await import('../mcp/v1-0-mcp-catalog');
+    const mcpCatalog = createMcpFunctionsCatalog();
+
+    bootstrapLitSandbox(
+      [
+        basicV10 as unknown as Catalog<ComponentApi>,
+        mcpCatalog as unknown as Catalog<ComponentApi>,
+      ],
+      {elementTagName: 'app-root-v10-multi'},
+    );
+
+    const ctor = customElements.get('app-root-v10-multi');
+    const element = new ctor!();
+    const sendSpy = vi.spyOn(a2uiBridge, 'sendMessage');
+    document.body.appendChild(element);
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window.parent,
+        origin: window.location.origin,
+        data: {type: 'GET_CATALOG'},
+      }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 25));
+
+    const catalogMsg = sendSpy.mock.calls
+      .map(c => c[0] as {type?: string; payload?: Record<string, unknown>})
+      .find(m => m.type === 'A2UI_CATALOG');
+    expect(catalogMsg).toBeDefined();
+    expect(catalogMsg?.payload?.['protocolVersion']).toBe('1.0');
+    const catalogsPayload = catalogMsg?.payload?.['catalogs'] as Array<Record<string, unknown>>;
+    expect(catalogsPayload).toHaveLength(2);
+    expect(catalogsPayload[1]?.['catalogId']).toBe(MCP_FUNCTIONS_CATALOG_ID);
+
+    element.remove();
+  });
 });

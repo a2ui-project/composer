@@ -43,7 +43,6 @@ import {IframeMcpClient} from './iframe-mcp-client';
 
 import {SurfaceResizeObserver, type SurfaceDimensions} from './surface-resize-observer';
 import {waitForContentToSettle, withinSettleCap} from './content-settle';
-export * from './surface-resize-observer';
 
 import type {
   SurfaceInstance,
@@ -162,6 +161,15 @@ export declare interface RendererProcessor {
    * @param payload The array of A2UI protocol commands.
    */
   processMessages(payload: A2uiMessage[]): void;
+
+  /**
+   * Dispatches an outbound agent function call through the renderer's RPC handler.
+   */
+  callAgentFunction?(
+    surfaceId: string,
+    call: Record<string, unknown>,
+    options?: {functionCallId?: string},
+  ): Promise<unknown>;
 }
 
 /**
@@ -240,6 +248,9 @@ interface ActiveRenderer {
 export class PreviewBridge {
   /** The single active framework rendering stack connection hook. */
   private activeRenderer: ActiveRenderer | null = null;
+
+  /** Active negotiated wire protocol version ('1.0' or 'v0.9') for the attached renderer. */
+  private activeProtocolVersion: '1.0' | 'v0.9' = 'v0.9';
 
   /** Indicates whether the bridge is actively listening for incoming messages. */
   private isListening = false;
@@ -384,6 +395,23 @@ export class PreviewBridge {
    */
   getActiveProcessor(): RendererProcessor | undefined {
     return this.activeRenderer?.processor ?? this.manualProcessor ?? undefined;
+  }
+
+  /**
+   * Dispatches an outbound callAgentFunction request via the active renderer processor.
+   */
+  callAgentFunction(
+    surfaceId: string,
+    call: Record<string, unknown>,
+    options?: {functionCallId?: string},
+  ): Promise<unknown> {
+    const processor = this.getActiveProcessor();
+    if (processor && typeof processor.callAgentFunction === 'function') {
+      return processor.callAgentFunction(surfaceId, call, options);
+    }
+    return Promise.reject(
+      new Error('PreviewBridge: No active renderer processor with callAgentFunction attached'),
+    );
   }
 
   /**
@@ -604,11 +632,13 @@ export class PreviewBridge {
     const surfaceConnection = this.connectSurfaceGroup(config.surfaceGroup);
     const activeSurfaceIds = new Set<string>();
 
+    this.initMessageListener();
     this.activeRenderer = {
       processor,
       config,
       activeSurfaceIds,
     };
+    this.activeProtocolVersion = this.inferProtocolVersionFromConfig(config);
     this.resetContentReadiness();
 
     if (this.currentAppliedTheme) {
@@ -650,6 +680,7 @@ export class PreviewBridge {
             this.renderTimeoutId = undefined;
           }
           this.activeRenderer = null;
+          this.activeProtocolVersion = 'v0.9';
         }
         surfaceConnection.unsubscribe();
         this.activeConnections.delete(attachConnection);
@@ -658,6 +689,28 @@ export class PreviewBridge {
 
     this.activeConnections.add(attachConnection);
     return attachConnection;
+  }
+
+  private inferProtocolVersionFromConfig(config: RendererConfig): '1.0' | 'v0.9' {
+    const candidates: unknown[] = [];
+    if (config.catalogJson !== undefined) {
+      candidates.push(
+        ...(Array.isArray(config.catalogJson) ? config.catalogJson : [config.catalogJson]),
+      );
+    } else if (config.catalog !== undefined) {
+      candidates.push(...(Array.isArray(config.catalog) ? config.catalog : [config.catalog]));
+    } else if (Array.isArray(config.catalogs)) {
+      candidates.push(...config.catalogs);
+    }
+    for (const entry of candidates) {
+      if (entry && typeof entry === 'object') {
+        const ver = (entry as {protocolVersion?: unknown}).protocolVersion;
+        if (ver === '1.0' || ver === 'v1.0') {
+          return '1.0';
+        }
+      }
+    }
+    return 'v0.9';
   }
 
   /**
@@ -686,6 +739,7 @@ export class PreviewBridge {
     this.isListening = false;
     this.activeRenderer = null;
     this.isCatalogReplyOwed = false;
+    this.activeProtocolVersion = 'v0.9';
     this.currentAppliedTheme = undefined;
 
     // Clean up active connections
@@ -739,33 +793,29 @@ export class PreviewBridge {
    * Wraps the event payload into a standard `SEND_TO_SERVER` message.
    *
    * @param action The declarative action payload containing click, input, or navigation events.
-   * @param [version='v0.9'] The A2UI protocol specification version.
+   * @param [version=this.activeProtocolVersion] The A2UI protocol specification version.
    */
-  sendAction(action: unknown, version = 'v0.9'): void {
+  sendAction(action: unknown, version: string = this.activeProtocolVersion): void {
+    const strategy = resolveProtocolStrategy(version);
     this.sendMessage({
       type: PreviewBridgeMessageType.SEND_TO_SERVER,
-      payload: {
-        version: version,
-        action: action,
-      },
+      payload: strategy.buildActionEnvelope(action),
     });
   }
 
   /**
    * Forwards a v1.0 outbound listener message (action, callAgentFunction, rendererFunctionResponse, error)
-   * over SEND_TO_SERVER to the parent host window, stamping version 'v1.0' if omitted.
+   * over SEND_TO_SERVER to the parent host window, stamping canonical version '1.0' if omitted.
    *
    * @param msg Outbound message payload.
    */
   sendOutboundMessage(msg: unknown): void {
     if (!msg || typeof msg !== 'object') return;
-    const payloadObj = {...(msg as Record<string, unknown>)};
-    if (!payloadObj['version']) {
-      payloadObj['version'] = 'v1.0';
-    }
+    const strategy = resolveProtocolStrategy(this.activeProtocolVersion === '1.0' ? '1.0' : 'v1.0');
+    const stamped = strategy.stampOutboundMessage(msg as Record<string, unknown>);
     this.sendMessage({
       type: PreviewBridgeMessageType.SEND_TO_SERVER,
-      payload: payloadObj,
+      payload: stamped,
     });
   }
 
@@ -872,7 +922,7 @@ export class PreviewBridge {
   private handleIncomingDataModelChange(payload: unknown): void {
     const payloadObj = payload as DataModelChangePayload | undefined;
     if (payloadObj && payloadObj.updateDataModel) {
-      const strategy = resolveProtocolStrategy();
+      const strategy = resolveProtocolStrategy(this.activeProtocolVersion);
       const renderPayload = [
         strategy.buildSyntheticEnvelope('dataModelChange', payloadObj.updateDataModel),
       ];
@@ -954,7 +1004,20 @@ export class PreviewBridge {
 
     if (Array.isArray(payload)) {
       const version = detectProtocolVersion(payload);
-      const strategy = resolveProtocolStrategy(version);
+      let nextProtocolVersion = this.activeProtocolVersion;
+      if (version === 'v1.0') {
+        nextProtocolVersion = '1.0';
+      } else if (
+        payload.some(
+          item =>
+            item &&
+            typeof item === 'object' &&
+            typeof (item as {version?: unknown}).version === 'string',
+        )
+      ) {
+        nextProtocolVersion = 'v0.9';
+      }
+      const strategy = resolveProtocolStrategy(version === 'v1.0' ? '1.0' : nextProtocolVersion);
 
       const createSurfaceCommands = payload.filter(
         (item: unknown) => item && typeof item === 'object' && 'createSurface' in item,
@@ -1004,10 +1067,14 @@ export class PreviewBridge {
         }
       }
 
+      clonedPayload = strategy.normalizeIncomingMessages(clonedPayload) as A2uiMessage[];
+
       let rendered = false;
+
       try {
         this.activeRenderer.processor.processMessages(clonedPayload);
         rendered = true;
+        this.activeProtocolVersion = nextProtocolVersion;
 
         // Clears any stale error overlay as soon as a frame renders successfully,
         // even during active streaming.
@@ -1056,7 +1123,7 @@ export class PreviewBridge {
     if (!this.activeRenderer) return;
 
     const {processor, config, activeSurfaceIds} = this.activeRenderer;
-    const strategy = resolveProtocolStrategy();
+    const strategy = resolveProtocolStrategy(this.activeProtocolVersion);
     for (const surfaceId of activeSurfaceIds) {
       try {
         processor.processMessages([strategy.buildDeleteSurfaceItem(surfaceId) as A2uiMessage]);
@@ -1286,14 +1353,22 @@ export class PreviewBridge {
       protocolVersion?: string;
       catalogSchema?: unknown;
       toJson?: () => unknown;
+      title?: string;
+      description?: string;
+      name?: string;
       [key: string]: unknown;
     };
+
+    const jsonMeta =
+      typeof catObj['toJson'] === 'function'
+        ? (catObj['toJson'] as () => Record<string, unknown> | null | undefined)()
+        : undefined;
 
     let schema: Record<string, unknown>;
     if (catObj.catalogSchema && typeof catObj.catalogSchema === 'object') {
       schema = {...(catObj.catalogSchema as Record<string, unknown>)};
-    } else if (typeof catObj.toJson === 'function') {
-      schema = {...(catObj.toJson() as Record<string, unknown>)};
+    } else if (jsonMeta && typeof jsonMeta === 'object') {
+      schema = {...jsonMeta};
     } else {
       schema = {...catObj};
     }
@@ -1313,45 +1388,62 @@ export class PreviewBridge {
       schema['protocolVersion'] = version;
     }
 
+    const title =
+      (schema['title'] as string | undefined) ??
+      (catObj['title'] as string | undefined) ??
+      (jsonMeta?.['title'] as string | undefined);
+    if (title) {
+      schema['title'] = title;
+    }
+
+    const description =
+      (schema['description'] as string | undefined) ??
+      (catObj['description'] as string | undefined) ??
+      (jsonMeta?.['description'] as string | undefined);
+    if (description) {
+      schema['description'] = description;
+    }
+
     return schema;
   }
 
   /**
-   * Coordinates in-memory retrieval (`catalogs`, `catalogJson`, `catalog`) vs. HTTP network fetching
-   * (including SPA HTML fallback to `/catalog.json`).
+   * Normalizes a list of catalog sources into primary and composite schemas.
    */
-  private async resolveCatalog(renderer: ActiveRenderer | null): Promise<{
+  private async normalizeCatalogList(
+    rawList: unknown[],
+    isMultiCatalog: boolean,
+  ): Promise<{
+    primarySchema: Record<string, unknown>;
+    allSchemas: Array<Record<string, unknown>>;
+    isMultiCatalog: boolean;
+    isInMemory: boolean;
+  }> {
+    const allSchemas: Array<Record<string, unknown>> = [];
+    for (const item of rawList) {
+      const normalized = await this.normalizeCatalogEntry(item);
+      if (normalized) {
+        allSchemas.push(normalized);
+      }
+    }
+
+    if (allSchemas.length > 0) {
+      return {
+        primarySchema: allSchemas[0],
+        allSchemas,
+        isMultiCatalog,
+        isInMemory: true,
+      };
+    }
+    throw new Error('Failed to resolve valid catalog from configuration.');
+  }
+
+  private async fetchCatalogFromNetwork(renderer: ActiveRenderer | null): Promise<{
     primarySchema: Record<string, unknown>;
     allSchemas: Array<Record<string, unknown>>;
     isMultiCatalog: boolean;
     isInMemory: boolean;
   } | null> {
-    const config = renderer?.config;
-    const inMemorySource = config?.catalogs ?? config?.catalogJson ?? config?.catalog;
-
-    if (inMemorySource !== undefined) {
-      const isMulti = config?.catalogs !== undefined || Array.isArray(inMemorySource);
-      const rawList = Array.isArray(inMemorySource) ? inMemorySource : [inMemorySource];
-
-      const allSchemas: Array<Record<string, unknown>> = [];
-      for (const item of rawList) {
-        const normalized = await this.normalizeCatalogEntry(item);
-        if (normalized) {
-          allSchemas.push(normalized);
-        }
-      }
-
-      if (allSchemas.length > 0) {
-        return {
-          primarySchema: allSchemas[0],
-          allSchemas,
-          isMultiCatalog: isMulti,
-          isInMemory: true,
-        };
-      }
-      throw new Error('Failed to resolve valid catalog from configuration.');
-    }
-
     if (typeof window === 'undefined' || !window.fetch) return null;
 
     let res = await this.fetchWithTimeout('catalog');
@@ -1428,6 +1520,68 @@ export class PreviewBridge {
   }
 
   /**
+   * Coordinates in-memory retrieval (`catalogJson`, `catalog`, `catalogs`) vs. HTTP network fetching
+   * (including SPA HTML fallback to `/catalog.json`).
+   */
+  private async resolveCatalog(renderer: ActiveRenderer | null): Promise<{
+    primarySchema: Record<string, unknown>;
+    allSchemas: Array<Record<string, unknown>>;
+    isMultiCatalog: boolean;
+    isInMemory: boolean;
+  } | null> {
+    const config = renderer?.config;
+    const explicitOverride = config?.catalogJson ?? config?.catalog;
+
+    if (explicitOverride !== undefined) {
+      const rawList = Array.isArray(explicitOverride) ? explicitOverride : [explicitOverride];
+      return this.normalizeCatalogList(rawList, Array.isArray(explicitOverride));
+    }
+
+    if (config?.catalogs !== undefined) {
+      const rawList = Array.isArray(config.catalogs) ? config.catalogs : [config.catalogs];
+      if (rawList.length > 0) {
+        const firstItem = rawList[0] as {
+          protocolVersion?: unknown;
+          components?: unknown;
+          catalogSchema?: unknown;
+          toJson?: unknown;
+        } | null;
+        const isSingleNonV10RuntimeCatalog =
+          rawList.length === 1 &&
+          Boolean(firstItem && typeof firstItem === 'object') &&
+          firstItem?.components instanceof Map &&
+          firstItem?.protocolVersion !== '1.0' &&
+          firstItem?.protocolVersion !== 'v1.0';
+
+        if (!isSingleNonV10RuntimeCatalog) {
+          return this.normalizeCatalogList(rawList, true);
+        }
+
+        const canExtractSchema =
+          Boolean(firstItem?.catalogSchema && typeof firstItem.catalogSchema === 'object') ||
+          typeof firstItem?.toJson === 'function';
+        try {
+          const networkResolved = await this.fetchCatalogFromNetwork(renderer);
+          if (networkResolved) {
+            return networkResolved;
+          }
+          if (canExtractSchema) {
+            return this.normalizeCatalogList(rawList, false);
+          }
+          return null;
+        } catch (err) {
+          if (canExtractSchema) {
+            return this.normalizeCatalogList(rawList, false);
+          }
+          throw err;
+        }
+      }
+    }
+
+    return this.fetchCatalogFromNetwork(renderer);
+  }
+
+  /**
    * Strips potential XSSI vulnerability prefixes (`)]}'\n`) and executes `JSON.parse()`.
    */
   private parseCatalogData(data: unknown): unknown {
@@ -1472,6 +1626,12 @@ export class PreviewBridge {
       }
 
       const {primarySchema, allSchemas, isMultiCatalog} = resolved;
+      if (
+        primarySchema['protocolVersion'] === '1.0' ||
+        primarySchema['protocolVersion'] === 'v1.0'
+      ) {
+        this.activeProtocolVersion = '1.0';
+      }
       const catalogId =
         (primarySchema['catalogId'] as string | undefined) ??
         (primarySchema['$id'] as string | undefined);
@@ -1564,11 +1724,44 @@ export class PreviewBridge {
     });
   }
 
+  private lastResolvedCatalogId?: string;
+
+  /**
+   * Aligns a single catalog's ID with the resolved catalogId when exactly one catalog is configured.
+   *
+   * @param catalogId The resolved catalog ID.
+   * @param rawCatalog The catalog or array of catalogs to alias.
+   */
+  aliasSingleCatalogId(catalogId: string | undefined, rawCatalog: unknown): void {
+    const targetCatalogId = catalogId || this.lastResolvedCatalogId;
+    if (!targetCatalogId) {
+      return;
+    }
+    const catalogs = Array.isArray(rawCatalog)
+      ? rawCatalog
+      : rawCatalog !== null && typeof rawCatalog === 'object'
+        ? [rawCatalog]
+        : undefined;
+    if (
+      catalogs &&
+      catalogs.length === 1 &&
+      !catalogs.some(c => (c as {id?: string})?.id === targetCatalogId)
+    ) {
+      const firstCatalog = catalogs[0];
+      if (firstCatalog && typeof firstCatalog === 'object') {
+        (firstCatalog as unknown as {id?: string}).id = targetCatalogId;
+      }
+    }
+  }
+
   /**
    * Safely triggers the onCatalogResolved callback if registered in the active renderer config.
    */
-
   private notifyCatalogResolved(catalogId: string): void {
+    this.lastResolvedCatalogId = catalogId;
+    if (this.activeRenderer?.config.catalogs) {
+      this.aliasSingleCatalogId(catalogId, this.activeRenderer.config.catalogs);
+    }
     if (this.activeRenderer?.config.onCatalogResolved) {
       try {
         this.activeRenderer.config.onCatalogResolved(catalogId);

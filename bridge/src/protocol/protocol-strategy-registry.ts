@@ -73,7 +73,3 @@ export function detectProtocolVersion(messages: readonly unknown[]): A2uiProtoco
   }
   return 'v0.9';
 }
-
-export * from './bridge-protocol-strategy.js';
-export * from './v0-9-bridge-protocol-strategy.js';
-export * from './v1-0-bridge-protocol-strategy.js';

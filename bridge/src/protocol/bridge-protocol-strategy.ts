@@ -40,6 +40,30 @@ export interface BridgeProtocolStrategy {
   buildDeleteSurfaceItem(surfaceId: string): RenderA2uiItem;
 
   /**
+   * Normalizes incoming layout command messages for this protocol version.
+   *
+   * @param messages Incoming layout command messages.
+   * @returns Normalized messages array.
+   */
+  normalizeIncomingMessages(messages: unknown[]): unknown[];
+
+  /**
+   * Stamps version onto an outbound message object if not already present.
+   *
+   * @param msg Outbound message payload record.
+   * @returns Outbound record stamped with canonical version.
+   */
+  stampOutboundMessage(msg: Record<string, unknown>): Record<string, unknown>;
+
+  /**
+   * Builds an action payload envelope for SEND_TO_SERVER.
+   *
+   * @param action Declarative action payload.
+   * @returns Structured record stamped with version and action.
+   */
+  buildActionEnvelope(action: unknown): Record<string, unknown>;
+
+  /**
    * Constructs a synthetic outbound or internal layout command envelope stamped with this strategy's protocol version.
    *
    * @param kind The envelope category: 'action', 'dataModelChange', or 'error'.
@@ -103,6 +127,44 @@ export abstract class BaseBridgeProtocolStrategy implements BridgeProtocolStrate
   }
 
   /**
+   * Normalizes incoming layout command messages for this protocol version.
+   * By default, returns the messages as-is.
+   *
+   * @param messages Incoming layout command messages.
+   * @returns Normalized messages array.
+   */
+  normalizeIncomingMessages(messages: unknown[]): unknown[] {
+    return messages;
+  }
+
+  /**
+   * Stamps version onto an outbound message object if not already present.
+   *
+   * @param msg Outbound message payload record.
+   * @returns Outbound record stamped with canonical version.
+   */
+  stampOutboundMessage(msg: Record<string, unknown>): Record<string, unknown> {
+    const payloadObj = {...msg};
+    if (!payloadObj['version']) {
+      payloadObj['version'] = this.wireVersion;
+    }
+    return payloadObj;
+  }
+
+  /**
+   * Builds an action payload envelope for SEND_TO_SERVER.
+   *
+   * @param action Declarative action payload.
+   * @returns Structured record stamped with version and action.
+   */
+  buildActionEnvelope(action: unknown): Record<string, unknown> {
+    return {
+      version: this.wireVersion,
+      action,
+    };
+  }
+
+  /**
    * Constructs a synthetic outbound or internal layout command envelope stamped with this strategy's protocol version.
    *
    * @param kind The envelope category: 'action', 'dataModelChange', or 'error'.
@@ -115,10 +177,7 @@ export abstract class BaseBridgeProtocolStrategy implements BridgeProtocolStrate
   ): Record<string, unknown> {
     switch (kind) {
       case 'action':
-        return {
-          version: this.wireVersion,
-          action: payload,
-        };
+        return this.buildActionEnvelope(payload);
       case 'dataModelChange':
         return {
           version: this.wireVersion,

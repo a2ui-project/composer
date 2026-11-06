@@ -92,7 +92,7 @@ export function resolveDynamicTree<T = unknown>(
 export interface DynamicValueStrategy<
   TBinding = unknown,
   TFunctionCall = unknown,
-  TExpression = unknown,
+  _TExpression = unknown,
 > {
   /** The protocol version handled by this strategy ('v0.9' or 'v1.0'). */
   readonly version: 'v0.9' | 'v1.0';
@@ -137,7 +137,12 @@ export function getDynamicValueStrategy(
     return v09DynamicValueStrategy;
   }
   const trimmed = version.trim();
-  if (trimmed === 'v1.0' || trimmed === '1.0' || trimmed.startsWith('1.') || trimmed.startsWith('v1.')) {
+  if (
+    trimmed === 'v1.0' ||
+    trimmed === '1.0' ||
+    trimmed.startsWith('1.') ||
+    trimmed.startsWith('v1.')
+  ) {
     return v10DynamicValueStrategy;
   }
   return v09DynamicValueStrategy;
@@ -232,4 +237,3 @@ export function resolveDynamicRecord(
   }
   return resolved;
 }
-
