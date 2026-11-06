@@ -21,11 +21,11 @@
             "baseHref": "./",
             "assets": [
               "src/favicon.ico",
-              "src/assets",
               {
-                "glob": "catalog.json",
+                "glob": "**/*",
                 "input": "src/assets",
-                "output": "/"
+                "output": "assets",
+                "ignore": ["**/*.ts"]
               }
             ],
             "styles": ["src/styles.scss"],

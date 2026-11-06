@@ -14,43 +14,21 @@
  * limitations under the License.
  */
 
-import {Injectable, inject} from '@angular/core';
-import {BasicCatalog} from '@a2ui/angular/v0_9';
-import {Catalog, ComponentApi, FunctionImplementation} from '@a2ui/web_core/v0_9';
-// TODO: Replace import from 'a2ui-bridge' with '@a2ui/mcp-catalog/v0_9' once published to NPM.
-import {a2uiBridge, createMcpCatalogFunctions} from 'a2ui-bridge';
-
-export const BASIC_CATALOG_ID = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
+import {Injectable} from '@angular/core';
+import {BasicCatalog} from '@a2ui/angular';
+import {attachCatalogSchema} from '../../../shared/attach-catalog-schema.js';
+import {COMPONENT_USAGES} from '../../../shared/usages.js';
 
 /**
- * Normalizes a catalog entry collection (ReadonlyMap or Record) into a flat array of values.
+ * Angular catalog providing canonical A2UI v1.0 BasicCatalog components
+ * enriched with component usage examples from usages.ts for the Gallery.
  */
-function extractCatalogEntries<T>(collection?: ReadonlyMap<string, T> | Record<string, T>): T[] {
-  if (!collection) return [];
-  if (typeof (collection as ReadonlyMap<string, T>).values === 'function') {
-    return Array.from((collection as ReadonlyMap<string, T>).values());
-  }
-  return Object.values(collection);
-}
-
-/**
- * Angular catalog combining the standard BasicCatalog components and functions
- * with the A2UI Model Context Protocol (MCP) catalog functions.
- */
-@Injectable()
-export class BasicWithMcpCatalog extends Catalog<ComponentApi> {
+@Injectable({
+  providedIn: 'root',
+})
+export class SampleBasicCatalog extends BasicCatalog {
   constructor() {
-    const basicCatalog = inject(BasicCatalog);
-    const baseComponents = extractCatalogEntries<ComponentApi>(basicCatalog.components);
-    const baseFunctions = extractCatalogEntries<FunctionImplementation>(basicCatalog.functions);
-    const mcpFunctions = createMcpCatalogFunctions(
-      {
-        processMessages: msgs => {
-          a2uiBridge.getActiveProcessor()?.processMessages(msgs);
-        },
-      },
-      async () => a2uiBridge.getMcpClient(),
-    );
-    super(BASIC_CATALOG_ID, baseComponents, [...baseFunctions, ...mcpFunctions]);
+    super();
+    attachCatalogSchema(this, COMPONENT_USAGES);
   }
 }
