@@ -29,7 +29,8 @@
 import {existsSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {A2uiMessageListSchema, BASIC_COMPONENTS} from '@a2ui/web_core/v0_9';
+import {AgentToRendererMessageSchema as A2uiMessageSchema} from '@a2ui/web_core/v1_0';
+import {BASIC_COMPONENTS} from '@a2ui/web_core/catalogs/basic/v1';
 import {normalizeDemoHeadings} from './normalize-demo-headings.mjs';
 
 // `fileURLToPath` (rather than `new URL(...).pathname`) is required here:
@@ -52,7 +53,7 @@ const CHECK_MODE = process.argv.slice(2).includes('--check');
 // never causes an install on its own. `.yarnrc.yml` sets
 // `nodeLinker: node-modules`, so the hoisted location is deterministic.
 const PKG_DIR = join(REPO_ROOT, 'node_modules/@a2ui/web_core');
-const EXAMPLES_SUBPATH = 'src/v0_9/schemas/catalogs/basic/examples';
+const EXAMPLES_SUBPATH = 'src/v1_0/schemas/catalogs/basic/examples';
 const EXAMPLES_DIR = join(PKG_DIR, EXAMPLES_SUBPATH);
 
 const SHOWCASE_DIR = join(REPO_ROOT, 'samples/shared/demos');
@@ -178,6 +179,10 @@ function buildDemos(filenames) {
       throw new Error(`Example file ${filename} has a missing or empty "messages" array.`);
     }
 
+    for (const message of example.messages) {
+      A2uiMessageSchema.parse(message);
+    }
+
     const id = idFromFilename(filename);
     if (!id) {
       throw new Error(
@@ -217,10 +222,17 @@ function readShowcaseDemos() {
         if (typeof example.name !== 'string' || typeof example.description !== 'string') {
           throw new Error(`${filename}: showcase name and description must be strings.`);
         }
-        A2uiMessageListSchema.parse(example.messages);
-        const components = example.messages.flatMap(
-          message => message.updateComponents?.components ?? [],
-        );
+        if (!Array.isArray(example.messages) || example.messages.length === 0) {
+          throw new Error(`${filename}: showcase has a missing or empty "messages" array.`);
+        }
+        for (const message of example.messages) {
+          A2uiMessageSchema.parse(message);
+        }
+        const components = example.messages.flatMap(message => {
+          if (message.createSurface?.components) return message.createSurface.components;
+          if (message.updateComponents?.components) return message.updateComponents.components;
+          return [];
+        });
         const ids = new Set(components.map(component => component.id));
         if (!ids.has('root') || ids.size !== components.length) {
           throw new Error(`${filename}: showcase needs a root and unique component ids.`);
@@ -229,8 +241,24 @@ function readShowcaseDemos() {
           const api = BASIC_COMPONENTS.find(api => api.name === component);
           if (!api) throw new Error(`${filename}: unknown basic component ${component}.`);
           api.schema.strict().parse(props);
-          const children = [props.child, ...(Array.isArray(props.children) ? props.children : [])];
-          for (const child of children.filter(Boolean)) {
+          const childRefs = [];
+          if (props.child) childRefs.push(props.child);
+          if (Array.isArray(props.children)) childRefs.push(...props.children);
+          else if (
+            props.children &&
+            typeof props.children === 'object' &&
+            props.children.componentId
+          ) {
+            childRefs.push(props.children.componentId);
+          }
+          if (props.trigger) childRefs.push(props.trigger);
+          if (props.content) childRefs.push(props.content);
+          if (Array.isArray(props.tabs)) {
+            for (const tab of props.tabs) {
+              if (tab.child) childRefs.push(tab.child);
+            }
+          }
+          for (const child of childRefs) {
             if (!ids.has(child))
               throw new Error(`${filename}: ${id} references missing child ${child}.`);
           }

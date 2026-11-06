@@ -3,17 +3,11 @@
   "description": "Edit the shipping details and inspect a checkout action in Composer.",
   "messages": [
     {
-      "version": "v0.9",
+      "version": "1.0",
       "createSurface": {
         "surfaceId": "showcase-03-checkout",
-        "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
-        "sendDataModel": true
-      }
-    },
-    {
-      "version": "v0.9",
-      "updateComponents": {
-        "surfaceId": "showcase-03-checkout",
+        "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
+        "sendDataModel": true,
         "components": [
           {
             "id": "root",
@@ -29,7 +23,7 @@
               "divider",
               "address",
               "billing",
-              "divider-two",
+              "divider_two",
               "actions"
             ]
           },
@@ -43,8 +37,7 @@
           {
             "id": "title",
             "component": "Text",
-            "text": "Checkout",
-            "variant": "h3"
+            "text": "### Checkout"
           },
           {
             "id": "cart",
@@ -56,26 +49,26 @@
           {
             "id": "product",
             "component": "Row",
-            "children": ["product-image", "product-details"],
+            "children": ["product_image", "product_details"],
             "align": "center"
           },
           {
-            "id": "product-image",
+            "id": "product_image",
             "component": "Image",
             "url": {
-              "path": "/image"
+              "@path": "/image"
             },
             "description": "Yellow headphones",
             "variant": "smallFeature",
             "fit": "cover"
           },
           {
-            "id": "product-details",
+            "id": "product_details",
             "component": "Column",
-            "children": ["product-name", "price"]
+            "children": ["product_name", "price"]
           },
           {
-            "id": "product-name",
+            "id": "product_name",
             "component": "Text",
             "text": "Wireless Headphones Pro",
             "variant": "body"
@@ -95,7 +88,7 @@
             "component": "TextField",
             "label": "Shipping address",
             "value": {
-              "path": "/address"
+              "@path": "/address"
             }
           },
           {
@@ -103,11 +96,11 @@
             "component": "CheckBox",
             "label": "Billing address same as shipping",
             "value": {
-              "path": "/sameAddress"
+              "@path": "/sameAddress"
             }
           },
           {
-            "id": "divider-two",
+            "id": "divider_two",
             "component": "Divider"
           },
           {
@@ -119,24 +112,24 @@
           {
             "id": "order",
             "component": "Button",
-            "child": "order-label",
+            "child": "order_label",
             "variant": "primary",
             "action": {
               "event": {
                 "name": "placeOrder",
                 "context": {
                   "address": {
-                    "path": "/address"
+                    "@path": "/address"
                   },
                   "sameAddress": {
-                    "path": "/sameAddress"
+                    "@path": "/sameAddress"
                   }
                 }
               }
             }
           },
           {
-            "id": "order-label",
+            "id": "order_label",
             "component": "Text",
             "text": "Place order \u00b7 $199.99",
             "variant": "body"
@@ -144,7 +137,7 @@
           {
             "id": "cancel",
             "component": "Button",
-            "child": "cancel-label",
+            "child": "cancel_label",
             "variant": "borderless",
             "action": {
               "event": {
@@ -154,19 +147,13 @@
             }
           },
           {
-            "id": "cancel-label",
+            "id": "cancel_label",
             "component": "Text",
             "text": "Cancel",
             "variant": "body"
           }
-        ]
-      }
-    },
-    {
-      "version": "v0.9",
-      "updateDataModel": {
-        "surfaceId": "showcase-03-checkout",
-        "value": {
+        ],
+        "dataModel": {
           "image": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=160&h=160&fit=crop",
           "address": "1600 Amphitheatre Pkwy, Mountain View, CA",
           "sameAddress": true
