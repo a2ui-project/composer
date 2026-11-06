@@ -16,21 +16,25 @@
 
 import '../../shared/basic-catalog.css';
 import {bootstrapLitSandbox} from 'a2ui-bridge/lit';
-import {basicCatalog} from '@a2ui/lit/v0_9';
-import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
+import {createMcpFunctionsCatalog} from 'a2ui-bridge';
+import {basicCatalog, injectBasicCatalogStyles} from '@a2ui/web_core/catalogs/basic/v1';
 import {renderMarkdown} from '@a2ui/markdown-it';
-
-// Export AppRoot class constructor value with a safe double cast to bypass duplicate-dependency nominal mismatches:
+import {A2uiSurface} from '@a2ui/lit';
+import {attachCatalogSchema} from '../../shared/attach-catalog-schema.js';
 import {COMPONENT_USAGES} from '../../shared/usages.js';
 import {DEMOS} from '../../shared/demos';
 
-export const AppRoot = bootstrapLitSandbox([basicCatalog as unknown as Catalog<ComponentApi>], {
+// Ensure the canonical @a2ui/lit surface component is registered
+void A2uiSurface;
+
+injectBasicCatalogStyles();
+attachCatalogSchema(basicCatalog, COMPONENT_USAGES);
+
+export const AppRoot = bootstrapLitSandbox([basicCatalog, createMcpFunctionsCatalog()], {
   elementTagName: 'app-root',
   markdownRenderer: renderMarkdown,
   getComponentUsages: async () => COMPONENT_USAGES,
   getDemos: async () => DEMOS,
 });
 
-// Export AppRoot instance type under same name (type/value namespace merging)
-// to ensure 100% backward-compatibility with test suites without touching test code:
 export type AppRoot = InstanceType<typeof AppRoot>;
