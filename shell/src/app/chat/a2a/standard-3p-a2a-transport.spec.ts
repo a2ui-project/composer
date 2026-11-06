@@ -727,4 +727,99 @@ describe('Standard3pA2aTransport', () => {
     expect(events.length).toBe(1);
     expect(events[0].taskId).toBe('task-int-state');
   });
+
+  it('advertises v1.0 extension, application/a2ui+json output mode, and supportedCatalogIds in capabilities', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+
+    globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.body) {
+        capturedBody = JSON.parse(init.body as string);
+      }
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              'data: {"taskId": "task-v1-caps", "status": {"state": "TASK_STATE_COMPLETED"}}\n\n',
+            ),
+          );
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: {'Content-Type': 'text/event-stream'},
+      });
+    });
+
+    const message: A2aMessage = {
+      role: 'user',
+      parts: [{text: 'Test v1'}],
+    };
+
+    const events: TaskStatusUpdateEvent[] = [];
+    for await (const evt of transport.sendMessageStream('http://localhost:8000', message, {
+      supportedCatalogIds: ['https://a2ui.org/catalogs/basic', 'https://a2ui.org/catalogs/custom'],
+    })) {
+      events.push(evt);
+    }
+
+    expect(events.length).toBe(1);
+    expect(capturedBody).toBeDefined();
+    const params = (capturedBody as unknown as {params: Record<string, unknown>}).params;
+    const config = params['configuration'] as Record<string, unknown>;
+    expect(config['extensions']).toContain('https://a2ui.org/a2a-extension/a2ui/v1.0');
+    expect(config['acceptedOutputModes']).toContain('application/a2ui+json');
+    expect(config['supportedCatalogIds']).toEqual([
+      'https://a2ui.org/catalogs/basic',
+      'https://a2ui.org/catalogs/custom',
+    ]);
+  });
+
+  it('formats action data parts with canonical version 1.0 when protocolVersion is 1.0 in sendActionStream', async () => {
+    let capturedBody: {
+      params: {
+        message: {parts: Array<{data: Record<string, unknown>; metadata: Record<string, unknown>}>};
+      };
+    } | null = null;
+
+    globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.body) {
+        capturedBody = JSON.parse(init.body as string);
+      }
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              'data: {"taskId": "task-v1-act", "status": {"state": "TASK_STATE_COMPLETED"}}\n\n',
+            ),
+          );
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: {'Content-Type': 'text/event-stream'},
+      });
+    });
+
+    const events: TaskStatusUpdateEvent[] = [];
+    for await (const evt of transport.sendActionStream(
+      'http://localhost:8000',
+      'task-v1-act',
+      {name: 'submitOrder', context: {prompt: 'Confirm Order'}},
+      {protocolVersion: '1.0'},
+    )) {
+      events.push(evt);
+    }
+
+    expect(events.length).toBe(1);
+    expect(capturedBody).toBeDefined();
+    const part = capturedBody!.params.message.parts[0];
+    expect(part.data['version']).toBe('1.0');
+    expect(part.data['action']).toEqual({
+      name: 'submitOrder',
+      context: {prompt: 'Confirm Order'},
+    });
+    expect(part.metadata['mimeType']).toBe('application/a2ui+json');
+  });
 });

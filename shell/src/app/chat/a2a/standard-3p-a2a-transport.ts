@@ -15,6 +15,10 @@
  */
 
 import {Injectable, inject} from '@angular/core';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import type {CatalogJson} from '../../storage/models/catalog-storage.model';
+import {V09A2aStrategy} from '../../agent-chat/protocol/v0-9-a2a-strategy';
+import {V10A2aStrategy} from '../../agent-chat/protocol/v1-0-a2a-strategy';
 import {generateUuid as uuid} from '../../utils/uuid';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {
@@ -35,6 +39,9 @@ import {
 })
 export class Standard3pA2aTransport implements A2aTransport {
   private readonly logger = inject(ErrorLogger).withTag('[Standard3pA2aTransport]');
+  private readonly catalogManagement = inject(CatalogManagement, {optional: true});
+  private readonly v09Strategy = inject(V09A2aStrategy);
+  private readonly v10Strategy = inject(V10A2aStrategy);
   private readonly endpointCache = new Map<string, string>();
 
   private validateAndNormalizeBaseUrl(baseUrl: string): URL {
@@ -149,13 +156,55 @@ export class Standard3pA2aTransport implements A2aTransport {
     const taskId = options?.taskId || message.taskId;
     const contextId = options?.contextId || message.contextId;
 
-    const supportedExtensions = [
-      'https://a2ui.org/a2a-extension/a2ui/v0.9',
-      'https://a2ui.org/a2a-extension/a2ui/v0.8',
-    ];
+    const activeCatalogs: CatalogJson[] =
+      this.catalogManagement?.activeCatalogs() ??
+      (options?.supportedCatalogIds
+        ? options.supportedCatalogIds.map(id => ({$id: id}) as unknown as CatalogJson)
+        : []);
+
+    const isV10 = options?.protocolVersion === '1.0' || options?.protocolVersion === 'v1.0';
+    const isV09 = options?.protocolVersion === 'v0.9' || options?.protocolVersion === '0.9';
+
+    let configuration: Record<string, unknown>;
+    let supportedExtensions: string[];
+
+    if (isV10) {
+      configuration = this.v10Strategy.getClientConfiguration(activeCatalogs);
+      supportedExtensions = (configuration['extensions'] as string[]) || [];
+    } else if (isV09) {
+      configuration = this.v09Strategy.getClientConfiguration(activeCatalogs);
+      supportedExtensions = (configuration['extensions'] as string[]) || [];
+    } else {
+      const v09Config = this.v09Strategy.getClientConfiguration(activeCatalogs);
+      const v10Config = this.v10Strategy.getClientConfiguration(activeCatalogs);
+      supportedExtensions = [
+        ...((v10Config['extensions'] as string[]) || []),
+        ...((v09Config['extensions'] as string[]) || []),
+      ];
+      const supportedCatalogIds = (v10Config['supportedCatalogIds'] as string[]) || [];
+      configuration = {
+        ['capabilities']: {
+          ['extensions']: supportedExtensions.map(uri => ({
+            ['uri']: uri,
+            ...(supportedCatalogIds.length > 0
+              ? {['supportedCatalogIds']: supportedCatalogIds}
+              : {}),
+          })),
+          ...(supportedCatalogIds.length > 0 ? {['supportedCatalogIds']: supportedCatalogIds} : {}),
+        },
+        ['extensions']: supportedExtensions,
+        ['acceptedOutputModes']: [
+          'text/plain',
+          'application/json',
+          'application/a2ui+json',
+          'application/json+a2ui',
+        ],
+        ...(supportedCatalogIds.length > 0 ? {['supportedCatalogIds']: supportedCatalogIds} : {}),
+      };
+    }
 
     // Normalize message parts to standard A2A schema (explicitly tagging text, data, and file parts with kind).
-    // Note: Property keys use computed string literals to prevent Closure Compiler from renaming them during minification in google3.
+    // Note: Property keys use computed string literals to prevent Closure Compiler from renaming them during minification.
     const messageObj: Record<string, unknown> = {
       ['messageId']: messageId,
       ['role']: message.role || 'user',
@@ -206,14 +255,6 @@ export class Standard3pA2aTransport implements A2aTransport {
       ['extensions']: supportedExtensions,
       ...(contextId ? {['contextId']: contextId} : {}),
       ...(taskId ? {['taskId']: taskId} : {}),
-    };
-
-    const configuration = {
-      ['capabilities']: {
-        ['extensions']: supportedExtensions.map(uri => ({['uri']: uri})),
-      },
-      ['extensions']: supportedExtensions,
-      ['acceptedOutputModes']: ['text/plain', 'application/json', 'application/json+a2ui'],
     };
 
     // 1. Standard A2A JSON-RPC 2.0 envelope (preferred specification format for `POST /` and `POST /jsonrpc`).
@@ -331,20 +372,27 @@ export class Standard3pA2aTransport implements A2aTransport {
     action: unknown,
     options?: A2aTransportOptions,
   ): AsyncIterable<TaskStatusUpdateEvent> {
+    const isV10 = options?.protocolVersion === '1.0' || options?.protocolVersion === 'v1.0';
+    const strategy = isV10 ? this.v10Strategy : this.v09Strategy;
+
+    let actualAction = action;
+    let userMessage: string | undefined;
+    if (typeof action === 'object' && action !== null && !Array.isArray(action)) {
+      const actRecord = action as Record<string, unknown>;
+      if ('action' in actRecord) {
+        actualAction = actRecord['action'];
+      }
+      if (typeof actRecord['userMessage'] === 'string') {
+        userMessage = actRecord['userMessage'];
+      }
+    }
+    const actionPart = strategy.buildActionDataPart(actualAction, userMessage);
+
     // Encapsulate the UI action inside a standard A2A data part with `a2ui_action` metadata
     const actionMessage: A2aMessage = {
       role: 'user',
       taskId,
-      parts: [
-        {
-          data: {
-            ['action']: action,
-          },
-          metadata: {
-            ['type']: 'a2ui_action',
-          },
-        },
-      ],
+      parts: [actionPart],
     };
 
     yield* this.sendMessageStream(baseUrl, actionMessage, {

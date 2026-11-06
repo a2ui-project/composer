@@ -44,7 +44,17 @@ import {
   A2aBackendMode,
   AppConfigProvider,
 } from '../settings/app-config-provider/app-config-provider';
-import {DefaultTarget, HostCommunication} from '../shell/host-communication/host-communication';
+import {
+  DefaultTarget,
+  HostCommunication,
+  SendToServerEnvelope,
+} from '../shell/host-communication/host-communication';
+import type {
+  V10CallAgentFunctionPayload,
+  V10RendererFunctionResponsePayload,
+} from '../shell/cross-frame-validator/v1-0-wire-validator';
+import {V09A2aStrategy} from './protocol/v0-9-a2a-strategy';
+import {V10A2aStrategy} from './protocol/v1-0-a2a-strategy';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {asRecord} from '../utils/json';
@@ -64,8 +74,6 @@ import {
 } from './converters/a2a-ui-converter';
 import {A2aStreamEventParser} from './converters/a2a-stream-event-parser.service';
 import {
-  A2UI_MIME_TYPE,
-  A2UI_PROTOCOL_VERSION,
   catalogDefinesCanvas,
   mergeA2uiItems,
   partitionA2uiSurfacePayload,
@@ -207,24 +215,52 @@ export class A2aChatView implements OnInit {
   protected readonly isCanvasOpen = signal<boolean>(false);
   /** Active A2UI component items to render inside Canvas. */
   protected readonly activeCanvasPayload = signal<RenderA2uiItem[] | null>(null);
-  /** Whether a response stream turn is currently executing. */
-  protected readonly isStreaming = signal<boolean>(false);
+
+  private readonly _isStreaming = signal<boolean>(false);
+  private readonly _activeRpcCount = signal<number>(0);
+  /** Whether a response stream turn or RPC is currently executing. */
+  protected readonly isStreaming = computed(
+    () => this._isStreaming() || this._activeRpcCount() > 0,
+  );
 
   /** Width in pixels for the resizable message inspector panel. */
   readonly inspectorWidth = signal<number>(380);
   /** Whether the inspector panel is currently being resized by mouse drag. */
   protected readonly isResizingInspector = signal<boolean>(false);
 
+  private readonly elementRef = inject(ElementRef);
+  private readonly v09Strategy = inject(V09A2aStrategy);
+  private readonly v10Strategy = inject(V10A2aStrategy);
+  private readonly pendingFunctionCalls = new Map<
+    string,
+    {sourceWindow: Window; abortController: AbortController}
+  >();
+  private readonly ownedWindows = new Set<Window>();
   private activeAbortController?: AbortController;
   private configDialogRef?: MatDialogRef<void, void>;
 
   constructor() {
     this.hostCommunication.sendToServer$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(event => {
-        if (!event) return;
-        if (event.timestamp && event.timestamp < this.initTimestamp) return;
-        this.handleSendToServerAction(event.payload);
+      .subscribe(envelope => {
+        if (!envelope) return;
+        if (envelope.timestamp && envelope.timestamp < this.initTimestamp) return;
+        if (envelope.sourceWindow && !this.isOwnedWindow(envelope.sourceWindow)) return;
+        this.handleSendToServerAction(envelope.payload);
+      });
+
+    this.hostCommunication.callAgentFunction$
+      ?.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(env => {
+        if (!this.isOwnedWindow(env.sourceWindow)) return;
+        this.handleCallAgentFunction(env);
+      });
+
+    this.hostCommunication.rendererFunctionResponse$
+      ?.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(env => {
+        if (!this.isOwnedWindow(env.sourceWindow)) return;
+        this.handleRendererFunctionResponse(env);
       });
 
     this.errorLogger.errorStream$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(log => {
@@ -420,7 +456,19 @@ export class A2aChatView implements OnInit {
   }
 
   protected handleSendToServerAction(payload: unknown): void {
-    const rawPayload = payload as {version?: string; action?: unknown} | undefined;
+    const rawPayload = payload as
+      | {
+          version?: string;
+          action?: unknown;
+          callAgentFunction?: unknown;
+          rendererFunctionResponse?: unknown;
+        }
+      | undefined;
+
+    if (rawPayload && (rawPayload.callAgentFunction || rawPayload.rendererFunctionResponse)) {
+      return;
+    }
+
     let action = rawPayload?.action !== undefined ? rawPayload.action : payload;
 
     if (typeof action === 'string') {
@@ -437,17 +485,50 @@ export class A2aChatView implements OnInit {
       this.cancelActiveGeneration();
     }
 
-    // The v0.9 client-to-server schema accepts exactly two properties, `version` and `action`.
-    // `userAction` is the superseded v0.8 spelling and any extra key makes the payload invalid,
-    // so the action is forwarded verbatim under a minimal envelope.
-    const actionData: Record<string, unknown> = {
-      version: A2UI_PROTOCOL_VERSION,
-      action,
-    };
+    let actionUserMessage: string | undefined;
+    let actionMetadata: Record<string, unknown> | undefined;
+    if (typeof action === 'object' && action !== null) {
+      const actObj = action as Record<string, unknown>;
+      if (typeof actObj['userMessage'] === 'string' && actObj['userMessage'].trim().length > 0) {
+        actionUserMessage = actObj['userMessage'].trim();
+      }
+      if (typeof actObj['metadata'] === 'object' && actObj['metadata'] !== null) {
+        actionMetadata = actObj['metadata'] as Record<string, unknown>;
+      }
+    }
+
+    const rawRecord =
+      typeof payload === 'object' && payload !== null
+        ? (payload as Record<string, unknown>)
+        : undefined;
+    if (
+      !actionUserMessage &&
+      typeof rawRecord?.['userMessage'] === 'string' &&
+      rawRecord['userMessage'].trim().length > 0
+    ) {
+      actionUserMessage = rawRecord['userMessage'].trim();
+    }
+    if (
+      !actionMetadata &&
+      typeof rawRecord?.['metadata'] === 'object' &&
+      rawRecord['metadata'] !== null
+    ) {
+      actionMetadata = rawRecord['metadata'] as Record<string, unknown>;
+    }
+
+    const isV10 =
+      this.catalogManagement.activeProtocolVersion() === 'v1.0' ||
+      this.catalogManagement.activeCatalog()?.protocolVersion === '1.0' ||
+      rawPayload?.version === '1.0' ||
+      rawPayload?.version === 'v1.0' ||
+      Boolean(actionUserMessage);
+
+    const strategy = isV10 ? this.v10Strategy : this.v09Strategy;
+    const actionPart = strategy.buildActionDataPart(action, actionUserMessage, actionMetadata);
 
     const contextId = this.activeContextId();
 
-    const actionText = resolveUserActionText(action);
+    const actionText = actionUserMessage || resolveUserActionText(action);
 
     const userUiMessage: UiMessage = {
       id: uuid(),
@@ -458,16 +539,7 @@ export class A2aChatView implements OnInit {
 
     const a2aMsg: A2aMessage = {
       role: 'user',
-      parts: [
-        {text: actionText},
-        {
-          data: actionData,
-          metadata: {
-            mimeType: A2UI_MIME_TYPE,
-            type: 'a2ui_action',
-          },
-        },
-      ],
+      parts: [{text: actionText}, actionPart],
       ...(contextId ? {contextId} : {}),
     };
 
@@ -518,7 +590,7 @@ export class A2aChatView implements OnInit {
   }
 
   private initTurnAbortController(): AbortController {
-    this.isStreaming.set(true);
+    this._isStreaming.set(true);
     if (this.activeAbortController) {
       this.activeAbortController.abort();
     }
@@ -541,7 +613,7 @@ export class A2aChatView implements OnInit {
       ),
     );
     if (this.activeAbortController === controller) {
-      this.isStreaming.set(false);
+      this._isStreaming.set(false);
       this.activeAbortController = undefined;
     }
   }
@@ -589,7 +661,7 @@ export class A2aChatView implements OnInit {
 
   private finalizeStreamingTurn(agentMessageId: string, controller: AbortController): void {
     if (this.activeAbortController === controller) {
-      this.isStreaming.set(false);
+      this._isStreaming.set(false);
       this.activeAbortController = undefined;
     }
 
@@ -800,7 +872,8 @@ export class A2aChatView implements OnInit {
       this.activeAbortController.abort();
       this.activeAbortController = undefined;
     }
-    this.isStreaming.set(false);
+    this.abortAllPendingFunctionCalls();
+    this._isStreaming.set(false);
     this.messages.update(msgs => msgs.map(m => (m.isStreaming ? {...m, isStreaming: false} : m)));
   }
 
@@ -931,5 +1004,173 @@ export class A2aChatView implements OnInit {
 
   private recordInspectorEvent(event: MessageInspectorEvent): void {
     this.inspectorEvents.update(evts => [event, ...evts].slice(0, 500));
+  }
+
+  private abortAllPendingFunctionCalls(): void {
+    for (const entry of this.pendingFunctionCalls.values()) {
+      entry.abortController.abort();
+    }
+    this.pendingFunctionCalls.clear();
+    this._activeRpcCount.set(0);
+  }
+
+  private isOwnedWindow(win: Window | null | undefined): boolean {
+    if (!win) return false;
+    if (this.ownedWindows.has(win)) return true;
+    const element = this.elementRef?.nativeElement as HTMLElement | undefined;
+    if (!element) return false;
+    const iframes = element.querySelectorAll('iframe');
+    for (let i = 0; i < iframes.length; i++) {
+      if (iframes[i].contentWindow === win) {
+        this.ownedWindows.add(win);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private async handleCallAgentFunction(
+    env: SendToServerEnvelope & {
+      payload: {callAgentFunction: V10CallAgentFunctionPayload};
+    },
+  ): Promise<void> {
+    const callPayload = env.payload.callAgentFunction;
+    const functionCallId = callPayload?.functionCallId;
+    const sourceWindow = env.sourceWindow;
+    if (!sourceWindow || !functionCallId) return;
+
+    const url = this.configProvider.a2aAgentUrl();
+    if (!url) {
+      const errorMsg: RenderA2uiItem = {
+        version: '1.0',
+        agentFunctionResponse: {
+          functionCallId,
+          error: {
+            code: 'NO_AGENT_CONNECTED',
+            message: 'No agent endpoint configured',
+          },
+        },
+      } as RenderA2uiItem;
+      this.hostCommunication.sendRenderA2UI([errorMsg], sourceWindow);
+      return;
+    }
+
+    const existing = this.pendingFunctionCalls.get(functionCallId);
+    if (existing) {
+      existing.abortController.abort();
+      this._activeRpcCount.update(c => Math.max(0, c - 1));
+    }
+
+    const abortController = new AbortController();
+    this.pendingFunctionCalls.set(functionCallId, {sourceWindow, abortController});
+    this._activeRpcCount.update(c => c + 1);
+
+    const callPart = this.v10Strategy.buildCallAgentFunctionDataPart(callPayload);
+    const callMessage: A2aMessage = {
+      role: 'user',
+      parts: [callPart],
+      ...(this.activeContextId() ? {contextId: this.activeContextId()} : {}),
+      ...(this.activeTaskId() ? {taskId: this.activeTaskId()!} : {}),
+    };
+
+    let hasReceivedResponse = false;
+
+    try {
+      const stream = this.a2aTransport.sendMessageStream(url, callMessage, {
+        tenantId: this.configProvider.a2aTenantId() || undefined,
+        contextId: this.activeContextId(),
+        taskId: this.activeTaskId() || undefined,
+        abortSignal: abortController.signal,
+        protocolVersion: '1.0',
+      });
+
+      for await (const chunk of stream) {
+        if (abortController.signal.aborted) break;
+        const parsed = this.streamEventParser.parse(chunk);
+        if (parsed.a2uiItems && parsed.a2uiItems.length > 0) {
+          for (const item of parsed.a2uiItems) {
+            if (item.agentFunctionResponse?.functionCallId === functionCallId) {
+              hasReceivedResponse = true;
+              this.hostCommunication.sendRenderA2UI([item], sourceWindow);
+            } else if (item.callRendererFunction) {
+              this.hostCommunication.sendRenderA2UI([item], sourceWindow);
+            }
+          }
+        }
+      }
+    } catch (err: unknown) {
+      if (!abortController.signal.aborted && !hasReceivedResponse) {
+        const errorMsg: RenderA2uiItem = {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId,
+            error: {
+              code: 'AGENT_FUNCTION_ERROR',
+              message: err instanceof Error ? err.message : 'Agent function call failed',
+            },
+          },
+        } as RenderA2uiItem;
+        this.hostCommunication.sendRenderA2UI([errorMsg], sourceWindow);
+        hasReceivedResponse = true;
+      }
+    } finally {
+      if (!hasReceivedResponse && !abortController.signal.aborted) {
+        const errorMsg: RenderA2uiItem = {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId,
+            error: {
+              code: 'AGENT_FUNCTION_ERROR',
+              message: 'Stream completed without returning agentFunctionResponse',
+            },
+          },
+        } as RenderA2uiItem;
+        this.hostCommunication.sendRenderA2UI([errorMsg], sourceWindow);
+      }
+      const current = this.pendingFunctionCalls.get(functionCallId);
+      if (current?.abortController === abortController) {
+        this.pendingFunctionCalls.delete(functionCallId);
+        this._activeRpcCount.update(c => Math.max(0, c - 1));
+      }
+    }
+  }
+
+  private async handleRendererFunctionResponse(
+    env: SendToServerEnvelope & {
+      payload: {rendererFunctionResponse: V10RendererFunctionResponsePayload};
+    },
+  ): Promise<void> {
+    const payload = env.payload.rendererFunctionResponse;
+    const url = this.configProvider.a2aAgentUrl();
+    if (!url) return;
+
+    const responsePart = this.v10Strategy.buildRendererFunctionResponseDataPart(payload);
+    const responseMessage: A2aMessage = {
+      role: 'user',
+      parts: [responsePart],
+      ...(this.activeContextId() ? {contextId: this.activeContextId()} : {}),
+      ...(this.activeTaskId() ? {taskId: this.activeTaskId()!} : {}),
+    };
+
+    try {
+      const stream = this.a2aTransport.sendMessageStream(url, responseMessage, {
+        tenantId: this.configProvider.a2aTenantId() || undefined,
+        contextId: this.activeContextId(),
+        taskId: this.activeTaskId() || undefined,
+        protocolVersion: '1.0',
+      });
+      for await (const chunk of stream) {
+        const parsed = this.streamEventParser.parse(chunk);
+        if (parsed.a2uiItems && parsed.a2uiItems.length > 0 && env.sourceWindow) {
+          for (const item of parsed.a2uiItems) {
+            if (item.callRendererFunction) {
+              this.hostCommunication.sendRenderA2UI([item], env.sourceWindow);
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore or log error
+    }
   }
 }

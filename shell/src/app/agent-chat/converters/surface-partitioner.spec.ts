@@ -737,7 +737,7 @@ describe('SurfacePartitioner', () => {
       expect(warn).toHaveBeenCalledOnce();
       expect(warn).toHaveBeenCalledWith(
         {
-          message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9.',
+          message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9 or 1.0.',
           sourceTag: '[A2UI]',
         },
         legacyItem,
@@ -855,6 +855,223 @@ describe('SurfacePartitioner', () => {
       );
       expect(componentIds).toEqual(['root', 'card-1', 'card-3']);
       expect(componentIds).not.toContain('card-2');
+    });
+  });
+
+  describe('A2UI v1.0 single-message createSurface & RPC partitioning', () => {
+    it('normalizes version v1.0 and 1.0 to canonical 1.0 without leading v and strips prototype pollution', () => {
+      const raw = [
+        {
+          ['__proto__']: {polluted: true},
+          version: 'v1.0',
+          createSurface: {
+            surfaceId: 'surf_v1',
+            catalogId: 'https://a2ui.org/specification/v1_0/basic_catalog.json',
+            sendDataModel: true,
+            theme: 'light',
+            dataModel: {greeting: 'Hello'},
+            components: [
+              {
+                id: 'root',
+                component: 'Card',
+                children: ['t1'],
+                ['constructor']: {bad: true},
+              },
+              {id: 't1', component: 'Text', text: 'Hi'},
+            ] as unknown as Record<string, unknown>[],
+          },
+        },
+      ];
+      const normalized = normalizeA2uiItems(raw);
+      expect(normalized.length).toBe(1);
+      expect(normalized[0].version).toBe('1.0');
+      expect(Object.hasOwn(normalized[0], '__proto__')).toBe(false);
+      expect(normalized[0].createSurface?.surfaceId).toBe('surf_v1');
+      expect(normalized[0].createSurface?.['theme']).toBe('light');
+      expect(normalized[0].createSurface?.dataModel).toEqual({greeting: 'Hello'});
+      expect(normalized[0].createSurface?.components?.length).toBe(2);
+      expect(
+        Object.hasOwn(
+          normalized[0].createSurface?.components?.[0] as Record<string, unknown>,
+          'constructor',
+        ),
+      ).toBe(false);
+    });
+
+    it('partitions single-message v1.0 createSurface containing Canvas into inline payload and canvas artifact', () => {
+      const raw = [
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 'surf_v1_canvas',
+            catalogId: 'https://a2ui.org/specification/v1_0/basic_catalog.json',
+            sendDataModel: true,
+            theme: 'dark',
+            dataModel: {status: 'active'},
+            components: [
+              {
+                id: 'root',
+                component: 'Column',
+                children: ['header_card', 'canvas_node'],
+              },
+              {
+                id: 'header_card',
+                component: 'Text',
+                text: 'Order Summary Header',
+              },
+              {
+                id: 'canvas_node',
+                component: {
+                  Canvas: {
+                    cardTitle: 'Interactive Map Canvas',
+                    cardDescription: 'Explore points of interest',
+                    cardIcon: 'map',
+                    autoOpen: true,
+                    children: ['map_content'],
+                  },
+                },
+              },
+              {
+                id: 'map_content',
+                component: 'Text',
+                text: 'Map View Content',
+              },
+            ],
+          },
+        },
+      ];
+
+      const partitioned = partitionA2uiSurfacePayload(normalizeA2uiItems(raw));
+      expect(partitioned.hasCanvas).toBe(true);
+      expect(partitioned.inlinePayload).not.toBeNull();
+      expect(partitioned.inlinePayload?.length).toBe(1);
+      expect(partitioned.inlinePayload?.[0].version).toBe('1.0');
+      const inlineCs = partitioned.inlinePayload?.[0].createSurface;
+      expect(inlineCs?.surfaceId).toBe('surf_v1_canvas');
+      expect(inlineCs?.['theme']).toBe('dark');
+      expect(inlineCs?.dataModel).toEqual({status: 'active'});
+      // Inline components should contain root and header_card, but NOT canvas_node or map_content
+      const inlineCompIds = (inlineCs?.components as Array<Record<string, unknown>>).map(
+        c => c['id'],
+      );
+      expect(inlineCompIds).toContain('root');
+      expect(inlineCompIds).toContain('header_card');
+      expect(inlineCompIds).not.toContain('canvas_node');
+      expect(inlineCompIds).not.toContain('map_content');
+
+      // Canvas artifact should contain the canvas components with canonical 1.0 version
+      expect(partitioned.canvasArtifacts.length).toBe(1);
+      expect(partitioned.canvasArtifacts[0].cardTitle).toBe('Interactive Map Canvas');
+      expect(partitioned.canvasArtifacts[0].payload[0].version).toBe('1.0');
+      expect(partitioned.canvasArtifacts[0].payload[0].createSurface?.surfaceId).toBe(
+        'surf_v1_canvas',
+      );
+    });
+
+    it('recognizes callRendererFunction and agentFunctionResponse in isA2uiItem and normalizeA2uiItems', () => {
+      const raw = [
+        {
+          version: '1.0',
+          callRendererFunction: {
+            surfaceId: 'surf_v1',
+            functionCallId: 'call_1',
+            callFunction: {['@call']: 'focusInput'},
+          },
+        },
+        {
+          version: 'v1.0',
+          agentFunctionResponse: {
+            functionCallId: 'call_2',
+            value: {result: 'ok'},
+          },
+        },
+      ];
+      expect(isA2uiItem(raw[0])).toBe(true);
+      expect(isA2uiItem(raw[1])).toBe(true);
+      const normalized = normalizeA2uiItems(raw);
+      expect(normalized.length).toBe(2);
+      expect(normalized[0].version).toBe('1.0');
+      expect(normalized[1].version).toBe('1.0');
+      expect(normalized[0].callRendererFunction?.functionCallId).toBe('call_1');
+      expect(normalized[1].agentFunctionResponse?.functionCallId).toBe('call_2');
+    });
+
+    it('preserves canonical version 1.0 on multi-message v1.0 surfaces (createSurface + updateComponents) and extracts @path cardTitle', () => {
+      const raw = [
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 'surf_v1_multi',
+            catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+          },
+        },
+        {
+          version: '1.0',
+          updateComponents: {
+            surfaceId: 'surf_v1_multi',
+            components: [
+              {
+                id: 'root',
+                component: 'Column',
+                children: ['header_text', 'canvas_panel'],
+              },
+              {
+                id: 'header_text',
+                component: 'Text',
+                text: 'Summary',
+              },
+              {
+                id: 'canvas_panel',
+                component: 'Canvas',
+                cardTitle: {'@path': '/canvasHeading'},
+                children: ['canvas_body'],
+              },
+              {
+                id: 'canvas_body',
+                component: 'Text',
+                text: 'Details',
+              },
+            ],
+          },
+        },
+      ];
+
+      const partitioned = partitionA2uiSurfacePayload(normalizeA2uiItems(raw));
+      expect(partitioned.hasCanvas).toBe(true);
+      expect(partitioned.inlinePayload?.every(item => item.version === '1.0')).toBe(true);
+      expect(partitioned.canvasArtifacts[0].cardTitle).toBe('/canvasHeading');
+      expect(partitioned.canvasArtifacts[0].payload.every(item => item.version === '1.0')).toBe(
+        true,
+      );
+    });
+
+    it('normalizes versionless v1.0 surface messages with canonical version 1.0', () => {
+      const raw = [
+        {
+          createSurface: {
+            surfaceId: 'surf_versionless_v1',
+            catalogId: 'https://a2ui.org/specification/v1_0/basic_catalog.json',
+            components: [{id: 'root', component: 'Text', text: 'Auto detected v1'}],
+          },
+        },
+        {
+          updateComponents: {
+            surfaceId: 'surf_versionless_v1',
+            components: [
+              {
+                id: 'comp2',
+                component: 'Button',
+                title: 'Submit',
+                action: {'@call': 'doSubmit'},
+              },
+            ],
+          },
+        },
+      ];
+      const normalized = normalizeA2uiItems(raw);
+      expect(normalized.length).toBe(2);
+      expect(normalized[0].version).toBe('1.0');
+      expect(normalized[1].version).toBe('1.0');
     });
   });
 });
