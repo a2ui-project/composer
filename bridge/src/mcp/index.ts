@@ -35,17 +35,6 @@ import {UpdateDataModelApi, UpdateDataModelImplementation} from './functions/upd
 /** Identifier of the catalog these functions implement. */
 export const MCP_CATALOG_ID = 'https://a2ui.org/specification/v0_9/catalogs/mcp/mcp_catalog.json';
 
-/**
- * API definitions and schemas for the catalog's data transformation functions.
- */
-export const DATA_FUNCTION_APIS: readonly FunctionApiDefinition[] = [
-  JmespathApi,
-  SplitApi,
-  RegexCaptureApi,
-  RegexReplaceApi,
-  UpdateDataModelApi,
-];
-
 /** Function implementations for the catalog's data transformation functions. */
 export const DATA_FUNCTIONS: FunctionImplementation[] = [
   JmespathImplementation,
@@ -102,3 +91,8 @@ export {RegexReplaceApi, RegexReplaceImplementation} from './functions/regexRepl
 export {SplitApi, SplitImplementation} from './functions/split.js';
 export {UpdateDataModelApi, UpdateDataModelImplementation} from './functions/updateDataModel.js';
 export {isThenable} from './functions/common.js';
+
+export * from './dynamic-value-strategy.js';
+export * from './v0-9-dynamic-value-strategy.js';
+export * from './v1-0-dynamic-value-strategy.js';
+export * from './v1-0-mcp-catalog.js';

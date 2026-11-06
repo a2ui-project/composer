@@ -26,7 +26,7 @@ import {
 import {search as searchJmespath} from 'jmespath';
 import {z} from 'zod/v3';
 
-import {resolveDynamicValueDeep} from '../v0-9-dynamic-value-strategy.js';
+import {resolveDynamicValueDeep} from '../dynamic-value-strategy.js';
 import {asyncable, type FunctionApiDefinition, withSettledArgs} from './common.js';
 
 /**

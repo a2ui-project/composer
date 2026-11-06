@@ -25,7 +25,7 @@ import {
 } from '@a2ui/web_core/v0_9';
 import {z} from 'zod/v3';
 
-import {resolveDynamicValueDeep} from '../v0-9-dynamic-value-strategy.js';
+import {isPrototypePollutionKey, resolveDynamicValueDeep} from '../dynamic-value-strategy.js';
 import {asyncable, type FunctionApiDefinition, withSettledArgs} from './common.js';
 
 /** Function API definition for `updateDataModel`. */
@@ -68,6 +68,12 @@ export const UpdateDataModelImplementation: FunctionImplementation = createFunct
         );
       }
       for (const [path, value] of Object.entries(updates as Record<string, unknown>)) {
+        if (
+          isPrototypePollutionKey(path) ||
+          path.split('/').some(segment => isPrototypePollutionKey(segment))
+        ) {
+          continue;
+        }
         // Clone objects and arrays to prevent mutations from affecting cached tool results.
         context.set(
           path,
