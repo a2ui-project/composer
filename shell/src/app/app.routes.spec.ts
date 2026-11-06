@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {ThemePreference} from 'a2ui-bridge';
 import {TestBed} from '@angular/core/testing';
 import {provideRouter, Router} from '@angular/router';
 import {RouterTestingHarness} from '@angular/router/testing';
@@ -32,7 +33,6 @@ import {
   AppConfigProvider,
   EnvMode,
   AuthType,
-  ThemePreference,
 } from './settings/app-config-provider/app-config-provider';
 import {LlmClient} from './chat/llm-client/llm-client';
 import {CatalogManagement} from './storage/catalog-management/catalog-management';

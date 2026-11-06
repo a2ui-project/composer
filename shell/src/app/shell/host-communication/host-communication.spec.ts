@@ -17,11 +17,8 @@
 import {TestBed} from '@angular/core/testing';
 import {DefaultTarget, HostCommunication, MessageEnvelope} from './host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {describe, it, expect, beforeEach, afterEach, vi, type Mock} from 'vitest';
 import {effect, signal, WritableSignal} from '@angular/core';
@@ -2319,6 +2316,216 @@ describe('HostCommunication', () => {
         RENDERER_ORIGIN,
       );
       expect(unreadyCard.frameWindow.postMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('SEND_TO_SERVER and Multi-Catalog Routing', () => {
+    let mockIframe: HTMLIFrameElement;
+    let mockIframeWindow: Window;
+
+    beforeEach(() => {
+      mockIframeWindow = {
+        postMessage: vi.fn(),
+      } as unknown as Window;
+      mockIframe = {
+        contentWindow: mockIframeWindow,
+      } as unknown as HTMLIFrameElement;
+      service.registerIframe(mockIframe);
+    });
+
+    it('emits validated SEND_TO_SERVER messages on sendToServer$ with sourceWindow', () => {
+      const emitted: unknown[] = [];
+      service.sendToServer$.subscribe(e => emitted.push(e));
+
+      const event = new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            version: '1.0',
+            action: {name: 'test_action'},
+          },
+        },
+      });
+      window.dispatchEvent(event);
+
+      expect(emitted.length).toBe(1);
+      expect(emitted[0]).toEqual(
+        expect.objectContaining({
+          payload: {
+            version: '1.0',
+            action: {name: 'test_action'},
+          },
+          sourceWindow: mockIframeWindow,
+          origin: 'http://localhost:3000',
+        }),
+      );
+    });
+
+    it('routes callAgentFunction to callAgentFunction$ stream', () => {
+      const emitted: unknown[] = [];
+      service.callAgentFunction$.subscribe(e => emitted.push(e));
+
+      const event = new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            version: '1.0',
+            callAgentFunction: {
+              surfaceId: 'surf-1',
+              functionCallId: 'fn-1',
+              call: 'doSomething',
+            },
+          },
+        },
+      });
+      window.dispatchEvent(event);
+
+      expect(emitted.length).toBe(1);
+      expect((emitted[0] as {sourceWindow: Window | null}).sourceWindow).toBe(mockIframeWindow);
+      expect(
+        (
+          emitted[0] as {
+            payload: {callAgentFunction: {call: string}};
+          }
+        ).payload.callAgentFunction.call,
+      ).toBe('doSomething');
+    });
+
+    it('routes rendererFunctionResponse to rendererFunctionResponse$ stream', () => {
+      const emitted: unknown[] = [];
+      service.rendererFunctionResponse$.subscribe(e => emitted.push(e));
+
+      const event = new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            version: '1.0',
+            rendererFunctionResponse: {
+              functionCallId: 'fn-2',
+              value: {success: true},
+            },
+          },
+        },
+      });
+      window.dispatchEvent(event);
+
+      expect(emitted.length).toBe(1);
+      expect((emitted[0] as {sourceWindow: Window | null}).sourceWindow).toBe(mockIframeWindow);
+      expect(
+        (
+          emitted[0] as {
+            payload: {rendererFunctionResponse: {value: {success: boolean}}};
+          }
+        ).payload.rendererFunctionResponse.value,
+      ).toEqual({success: true});
+    });
+
+    it('routes action to action$ stream', () => {
+      const emitted: unknown[] = [];
+      service.action$.subscribe(e => emitted.push(e));
+
+      const event = new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            version: '1.0',
+            action: {name: 'click_btn'},
+          },
+        },
+      });
+      window.dispatchEvent(event);
+
+      expect(emitted.length).toBe(1);
+      expect((emitted[0] as {sourceWindow: Window | null}).sourceWindow).toBe(mockIframeWindow);
+      expect(
+        (
+          emitted[0] as {
+            payload: {action: {name: string}};
+          }
+        ).payload.action.name,
+      ).toBe('click_btn');
+    });
+
+    it('routes error to sendToServerError$ stream', () => {
+      const emitted: unknown[] = [];
+      service.sendToServerError$.subscribe(e => emitted.push(e));
+
+      const event = new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            version: '1.0',
+            error: {message: 'Server error', code: 'INTERNAL'},
+          },
+        },
+      });
+      window.dispatchEvent(event);
+
+      expect(emitted.length).toBe(1);
+      expect((emitted[0] as {sourceWindow: Window | null}).sourceWindow).toBe(mockIframeWindow);
+      expect(
+        (
+          emitted[0] as {
+            payload: {error: {code: string}};
+          }
+        ).payload.error.code,
+      ).toBe('INTERNAL');
+    });
+
+    it('rejects malformed SEND_TO_SERVER and does not emit on sendToServer$', () => {
+      const emitted: unknown[] = [];
+      service.sendToServer$.subscribe(e => emitted.push(e));
+
+      const event = new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            version: 'v1.0',
+            callAgentFunction: {
+              // Missing surfaceId, functionCallId, and function name
+            },
+          },
+        },
+      });
+      window.dispatchEvent(event);
+
+      expect(emitted.length).toBe(0);
+    });
+
+    it('forwards A2UI_CATALOG with multi-catalog array on messageStream$', () => {
+      const emitted: MessageEnvelope[] = [];
+      service.messageStream$.subscribe(e => emitted.push(e));
+
+      const catalogPayload = {
+        catalog: {catalogId: 'cat-main'},
+        catalogs: [{catalogId: 'cat-1'}, {catalogId: 'cat-2'}],
+      };
+      const event = new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          payload: catalogPayload,
+        },
+      });
+      window.dispatchEvent(event);
+
+      const catalogEnvelope = emitted.find(e => e.type === PreviewBridgeMessageType.A2UI_CATALOG);
+      expect(catalogEnvelope).toBeDefined();
+      expect(catalogEnvelope?.payload).toEqual(catalogPayload);
+      expect(catalogEnvelope?.sourceWindow).toBe(mockIframeWindow);
     });
   });
 });

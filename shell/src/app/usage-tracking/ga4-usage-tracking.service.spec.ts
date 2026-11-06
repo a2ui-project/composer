@@ -17,13 +17,9 @@
 import {DOCUMENT} from '@angular/common';
 import {signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {afterEach, beforeEach, describe, expect, it, vi, type Mock} from 'vitest';
-import {
-  AppConfigProvider,
-  EnvMode,
-  ThemePreference,
-} from '../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider, EnvMode} from '../settings/app-config-provider/app-config-provider';
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
@@ -69,6 +65,8 @@ describe('Ga4UsageTrackingService', () => {
 
   const mockCatalogManagement = {
     activeCatalog: signal({catalogId: 'basic-catalog', title: 'Basic Catalog'}),
+    hasReceivedCatalogResponse: signal(true),
+    activeProtocolVersion: signal('v0.9'),
   };
 
   beforeEach(() => {
@@ -773,6 +771,54 @@ describe('Ga4UsageTrackingService', () => {
       expect((calls[0][2] as Record<string, unknown>)['source_tag']).toEqual(validTag);
       expect((calls[1][2] as Record<string, unknown>)['source_tag']).toEqual('[Unknown]');
     });
+
+    it('preserves @-prefixed invalid properties like @call, @args, and @path', () => {
+      service.trackComposerError({
+        sourceTag: '[RPC]',
+        errorCategory: 'FUNCTION_CALL_ERROR',
+        invalidProperty: '@call',
+      });
+      service.trackComposerError({
+        sourceTag: '[RPC]',
+        errorCategory: 'FUNCTION_CALL_ERROR',
+        invalidProperty: '@args',
+      });
+      service.trackComposerError({
+        sourceTag: '[DataModel]',
+        errorCategory: 'MUTATION_ERROR',
+        invalidProperty: '@path',
+      });
+
+      const calls = mockWindow.gtag!.mock.calls;
+      expect((calls[0][2] as Record<string, unknown>)['invalid_property']).toBe('@call');
+      expect((calls[1][2] as Record<string, unknown>)['invalid_property']).toBe('@args');
+      expect((calls[2][2] as Record<string, unknown>)['invalid_property']).toBe('@path');
+    });
+
+    it('passes explicit protocolVersion parameter in trackComposerError when provided', () => {
+      service.trackComposerError({
+        sourceTag: '[Protocol]',
+        errorCategory: 'PROTOCOL_VERSION_MISMATCH',
+        protocolVersion: 'v1.0',
+      });
+
+      const calls = mockWindow.gtag!.mock.calls;
+      expect((calls[0][2] as Record<string, unknown>)['protocol_version']).toBe('v1.0');
+    });
+
+    it('attaches empty string for protocol_version before handshake response is received', () => {
+      mockCatalogManagement.hasReceivedCatalogResponse.set(false);
+      service.trackPageView({pagePath: '/chat'});
+
+      const calls = mockWindow.gtag!.mock.calls;
+      expect((calls[0][2] as Record<string, unknown>)['protocol_version']).toBe('');
+
+      mockCatalogManagement.hasReceivedCatalogResponse.set(true);
+      mockCatalogManagement.activeProtocolVersion.set('v1.0');
+      service.trackPageView({pagePath: '/chat2'});
+
+      expect((calls[1][2] as Record<string, unknown>)['protocol_version']).toBe('v1.0');
+    });
   });
 });
 
@@ -799,7 +845,15 @@ describe('Ga4UsageTrackingService (Disabled)', () => {
         {provide: StartupResolution, useValue: {resolvedComponentUrl: signal('')}},
         {provide: StartupConfigStateService, useValue: {activeCatalogId: signal('')}},
         {provide: AppConfigProvider, useValue: {themePreference: signal('system')}},
-        {provide: CatalogManagement, useValue: {activeCatalogTitle: signal('')}},
+        {
+          provide: CatalogManagement,
+          useValue: {
+            activeCatalogTitle: signal(''),
+            activeCatalog: signal(null),
+            hasReceivedCatalogResponse: signal(false),
+            activeProtocolVersion: signal('v0.9'),
+          },
+        },
         {provide: DOCUMENT, useValue: mockDocument},
       ],
     });

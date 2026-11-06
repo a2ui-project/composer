@@ -17,7 +17,7 @@
 import {Component, signal, WritableSignal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {PreviewBridgeMessageType, type SurfaceResizePayload} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, type SurfaceResizePayload, ThemePreference} from 'a2ui-bridge';
 
 import {ReplaySubject} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
@@ -27,10 +27,7 @@ import {
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {bridgeEnvelope, surfaceResizeEnvelope} from '../testing/bridge-envelopes';
 import {showGuestDocument} from '../testing/guest-document';
 import {buildRendererUrl} from '../renderer-url';

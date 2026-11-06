@@ -87,6 +87,7 @@ export const SUBCLASS_DESCRIPTIONS = Object.fromEntries(
  */
 export const KNOWN_DESCRIPTIONS = {
   error_type: 'Functional error type classification',
+  protocol_version: 'Active A2UI protocol version (v0.9 or v1.0)',
   ...SUBCLASS_DESCRIPTIONS,
 };
 

@@ -32,12 +32,11 @@ import {
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {signal, WritableSignal, Signal, computed} from '@angular/core';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {
   AppConfigProvider,
   AuthType,
   EnvMode,
-  ThemePreference,
   A2aBackendMode,
 } from '../app-config-provider/app-config-provider';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';

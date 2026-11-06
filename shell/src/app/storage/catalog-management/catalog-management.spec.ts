@@ -422,12 +422,14 @@ describe('CatalogManagement', () => {
 
     expect(indexedDbStorageMock.getCatalogRecord).toHaveBeenCalledWith('http://localhost/renderer');
     expect(service.catalogHashDelta()).toBe(true);
-    expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledWith({
-      rendererUrl: 'http://localhost/renderer',
-      catalogString: service.lastCatalogString(),
-      checksumHash: service.lastChecksumHash(),
-      lastAccessed: expect.any(Number),
-    });
+    expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rendererUrl: 'http://localhost/renderer',
+        catalogString: service.lastCatalogString(),
+        checksumHash: service.lastChecksumHash(),
+        lastAccessed: expect.any(Number),
+      }),
+    );
 
     expect(service.activeCatalog()).toEqual(payload);
     expect(service.activeCatalogTitle()).toBe('New Catalog');
@@ -465,12 +467,14 @@ describe('CatalogManagement', () => {
 
     expect(indexedDbStorageMock.getCatalogRecord).toHaveBeenCalledWith('http://localhost/renderer');
     expect(service.catalogHashDelta()).toBe(true);
-    expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledWith({
-      rendererUrl: 'http://localhost/renderer',
-      catalogString: service.lastCatalogString(),
-      checksumHash: service.lastChecksumHash(),
-      lastAccessed: expect.any(Number),
-    });
+    expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rendererUrl: 'http://localhost/renderer',
+        catalogString: service.lastCatalogString(),
+        checksumHash: service.lastChecksumHash(),
+        lastAccessed: expect.any(Number),
+      }),
+    );
 
     expect(service.activeCatalog()).toEqual(payload);
     expect(service.activeCatalogTitle()).toBe('Updated Catalog');
@@ -525,12 +529,14 @@ describe('CatalogManagement', () => {
     vi.spyOn(crypto.subtle, 'digest').mockResolvedValue(new Uint8Array(32).buffer);
 
     expect(service.catalogHashDelta()).toBe(false);
-    expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledWith({
-      rendererUrl: 'http://localhost/renderer',
-      catalogString: computedCatalogString,
-      checksumHash: computedHash,
-      lastAccessed: expect.any(Number),
-    });
+    expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rendererUrl: 'http://localhost/renderer',
+        catalogString: computedCatalogString,
+        checksumHash: computedHash,
+        lastAccessed: expect.any(Number),
+      }),
+    );
   });
 
   it('handles insecure context when crypto.subtle is unavailable', async () => {
@@ -809,5 +815,295 @@ describe('CatalogManagement', () => {
     expect(service.handshakeState()).toBe('settled');
 
     TestBed.resetTestingModule();
+  });
+
+  describe('protocol versioning and multi-catalog support', () => {
+    it('defaults activeProtocolVersion to v0.9 and hasReceivedCatalogResponse to false before handshake', () => {
+      expect(service.hasReceivedCatalogResponse()).toBe(false);
+      expect(service.activeProtocolVersion()).toBe('v0.9');
+      expect(service.activeCatalogs()).toEqual([]);
+    });
+
+    it('settles with activeProtocolVersion v1.0 on empty catalog response {}', () => {
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {},
+        timestamp: 4001,
+      });
+      TestBed.tick();
+
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.handshakeState()).toBe('settled');
+      expect(service.activeCatalog()).toBeNull();
+      expect(service.activeCatalogs()).toEqual([]);
+      expect(service.activeProtocolVersion()).toBe('v1.0');
+    });
+
+    it('settles with activeProtocolVersion v1.0 on { catalog: null }', () => {
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalog: null},
+        timestamp: 4002,
+      });
+      TestBed.tick();
+
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.handshakeState()).toBe('settled');
+      expect(service.activeCatalog()).toBeNull();
+      expect(service.activeCatalogs()).toEqual([]);
+      expect(service.activeProtocolVersion()).toBe('v1.0');
+    });
+
+    async function flushMicrotasks(count = 10): Promise<void> {
+      for (let i = 0; i < count; i++) {
+        await Promise.resolve();
+      }
+    }
+
+    it('settles with activeProtocolVersion v1.0 when catalog has protocolVersion 1.0', async () => {
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalogId: 'cat-v1',
+          protocolVersion: '1.0',
+          components: {},
+        },
+        timestamp: 4003,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.activeProtocolVersion()).toBe('v1.0');
+    });
+
+    it('settles with activeProtocolVersion v1.0 when catalog has protocolVersion v1.0', async () => {
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalogId: 'cat-v1',
+          protocolVersion: 'v1.0',
+          components: {},
+        },
+        timestamp: 4004,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.activeProtocolVersion()).toBe('v1.0');
+    });
+
+    it('settles with activeProtocolVersion v0.9 when catalog has protocolVersion 0.9 or v0.9 or omitted or unknown', async () => {
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalogId: 'cat-v09',
+          protocolVersion: '0.9',
+          components: {},
+        },
+        timestamp: 4005,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.activeProtocolVersion()).toBe('v0.9');
+    });
+
+    it('handles multi-catalog payload { catalog, catalogs } and caches catalogsJson', async () => {
+      const primaryCat = {catalogId: 'primary-cat', title: 'Primary', components: {}};
+      const secondaryCat = {catalogId: 'secondary-cat', title: 'Secondary', components: {}};
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalog: primaryCat,
+          catalogs: [primaryCat, secondaryCat],
+        },
+        timestamp: 4006,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.activeCatalog()).toEqual(primaryCat);
+      expect(service.activeCatalogs()).toEqual([primaryCat, secondaryCat]);
+
+      expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          catalogJson: primaryCat,
+          catalogsJson: [primaryCat, secondaryCat],
+        }),
+      );
+    });
+
+    it('resets hasReceivedCatalogResponse to false when rendererUrl changes to an uncached URL', async () => {
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalogId: 'cat-1',
+          components: {},
+        },
+        timestamp: 4007,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+
+      indexedDbStorageMock.getCatalogRecord.mockResolvedValue(null);
+      resolvedUrlSignal.set('http://localhost/new-renderer');
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.hasReceivedCatalogResponse()).toBe(false);
+      expect(service.activeProtocolVersion()).toBe('v0.9');
+      expect(service.activeCatalogs()).toEqual([]);
+    });
+
+    it('hydrates multi-catalog from cached record with catalogsJson', async () => {
+      const cachedRecord = {
+        rendererUrl: 'http://localhost/cached-multi',
+        catalogString: JSON.stringify({catalogId: 'c1'}),
+        checksumHash: 'hash-c1',
+        lastAccessed: 1000,
+        catalogJson: {catalogId: 'c1', title: 'C1', components: {}},
+        catalogsJson: [
+          {catalogId: 'c1', title: 'C1', components: {}},
+          {catalogId: 'c2', title: 'C2', components: {}},
+        ],
+      };
+      indexedDbStorageMock.getCatalogRecord.mockImplementation(async (url: string) => {
+        if (url === 'http://localhost/cached-multi') {
+          return cachedRecord;
+        }
+        return null;
+      });
+
+      resolvedUrlSignal.set('http://localhost/cached-multi');
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.activeCatalog()).toEqual({catalogId: 'c1', title: 'C1', components: {}});
+      expect(service.activeCatalogs()).toEqual([
+        {catalogId: 'c1', title: 'C1', components: {}},
+        {catalogId: 'c2', title: 'C2', components: {}},
+      ]);
+    });
+
+    it('merges components and functions in mergedActiveCatalog with primary-wins precedence and collision warnings', async () => {
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
+      const basicCat = {
+        $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        protocolVersion: '1.0',
+        components: {
+          Text: {type: 'object', description: 'Primary Text'},
+          Button: {type: 'object'},
+        },
+        functions: {
+          formatString: {type: 'object', description: 'Primary formatString'},
+        },
+      };
+      const mcpCat = {
+        $id: 'https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json',
+        protocolVersion: '1.0',
+        components: {
+          Text: {type: 'object', description: 'Colliding Secondary Text'},
+        },
+        functions: {
+          formatString: {type: 'object', description: 'Colliding formatString'},
+          callMcpTool: {type: 'object'},
+        },
+      };
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalog: basicCat,
+          catalogs: [basicCat, mcpCat],
+        },
+        timestamp: 4010,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      const merged = service.mergedActiveCatalog();
+      expect(merged).not.toBeNull();
+      expect(merged?.['$id']).toBe(basicCat['$id']);
+      expect(merged?.components?.['Text']?.['description']).toBe('Primary Text');
+      expect(merged?.components?.['Button']).toBeDefined();
+      const functionsMap = merged?.functions as Record<string, Record<string, unknown>> | undefined;
+      expect(functionsMap?.['formatString']?.['description']).toBe('Primary formatString');
+      expect(functionsMap?.['callMcpTool']).toBeDefined();
+      expect(warnSpy).toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('merges mixed array and map catalog functions with primary-wins precedence and collision warnings', async () => {
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
+      const arrayCat = {
+        $id: 'https://a2ui.org/specification/v1_0/catalogs/slack/catalog.json',
+        protocolVersion: '1.0',
+        components: {
+          Card: {type: 'object', description: 'Primary Card'},
+        },
+        functions: [
+          {name: 'required', returnType: 'boolean', parameters: {type: 'object'}},
+          {
+            name: 'formatString',
+            returnType: 'string',
+            parameters: {type: 'object', description: 'Primary Array formatString'},
+          },
+        ],
+      };
+      const mapCat = {
+        $id: 'https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json',
+        protocolVersion: '1.0',
+        components: {
+          Card: {type: 'object', description: 'Colliding Secondary Card'},
+        },
+        functions: {
+          formatString: {type: 'object', description: 'Colliding Map formatString'},
+          callMcpTool: {type: 'object'},
+        },
+      };
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalog: arrayCat,
+          catalogs: [arrayCat, mapCat],
+        },
+        timestamp: 4020,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      const merged = service.mergedActiveCatalog();
+      expect(merged).not.toBeNull();
+      expect(merged?.components?.['Card']?.['description']).toBe('Primary Card');
+      const functionsMap = merged?.functions as Record<string, Record<string, unknown>> | undefined;
+      expect(functionsMap?.['required']).toBeDefined();
+      expect(functionsMap?.['callMcpTool']).toBeDefined();
+      expect(functionsMap?.['formatString']).toBeDefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('functions=[formatString]'),
+        }),
+      );
+
+      warnSpy.mockRestore();
+    });
   });
 });

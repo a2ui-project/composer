@@ -27,11 +27,8 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import type * as monaco from 'monaco-editor';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';

@@ -18,7 +18,7 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal, WritableSignal} from '@angular/core';
 import {afterEach, beforeEach, describe, expect, it, MockInstance, vi} from 'vitest';
-import {Demo, PreviewBridgeMessageType} from 'a2ui-bridge';
+import {Demo, PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {DemoCard, DemoCardState} from './demo-card';
 import {DemoCardHarness} from './test/demo-card.harness';
 import {MEASURE_HEIGHT_PX, READY_TIMEOUT_MS, SIZING_WINDOW_MS} from './demo-card-sizing';
@@ -30,10 +30,7 @@ import {
   HostCommunication,
   MessageEnvelope,
 } from '../shell/host-communication/host-communication';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
 import {DemoLauncher} from './services/demo-launcher';
 
 const RENDERER_URL = 'http://localhost:3000/renderer';

@@ -15,8 +15,7 @@
  */
 
 import {InjectionToken} from '@angular/core';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {ThemePreference} from '../settings/app-config-provider/app-config-provider';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 
 /**
@@ -90,6 +89,7 @@ export interface ComposerErrorTelemetryParams {
   line?: number;
   column?: number;
   invalidProperty?: string;
+  protocolVersion?: string;
 }
 
 /**

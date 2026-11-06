@@ -28,14 +28,11 @@ import {
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
 import {ErrorLogger} from '../../debug/error-logger.service';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {signal, WritableSignal} from '@angular/core';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {bridgeEnvelope, surfaceResizeEnvelope} from '../testing/bridge-envelopes';
 import {
   GuestSimulationHost,

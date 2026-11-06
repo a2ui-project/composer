@@ -15,8 +15,8 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {ComposerPanelId, ComposerWorkspace} from './composer-workspace';
-import {ResetLayoutEvent} from './composer-panel-id';
+import {ComposerWorkspace} from './composer-workspace';
+import {ComposerPanelId, ResetLayoutEvent} from './composer-panel-id';
 import {
   ComposerDockview,
   DEFAULT_CONTAINER_WIDTH,
@@ -31,7 +31,7 @@ import {provideRouter} from '@angular/router';
 import {HostCommunication} from '../host-communication/host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {DockviewComponent} from 'dockview-core';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {LlmClient, LlmMessage} from '../../chat/llm-client/llm-client';
 import {StateSync} from '../../chat/state-sync/state-sync';
@@ -41,7 +41,6 @@ import {
   AppConfigProvider,
   AuthType,
   EnvMode,
-  ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {signal} from '@angular/core';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';

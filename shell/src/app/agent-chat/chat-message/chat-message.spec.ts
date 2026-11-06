@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {ThemePreference} from 'a2ui-bridge';
 import {DOCUMENT} from '@angular/common';
 import {signal} from '@angular/core';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
@@ -23,10 +24,7 @@ import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {EMPTY} from 'rxjs';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../../chat/chat-state/chat-state';
 import {A2aChatMessage} from './chat-message';
 import {A2aChatMessageHarness} from './test/chat-message.harness';

@@ -31,17 +31,12 @@ import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {HostCommunication} from '../host-communication/host-communication';
 import {ErrorLogger} from '../../debug/error-logger.service';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {ComposerPanelId} from './composer-panel-id';
 import {ComposerDockview} from './composer-dockview.service';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {StateSync} from '../../chat/state-sync/state-sync';
-
-export {ComposerPanelId};
 
 /** Internal interface mapping raw cross-frame workspace telemetry payloads */
 export declare interface WorkspaceMessagePayload {

@@ -25,17 +25,14 @@ import {GalleryLauncher} from './gallery-launcher';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {GalleryHarness} from './test/gallery.harness';
 import {GalleryCatalog, CategorizedComponents} from './services/gallery-catalog';
-import {PreviewBridgeMessageType, type ComponentUsage} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, type ComponentUsage, ThemePreference} from 'a2ui-bridge';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {CatalogSchemaResolver, ParsedProperty} from './schema/catalog-schema-resolver';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {HostCommunication} from '../shell/host-communication/host-communication';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
 import {StateSync} from '../chat/state-sync/state-sync';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
