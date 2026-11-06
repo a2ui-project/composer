@@ -436,6 +436,9 @@ async function openSlackAssistant(page: Page): Promise<void> {
   await openComposerWithSlackRenderer(page, {rendererId: 'slack', forceAuthMode: '3p'});
   await addFakeGeminiApiKeyThroughSettings(page);
   await page.getByRole('link', {name: 'Composer Workspace'}).click();
+  // Move the mouse off the navigation link so its tooltip overlay does not steal
+  // subsequent keyboard events dispatched through Angular CDK Overlay.
+  await page.mouse.move(0, 0);
 }
 
 /** Has the assistant generate the World Cup score table and waits for it to render. */

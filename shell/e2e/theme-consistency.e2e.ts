@@ -18,7 +18,11 @@ import {expect, test, type Page} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {connectMockAgent} from '../src/app/agent-chat/test/mock-a2a-agent';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
-import {waitForMonacoEditor} from './helpers';
+import {mockLocalRenderersConfig, stubRendererHtml, waitForMonacoEditor} from './helpers';
+
+test.beforeEach(async ({context}) => {
+  await mockLocalRenderersConfig(context);
+});
 
 async function themeColor(page: Page, token: string): Promise<string> {
   const hex = await page.locator('body').evaluate((body, name) => {
@@ -79,15 +83,18 @@ test('Composer chat and raw update labels share the workspace palette in both th
 }) => {
   await page.route('**/config.json', route => route.fulfill({json: {renderers: {default: {}}}}));
   await page.route('http://theme-renderer.test/**', route =>
-    route.fulfill({contentType: 'text/html', body: '<html><body>Theme preview</body></html>'}),
+    route.fulfill({contentType: 'text/html', body: stubRendererHtml('Theme preview')}),
   );
   await page.addInitScript(() => {
-    localStorage.clear();
-    localStorage.setItem('a2ui_composer_force_1p', 'true');
-    localStorage.setItem(
-      'a2ui_composer_allowed_origins',
-      JSON.stringify(['http://theme-renderer.test']),
-    );
+    if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
+      sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
+      localStorage.clear();
+      localStorage.setItem('a2ui_composer_force_1p', 'true');
+      localStorage.setItem(
+        'a2ui_composer_allowed_origins',
+        JSON.stringify(['http://theme-renderer.test']),
+      );
+    }
   });
   await page.goto('/?renderer=http://theme-renderer.test/index.html');
   const frame = previewFrame(page).locator('body');
@@ -176,7 +183,10 @@ test('Workspace panels, the JSON editor, and the chat panel share one surface in
     route.fulfill({json: {renderers: {default: {rendererUrl}}}}),
   );
   await page.addInitScript(() => {
-    localStorage.clear();
+    if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
+      sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
+      localStorage.clear();
+    }
     localStorage.setItem('a2ui_composer_force_1p', 'true');
   });
   await page.goto(`/?renderer=${rendererUrl}`);

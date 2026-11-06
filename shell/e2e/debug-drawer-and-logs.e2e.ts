@@ -17,6 +17,7 @@
 import {test, expect} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
+import {stubRendererHtml} from './helpers';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -38,12 +39,13 @@ test.beforeEach(async ({page}) => {
   await page.route('http://custom-renderer.com/*', async route => {
     await route.fulfill({
       contentType: 'text/html',
-      body: `<!DOCTYPE html><html><body>Preview</body></html>`,
+      body: stubRendererHtml('Preview'),
     });
   });
 
   await page.addInitScript(() => {
-    if (window === window.top) {
+    if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
+      sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
       localStorage.clear();
       localStorage.setItem('a2ui_composer_force_1p', 'true');
       localStorage.setItem(
@@ -53,6 +55,8 @@ test.beforeEach(async ({page}) => {
     }
   });
   await page.goto('/?renderer=http://custom-renderer.com/index.html');
+  await expect(page.locator('a2ui-composer-workspace')).toBeVisible();
+  await expect(page.locator('.header-title')).toContainText('Stub Catalog');
 });
 
 test.describe('Debugging Panels & Diagnostic Logs', () => {

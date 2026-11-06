@@ -25,13 +25,19 @@ import {
   firstPreviewFrame,
   previewFrame,
 } from '../src/app/preview/testing/preview-frame-locators';
-import {WindowWithMonaco, expectNoCatalogWatchdog, trackRendererReady} from './helpers';
-import {DEMO_CARD_COUNT, cardTitled, revealCard} from './demo-wall-helpers';
+import {
+  WindowWithMonaco,
+  expectNoCatalogWatchdog,
+  mockLocalRenderersConfig,
+  trackRendererReady,
+} from './helpers';
+import {DEMO_CARD_COUNT, REVEAL_TIMEOUT_MS, cardTitled, revealCard} from './demo-wall-helpers';
 
 /** Text the first demo (Flight status) renders once its guest is live. */
 const FIRST_DEMO_MARKER = 'VIE';
 
-test.beforeEach(async ({page}) => {
+test.beforeEach(async ({page, context}) => {
+  await mockLocalRenderersConfig(context);
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
   });
@@ -76,7 +82,7 @@ for (const renderer of [
       await expect(cards).toHaveCount(DEMO_CARD_COUNT);
       await expect(
         demoCardFrame(cards.nth(0)).getByText(FIRST_DEMO_MARKER, {exact: true}),
-      ).toBeVisible();
+      ).toBeVisible({timeout: REVEAL_TIMEOUT_MS});
       await expectNoCatalogWatchdog(page);
     });
 
@@ -98,21 +104,31 @@ for (const renderer of [
       const system = demoCardFrame(cards.nth(1));
       const checkout = demoCardFrame(cards.nth(2));
       const workflow = demoCardFrame(cards.nth(3));
-      await expect(flight.getByText('VIE', {exact: true})).toBeVisible();
-      await expect(flight.getByText('JFK', {exact: true})).toBeVisible();
+      await expect(flight.getByText('VIE', {exact: true})).toBeVisible({
+        timeout: REVEAL_TIMEOUT_MS,
+      });
+      await expect(flight.getByText('JFK', {exact: true})).toBeVisible({
+        timeout: REVEAL_TIMEOUT_MS,
+      });
       await expect(flight.locator('body')).toHaveCSS('font-family', 'Arial, Helvetica, sans-serif');
-      await expect(flight.locator('svg')).toBeVisible();
-      await expect(checkout.locator('svg')).toBeVisible();
+      await expect(flight.locator('svg')).toBeVisible({timeout: REVEAL_TIMEOUT_MS});
+      await expect(checkout.locator('svg')).toBeVisible({timeout: REVEAL_TIMEOUT_MS});
       await expect(flight.getByText('VIE', {exact: true})).toHaveCSS('font-size', '32px');
       await expect(checkout.getByRole('button', {name: 'Place order · $199.99'})).toHaveCSS(
         'border-radius',
         '24px',
       );
-      await expect(system.getByRole('img', {name: 'CPU load: 65 percent'})).toBeVisible();
-      await expect(system.getByRole('img', {name: 'Memory usage: 82 percent'})).toBeVisible();
+      await expect(system.getByRole('img', {name: 'CPU load: 65 percent'})).toBeVisible({
+        timeout: REVEAL_TIMEOUT_MS,
+      });
+      await expect(system.getByRole('img', {name: 'Memory usage: 82 percent'})).toBeVisible({
+        timeout: REVEAL_TIMEOUT_MS,
+      });
       // The placeholder covers controls until the initial height measurement settles.
       for (let index = 0; index < 4; index++) {
-        await expect(demoCardPlaceholder(cards.nth(index))).toBeHidden();
+        await expect(demoCardPlaceholder(cards.nth(index))).toBeHidden({
+          timeout: REVEAL_TIMEOUT_MS,
+        });
       }
       const input = checkout.locator('input[type="text"]');
       await input.fill('123 Market Street');
@@ -316,7 +332,9 @@ for (const renderer of [
           {timeout: 20000},
         )
         .toContain('gallery-simple-login-form');
-      await expect(firstPreviewFrame(page).locator('body')).toContainText('Sign In');
+      await expect(firstPreviewFrame(page).locator('body')).toContainText('Sign In', {
+        timeout: 15_000,
+      });
     });
   });
 }

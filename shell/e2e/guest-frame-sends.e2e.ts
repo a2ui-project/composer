@@ -23,7 +23,7 @@ import {
   sideCanvasFrame,
 } from '../src/app/preview/testing/preview-frame-locators';
 import {cardTitled, DEMO_RENDERERS, revealCard} from './demo-wall-helpers';
-import {showInlineSurface} from './helpers';
+import {mockLocalRenderersConfig, showInlineSurface} from './helpers';
 
 /**
  * Counts what each guest document receives from the shell, to pin down
@@ -354,7 +354,8 @@ async function setThemeCountsAfterToggle(
 }
 
 test.describe('GuestFrame sends', () => {
-  test.beforeEach(async ({page}) => {
+  test.beforeEach(async ({page, context}) => {
+    await mockLocalRenderersConfig(context);
     await instrument(page);
   });
 

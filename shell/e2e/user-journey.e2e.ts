@@ -18,6 +18,7 @@ import {test, expect} from '@playwright/test';
 import {
   CHAT_PANELS,
   getMonacoContent,
+  mockLocalRenderersConfig,
   setMonacoContent,
   useChatPanel,
   waitForMonacoEditor,
@@ -42,7 +43,8 @@ const REMOTE_PAYLOAD_LOAD_TIMEOUT_MS = 10_000;
  */
 const CUSTOM_INSTRUCTIONS_DIALOG_WIDTH_PX = 600;
 
-test.beforeEach(async ({page}) => {
+test.beforeEach(async ({page, context}) => {
+  await mockLocalRenderersConfig(context);
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
   });
@@ -207,7 +209,7 @@ test.describe('E2E Workspace User Journey', () => {
     await expect(previewIframe.locator('body')).toBeVisible({
       timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
     });
-    await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({
+    await expect(previewIframe.locator('a2ui-v09-surface, a2ui-surface').first()).toBeVisible({
       timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
     });
   });
@@ -250,7 +252,7 @@ test.describe('E2E Workspace User Journey', () => {
     await expect(previewIframe.locator('body')).toBeVisible({
       timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
     });
-    await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({
+    await expect(previewIframe.locator('a2ui-v09-surface, a2ui-surface').first()).toBeVisible({
       timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
     });
   });
@@ -393,7 +395,7 @@ test.describe('E2E Workspace User Journey', () => {
 
       await waitForPreviewTab(page);
       const previewIframe = firstPreviewFrame(page);
-      await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({
+      await expect(previewIframe.locator('a2ui-v09-surface, a2ui-surface').first()).toBeVisible({
         timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
       });
       await expect(previewIframe.locator('h1').first()).toContainText('Book a Car', {
@@ -475,14 +477,14 @@ test.describe('E2E Workspace User Journey', () => {
 
       // Rendered preview should have 1 blank surface and 0 headings from the old sample
       await waitForPreviewTab(page);
-      await expect(previewIframe.locator('a2ui-v09-surface')).toHaveCount(1);
+      await expect(previewIframe.locator('a2ui-v09-surface, a2ui-surface')).toHaveCount(1);
       await expect(previewIframe.locator('h1')).toHaveCount(0);
 
       // Reloading the browser page cold-boots with the default Book a Car sample restored
       await page.reload();
       await page.waitForLoadState('load');
       await waitForPreviewTab(page);
-      await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({
+      await expect(previewIframe.locator('a2ui-v09-surface, a2ui-surface').first()).toBeVisible({
         timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
       });
       await expect(previewIframe.locator('h1').first()).toContainText('Book a Car', {

@@ -15,9 +15,14 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {mockLocalRenderersConfig} from '../../../../e2e/helpers';
 import {inlineSurfaceIframe} from '../../preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../../preview/testing/renderer-urls';
 import {connectMockAgent, mockAgentCard, sseEvent, sseFlightBody} from '../test/mock-a2a-agent';
+
+test.beforeEach(async ({context}) => {
+  await mockLocalRenderersConfig(context);
+});
 
 /** Budget for a guest frame to finish its handshake and draw a surface. */
 const SURFACE_RENDER_TIMEOUT_MS = 15_000;
@@ -165,7 +170,12 @@ test.describe('A2aChatMessage Visual Regression & Layout', () => {
     });
 
     await page.goto('/a2a');
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => {
+      if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
+        sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
+        localStorage.clear();
+      }
+    });
     await page.goto('/a2a');
 
     const configPanel = page.locator('.agent-config-panel');

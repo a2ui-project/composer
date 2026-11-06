@@ -15,8 +15,10 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {mockLocalRenderersConfig} from './helpers';
 
-test.beforeEach(async ({page}) => {
+test.beforeEach(async ({page, context}) => {
+  await mockLocalRenderersConfig(context);
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
   });

@@ -15,10 +15,14 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {mockLocalRenderersConfig} from '../../../e2e/helpers';
 import {sideCanvasFrame} from '../preview/testing/preview-frame-locators';
 import {connectMockAgent} from './test/mock-a2a-agent';
 
 test.describe('A2aChatView Full Orchestration Visual Regression & Layout', () => {
+  test.beforeEach(async ({context}) => {
+    await mockLocalRenderersConfig(context);
+  });
   test('renders orchestrated full page layout with header, conversation, input, and inspector drawer', async ({
     page,
   }) => {

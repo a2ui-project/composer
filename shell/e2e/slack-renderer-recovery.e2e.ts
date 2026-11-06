@@ -150,6 +150,7 @@ test.describe('Slack renderer recovery in Composer', () => {
     await expect(slackPreviewFrame(page).getByRole('button', {name: 'Search Cars'})).toBeVisible();
 
     await page.goto(`/?renderer=${RENDERER_URLS.slack}`);
+    await expect(page.locator('.header-title')).toContainText('Slack', {timeout: 20_000});
     await waitForMonacoEditor(page);
     await replaceMonacoJson(page, textPayload('switch-back', 'Back on Slack'));
 

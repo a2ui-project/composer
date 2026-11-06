@@ -337,14 +337,14 @@ for (const config of CONFIGS) {
     test('validates startup telemetry handshake messages and catalog properties', async ({
       page,
     }) => {
-      await page.goto(`/?renderer=${config.rendererUrl}`, {waitUntil: 'commit'});
-      await page.evaluateHandle(() => {
+      await page.addInitScript(() => {
         const log: CapturedBridgeEnvelope[] = [];
+        (window as unknown as {__bridgeLog: CapturedBridgeEnvelope[]}).__bridgeLog = log;
         window.addEventListener('message', e =>
           log.push({...(e.data || {}), __timeMs: performance.now()}),
         );
-        return log;
       });
+      await page.goto(`/?renderer=${config.rendererUrl}`, {waitUntil: 'commit'});
       await page.waitForLoadState('load');
       await expect(page.locator('.workspace-container')).toBeVisible();
 
@@ -388,14 +388,17 @@ for (const config of CONFIGS) {
     });
 
     test('synchronizes "pick-up date" from preview iframe to data model tab', async ({page}) => {
-      await page.goto(`/?renderer=${config.rendererUrl}`, {waitUntil: 'commit'});
-      const historyHandle = await page.evaluateHandle(() => {
+      await page.addInitScript(() => {
         const log: CapturedBridgeEnvelope[] = [];
+        (window as unknown as {__bridgeLog: CapturedBridgeEnvelope[]}).__bridgeLog = log;
         window.addEventListener('message', e =>
           log.push({...(e.data || {}), __timeMs: performance.now()}),
         );
-        return log;
       });
+      await page.goto(`/?renderer=${config.rendererUrl}`, {waitUntil: 'commit'});
+      const historyHandle = await page.evaluateHandle(
+        () => (window as unknown as {__bridgeLog: CapturedBridgeEnvelope[]}).__bridgeLog,
+      );
       await page.waitForLoadState('load');
       await expect(page.locator('.workspace-container')).toBeVisible();
 
@@ -430,14 +433,17 @@ for (const config of CONFIGS) {
     test('propagates data model changes from shell "Data Model" tab to rendered preview', async ({
       page,
     }) => {
-      await page.goto(`/?renderer=${config.rendererUrl}`, {waitUntil: 'commit'});
-      const historyHandle = await page.evaluateHandle(() => {
+      await page.addInitScript(() => {
         const log: CapturedBridgeEnvelope[] = [];
+        (window as unknown as {__bridgeLog: CapturedBridgeEnvelope[]}).__bridgeLog = log;
         window.addEventListener('message', e =>
           log.push({...(e.data || {}), __timeMs: performance.now()}),
         );
-        return log;
       });
+      await page.goto(`/?renderer=${config.rendererUrl}`, {waitUntil: 'commit'});
+      const historyHandle = await page.evaluateHandle(
+        () => (window as unknown as {__bridgeLog: CapturedBridgeEnvelope[]}).__bridgeLog,
+      );
       await page.waitForLoadState('load');
       await expect(page.locator('.workspace-container')).toBeVisible();
 
@@ -473,17 +479,25 @@ for (const config of CONFIGS) {
     });
 
     test('propagates Raw A2UI JSON updates to the rendered preview', async ({page}) => {
-      await page.goto(`/?renderer=${config.rendererUrl}`, {waitUntil: 'commit'});
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const historyHandle = await page.evaluateHandle(() => {
+      await page.addInitScript(() => {
         const log: CapturedBridgeEnvelope[] = [];
+        (window as unknown as {__bridgeLog: CapturedBridgeEnvelope[]}).__bridgeLog = log;
         window.addEventListener('message', e =>
           log.push({...(e.data || {}), __timeMs: performance.now()}),
         );
-        return log;
       });
+      await page.goto(`/?renderer=${config.rendererUrl}`, {waitUntil: 'commit'});
+      const historyHandle = await page.evaluateHandle(
+        () => (window as unknown as {__bridgeLog: CapturedBridgeEnvelope[]}).__bridgeLog,
+      );
       await page.waitForLoadState('load');
       await expect(page.locator('.workspace-container')).toBeVisible();
+
+      const iframe = previewFrame(page);
+      await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible({
+        timeout: PREVIEW_GUEST_READY_TIMEOUT_MS,
+      });
+      await waitForPreviewSettled(page, historyHandle);
 
       const rawJson = await getMonacoContent(page);
 
@@ -495,7 +509,6 @@ for (const config of CONFIGS) {
 
       await waitForPreviewTab(page);
 
-      const iframe = previewFrame(page);
       const searchButton = iframe.getByRole('button', {name: 'Search Rental Cars'});
       await expect(searchButton).toBeVisible();
       await expect(searchButton).toBeEnabled();

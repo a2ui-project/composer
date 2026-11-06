@@ -16,20 +16,7 @@
 
 import {test, expect} from '@playwright/test';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
-import {CHAT_PANELS, useChatPanel} from './helpers';
-
-interface MonacoModel {
-  getValue(): string;
-  setValue(value: string): void;
-}
-
-interface WindowWithMonaco extends Window {
-  monaco?: {
-    editor: {
-      getModels(): MonacoModel[];
-    };
-  };
-}
+import {CHAT_PANELS, stubRendererHtml, useChatPanel, type WindowWithMonaco} from './helpers';
 
 test.use({
   storageState: {
@@ -78,12 +65,12 @@ test.beforeEach(async ({page}) => {
   await page.route('http://custom-renderer.com/*', async route => {
     await route.fulfill({
       contentType: 'text/html',
-      body: `<!DOCTYPE html><html><body><div id="root">Preview</div></body></html>`,
+      body: stubRendererHtml('<div id="root">Preview</div>'),
     });
   });
 
   await page.goto('/?renderer=http://custom-renderer.com');
-  await expect(page.locator('.header-title')).toContainText('A2UI Composer');
+  await expect(page.locator('.header-title')).toContainText('Stub Catalog');
 });
 
 test.describe('JSON Error Handling & Diagnostics', () => {
@@ -111,10 +98,20 @@ test.describe('JSON Error Handling & Diagnostics', () => {
       }
     });
 
+    // Ensure Monaco's background JSON worker has analyzed the model and produced diagnostic markers
+    // before the debounced error snackbar evaluates error coordinates.
+    await page.waitForFunction(() => {
+      const monaco = (window as unknown as WindowWithMonaco).monaco;
+      const model = monaco?.editor?.getModels()?.[0];
+      if (!model || !monaco) return false;
+      const markers = monaco.editor.getModelMarkers?.({resource: model.uri}) ?? [];
+      return markers.some(m => m.startLineNumber === 4);
+    });
+
     // Wait for debounce of snackbar
     const snackbar = page
       .locator('simple-snack-bar')
-      .filter({hasText: /error|syntax/i})
+      .filter({hasText: /syntax/i})
       .first();
     await expect(snackbar).toBeVisible({timeout: 8000});
 
@@ -130,22 +127,20 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     await expect(errorsTab).toHaveCount(0);
 
     // Verify editor navigated cursor position
-    const cursorPosition = await page.evaluate(() => {
-      const monacoWithEditors = (
-        window as unknown as {
-          monaco?: {
-            editor: {
-              getEditors(): {getPosition(): {lineNumber: number; column: number} | null}[];
-            };
-          };
-        }
-      ).monaco;
-      return monacoWithEditors?.editor?.getEditors()?.[0]?.getPosition();
-    });
-    // Rationale: the malformed fixture `{"version": "v0.9", "invalid": }` reports
-    // its unclosed delimiter on line 4, so Monaco correctly navigates to line 4;
-    // the expected value of 3 was simply wrong. Please do not loosen it again.
-    expect(cursorPosition?.lineNumber).toBe(4);
+    await expect
+      .poll(
+        async () => {
+          return page.evaluate(() => {
+            const monaco = (window as unknown as WindowWithMonaco).monaco;
+            const editors = monaco?.editor?.getEditors?.() ?? [];
+            const editor =
+              editors.find(ed => ed.getModel()?.getValue().includes('"invalid":')) ?? editors[0];
+            return editor?.getPosition()?.lineNumber;
+          });
+        },
+        {timeout: 5000},
+      )
+      .toBe(4);
   });
 
   for (const panel of CHAT_PANELS) {
@@ -153,8 +148,8 @@ test.describe('JSON Error Handling & Diagnostics', () => {
       page,
     }) => {
       await useChatPanel(page, panel);
-      // The assistant only submits once a renderer has announced its catalog, which the
-      // stub renderer above never does, so use a real sample renderer here.
+      // The assistant only submits once a renderer has announced a catalog with components;
+      // the stub renderer above returns empty components: {}, so switch to a sample renderer here.
       await page.goto('/?renderer=http://localhost:3456');
       await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
 
