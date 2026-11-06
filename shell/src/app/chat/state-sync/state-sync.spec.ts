@@ -20,9 +20,10 @@ import {StateSync} from './state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {LlmMessage} from '../llm-client/llm-client';
 import {MessageRole} from '../llm-client/llm-client';
-import {CAR_BOOKING} from '../chat-service/initial-draft';
+import {CAR_BOOKING, CAR_BOOKING_V1_0, BASIC_CATALOG_ID_V1_0} from '../chat-service/initial-draft';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
+import type {A2uiProtocolVersion} from 'a2ui-bridge';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {formatJson} from '../../utils/json';
 import {signal} from '@angular/core';
@@ -62,6 +63,8 @@ class MockChatState {
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);
+  readonly hasReceivedCatalogResponse = signal<boolean>(true);
+  readonly activeProtocolVersion = signal<A2uiProtocolVersion>('v0.9');
 }
 
 class MockStartupConfigState {
@@ -1161,6 +1164,71 @@ describe('StateSync Autosave Draft Integrations', () => {
       });
       TestBed.tick();
       expect(service.activeDraft()).toContain('material_catalog.json');
+    });
+  });
+
+  describe('Protocol Version Auto-Swap and Draft Preservation', () => {
+    it('auto-swaps untouched CAR_BOOKING to CAR_BOOKING_V1_0 when activeProtocolVersion changes to v1.0 and catalog response is received', () => {
+      expect(service.activeDraft()).toBe(CAR_BOOKING);
+      expect(service.hasEditedDraft()).toBe(false);
+
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      TestBed.tick();
+
+      expect(service.activeDraft()).toBe(CAR_BOOKING_V1_0);
+    });
+
+    it('auto-swaps untouched v0.9 blank draft to v1.0 blank draft when activeProtocolVersion changes to v1.0', () => {
+      service.resetToBlankDraft();
+      expect(service.activeDraft()).toContain('v0.9');
+
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      TestBed.tick();
+
+      expect(service.activeDraft()).toContain('"version": "1.0"');
+      expect(service.activeDraft()).toContain(BASIC_CATALOG_ID_V1_0);
+    });
+
+    it('strictly preserves user-edited draft when activeProtocolVersion changes to v1.0', () => {
+      const userEditedDraft = '[{"version":"v0.9","custom":"user-work"}]';
+      service.updateDraft(userEditedDraft);
+      expect(service.hasEditedDraft()).toBe(true);
+
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      TestBed.tick();
+
+      expect(service.activeDraft()).toBe(userEditedDraft);
+    });
+
+    it('strictly preserves URL-bootstrapped sharedA2uiPayload draft when activeProtocolVersion changes to v1.0', () => {
+      const bootstrappedDraft = '[{"version":"v0.9","bootstrapped":"from-url"}]';
+      startupConfigStateMock.sharedA2uiPayload.set(bootstrappedDraft);
+      TestBed.tick();
+      expect(service.activeDraft()).toBe(bootstrappedDraft);
+      expect(service.hasEditedDraft()).toBe(true);
+
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      TestBed.tick();
+
+      expect(service.activeDraft()).toBe(bootstrappedDraft);
+    });
+
+    it('auto-swaps untouched CAR_BOOKING_V1_0 back to CAR_BOOKING when activeProtocolVersion changes back to v0.9', () => {
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      TestBed.tick();
+      expect(service.activeDraft()).toBe(CAR_BOOKING_V1_0);
+
+      catalogManagementMock.activeProtocolVersion.set('v0.9');
+      TestBed.tick();
+      expect(service.activeDraft()).toBe(CAR_BOOKING);
+    });
+
+    it('does not swap draft when hasReceivedCatalogResponse is false', () => {
+      catalogManagementMock.hasReceivedCatalogResponse.set(false);
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      TestBed.tick();
+
+      expect(service.activeDraft()).toBe(CAR_BOOKING);
     });
   });
 });

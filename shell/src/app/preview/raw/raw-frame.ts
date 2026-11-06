@@ -39,6 +39,7 @@ import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service'
 import {tryParseJsonArray} from '../../utils/json';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
+import {validatePayloadProtocolVersion} from '../protocol-version-mismatch';
 import type {editor} from 'monaco-editor';
 
 export const IFRAME_UNRESPONSIVE_ERROR_PREFIX = 'IFRAME_UNRESPONSIVE_ERROR: ';
@@ -153,16 +154,20 @@ export class RawFrame {
     this.layoutJson = signal(this.stateSync.hydrateActiveDraft());
     effect(() => {
       const catalog = this.catalogManagement.activeCatalog();
-      if (catalog) {
-        const currentLayout = untracked(() => this.layoutJson());
-        try {
-          const payload = this.parseLayoutString(currentLayout);
-          if (payload !== null) {
-            this.hostCommunication.sendRenderA2UI(payload);
+      const hasCatalogResponse = this.catalogManagement.hasReceivedCatalogResponse();
+      this.catalogManagement.activeProtocolVersion();
+      if (catalog || hasCatalogResponse) {
+        untracked(() => {
+          const currentLayout = this.layoutJson();
+          try {
+            const payload = this.parseLayoutString(currentLayout);
+            if (payload !== null) {
+              this.sendValidatedRenderA2UI(payload);
+            }
+          } catch (err) {
+            // Ignore initial parse errors
           }
-        } catch (err) {
-          // Ignore initial parse errors
-        }
+        });
       }
     });
 
@@ -179,7 +184,7 @@ export class RawFrame {
         try {
           const payload = this.parseLayoutString(this.layoutJson());
           if (payload !== null) {
-            this.hostCommunication.sendRenderA2UI(payload);
+            this.sendValidatedRenderA2UI(payload);
           }
         } catch (err) {
           if (err instanceof SyntaxError) {
@@ -225,8 +230,11 @@ export class RawFrame {
                 this.cancelInvalidJsonTimer();
                 this.isJsonInvalid.set(false);
                 this.snackBar.dismiss();
-                this.hostCommunication.sendRenderA2UI(payload);
-                this.startWatchdog();
+                if (this.sendValidatedRenderA2UI(payload)) {
+                  this.startWatchdog();
+                } else {
+                  this.clearWatchdog();
+                }
               } else {
                 this.clearWatchdog();
                 this.lastSyntaxError = null;
@@ -282,8 +290,11 @@ export class RawFrame {
           this.clearWatchdog();
           return;
         }
-        this.hostCommunication.sendRenderA2UI(payload);
-        this.startWatchdog();
+        if (this.sendValidatedRenderA2UI(payload)) {
+          this.startWatchdog();
+        } else {
+          this.clearWatchdog();
+        }
       });
   }
 
@@ -495,5 +506,27 @@ export class RawFrame {
       return `Go to line ${line}`;
     }
     return undefined;
+  }
+
+  private sendValidatedRenderA2UI(payload: unknown[]): boolean {
+    if (!this.catalogManagement.hasReceivedCatalogResponse()) {
+      return false;
+    }
+
+    const activeVersion = this.catalogManagement.activeProtocolVersion();
+
+    const validation = validatePayloadProtocolVersion(payload, activeVersion);
+    if (!validation.valid) {
+      this.clearWatchdog();
+      this.errorLogger.error({
+        sourceTag: '[RawFrame]',
+        code: 'PROTOCOL_VERSION_MISMATCH',
+        message: validation.message,
+      });
+      return false;
+    }
+
+    this.hostCommunication.sendRenderA2UI(payload);
+    return true;
   }
 }

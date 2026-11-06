@@ -20,17 +20,21 @@ import {MAX_CONTENT_HEIGHT_PX} from '../content-height';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, afterEach, expect, beforeEach, vi} from 'vitest';
-import {ReplaySubject, config as rxjsConfig} from 'rxjs';
+import {ReplaySubject, Subject, Observable, config as rxjsConfig} from 'rxjs';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {
   DefaultTarget,
   HostCommunication,
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
+
+type ObservableValue<T> = T extends Observable<infer U> ? U : never;
+type CallAgentFunctionEnvelope = ObservableValue<HostCommunication['callAgentFunction$']>;
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {StateSync} from '../../chat/state-sync/state-sync';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {signal, WritableSignal} from '@angular/core';
 import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {bridgeEnvelope, surfaceResizeEnvelope} from '../testing/bridge-envelopes';
@@ -73,6 +77,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
   let chatStateMock: MockChatState;
   let stateSyncMock: MockStateSync;
   let messageStreamSubject: ReplaySubject<MessageEnvelope>;
+  let callAgentFunctionSubject: Subject<CallAgentFunctionEnvelope>;
   /** Window of the default frame's iframe, which its guest's messages come from. */
   let guestWindow: Window;
 
@@ -98,10 +103,12 @@ describe('RenderedFrame Live Preview Viewport', () => {
   function createFrame(
     sizing: RenderedFrameSizing = 'content',
     defaultTarget: DefaultTarget = DefaultTarget.REPLACE,
+    autoRejectAgentFunctions: boolean = false,
   ): ComponentFixture<RenderedFrame> {
     const frameFixture = TestBed.createComponent(RenderedFrame);
     frameFixture.componentRef.setInput('sizing', sizing);
     frameFixture.componentRef.setInput('defaultTarget', defaultTarget);
+    frameFixture.componentRef.setInput('autoRejectAgentFunctions', autoRejectAgentFunctions);
     return frameFixture;
   }
 
@@ -121,11 +128,14 @@ describe('RenderedFrame Live Preview Viewport', () => {
     };
 
     messageStreamSubject = new ReplaySubject<MessageEnvelope>(1);
+    callAgentFunctionSubject = new Subject<CallAgentFunctionEnvelope>();
     hostCommunicationServiceMock = {
       registerIframe: vi.fn(),
       unregisterIframe: vi.fn(),
       sendRenderA2UI: vi.fn(),
+      sendMessage: vi.fn(),
       messageStream$: messageStreamSubject.asObservable(),
+      callAgentFunction$: callAgentFunctionSubject.asObservable(),
     };
 
     await TestBed.configureTestingModule({
@@ -138,6 +148,13 @@ describe('RenderedFrame Live Preview Viewport', () => {
         {
           provide: HostCommunication,
           useValue: hostCommunicationServiceMock,
+        },
+        {
+          provide: CatalogManagement,
+          useValue: {
+            hasReceivedCatalogResponse: signal(true),
+            activeProtocolVersion: signal('v0.9'),
+          },
         },
         {
           provide: AppConfigProvider,
@@ -758,6 +775,95 @@ describe('RenderedFrame Live Preview Viewport', () => {
       fixture.componentRef.setInput('sizing', 'content');
       fixture.detectChanges();
       expect(await harness.getAppliedHeightPx()).toBe(264);
+    });
+  });
+
+  describe('autoRejectAgentFunctions', () => {
+    it('does not auto-reject when autoRejectAgentFunctions is false (default)', async () => {
+      callAgentFunctionSubject.next({
+        origin: 'http://localhost:3000',
+        timestamp: Date.now(),
+        sourceWindow: guestWindow,
+        payload: {
+          version: 'v1.0',
+          callAgentFunction: {
+            surfaceId: 'surf-1',
+            functionCallId: 'call-1',
+            call: 'testFunc',
+          },
+        },
+      });
+      fixture.detectChanges();
+
+      expect(hostCommunicationServiceMock.sendRenderA2UI).not.toHaveBeenCalled();
+    });
+
+    it('immediately auto-rejects with NO_AGENT_CONNECTED when autoRejectAgentFunctions is true and sourceWindow matches', async () => {
+      const autoRejectFixture = createFrame('content', DefaultTarget.REPLACE, true);
+      autoRejectFixture.detectChanges();
+      const autoRejectHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        autoRejectFixture,
+        RenderedFrameHarness,
+      );
+      const autoRejectGuestWindow = await guestWindowOf(autoRejectHarness);
+
+      vi.mocked(hostCommunicationServiceMock.sendRenderA2UI!).mockClear();
+
+      callAgentFunctionSubject.next({
+        origin: 'http://localhost:3000',
+        timestamp: Date.now(),
+        sourceWindow: autoRejectGuestWindow,
+        payload: {
+          version: 'v1.0',
+          callAgentFunction: {
+            surfaceId: 'surf-1',
+            functionCallId: 'call-xyz-123',
+            call: 'testFunc',
+          },
+        },
+      });
+      autoRejectFixture.detectChanges();
+
+      expect(hostCommunicationServiceMock.sendRenderA2UI).toHaveBeenCalledWith(
+        [
+          {
+            version: '1.0',
+            agentFunctionResponse: {
+              functionCallId: 'call-xyz-123',
+              error: {
+                code: 'NO_AGENT_CONNECTED',
+                message: 'No agent is connected to handle agent function calls.',
+              },
+            },
+          },
+        ],
+        autoRejectGuestWindow,
+      );
+    });
+
+    it('ignores callAgentFunction emissions originating from a different sourceWindow', async () => {
+      const autoRejectFixture = createFrame('content', DefaultTarget.REPLACE, true);
+      autoRejectFixture.detectChanges();
+
+      vi.mocked(hostCommunicationServiceMock.sendRenderA2UI!).mockClear();
+      const differentWindow = {} as Window;
+
+      callAgentFunctionSubject.next({
+        origin: 'http://localhost:3000',
+        timestamp: Date.now(),
+        sourceWindow: differentWindow,
+        payload: {
+          version: 'v1.0',
+          callAgentFunction: {
+            surfaceId: 'surf-1',
+            functionCallId: 'call-xyz-123',
+            call: 'testFunc',
+          },
+        },
+      });
+      autoRejectFixture.detectChanges();
+
+      expect(hostCommunicationServiceMock.sendRenderA2UI).not.toHaveBeenCalled();
     });
   });
 });
