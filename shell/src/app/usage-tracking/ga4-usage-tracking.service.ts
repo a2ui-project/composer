@@ -39,6 +39,7 @@ import {
   UsageTrackingService,
 } from './usage-tracking.service';
 import {generateUuid} from '../utils/uuid';
+import {getCatalogId} from '../storage/models/catalog-storage.model';
 
 declare global {
   interface Window {
@@ -236,7 +237,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   protected getBaselineDimensions(): Record<string, unknown> {
     const activeRendererId = this.startupConfigState.selectedRendererId() || 'default';
     const catalogObj = this.catalogManagement.activeCatalog();
-    const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
+    const catalogId = (catalogObj && getCatalogId(catalogObj)) || '';
     return {
       ['send_to']: this.config.measurementId,
       ['composer_session_id']: this._composerSessionId,

@@ -27,6 +27,7 @@ import {RenderA2uiItem, A2uiComponentInstance, UpdateComponentsDetails} from 'a2
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {tryParseJsonArray, formatJson} from '../../utils/json';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {getCatalogId} from '../../storage/models/catalog-storage.model';
 
 /**
  * Manages in-memory volatile autosave draft layouts and bidirectionally
@@ -93,7 +94,7 @@ export class StateSync {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(catalog => {
-        const catalogId = (catalog!.catalogId || catalog!.$id || '') as string;
+        const catalogId = getCatalogId(catalog!) || '';
         const isInitialHandshake = this.previousCatalogId === null;
         const isCatalogChange =
           this.previousCatalogId !== null && this.previousCatalogId !== catalogId;
@@ -131,6 +132,14 @@ export class StateSync {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((val: string) => {
+        // While a response streams, its model turn must stay the conversation's last
+        // turn. The editor and preview are locked then, so a canvas change can only be
+        // a reset to the renderer's sample, for example after the assistant switched
+        // renderers; the response replaces it, and the next prompt sends the canvas
+        // with its request either way.
+        if (this.chatState.isProgrammaticStreamActive()) {
+          return;
+        }
         this.syncLayoutToHistory(val);
       });
   }
@@ -202,7 +211,7 @@ export class StateSync {
     this.lastSynchronizedLayout = null;
     this.previousCatalogId = null;
     const catalog = this.catalogManagement.activeCatalog();
-    let catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
+    let catalogId = (catalog && getCatalogId(catalog)) || '';
     const activeRenderer = this.startupConfigState.activeRenderer();
     if (!activeRenderer?.samplePayload && !catalogId) {
       catalogId = BASIC_CATALOG_ID;
@@ -223,8 +232,7 @@ export class StateSync {
   resetToBlankDraft(): void {
     this.cancelPendingDraftSync$.next();
     const catalog = this.catalogManagement.activeCatalog();
-    const effectiveCatalogId =
-      (catalog ? catalog.catalogId || catalog.$id || '' : '') || BASIC_CATALOG_ID;
+    const effectiveCatalogId = (catalog && getCatalogId(catalog)) || BASIC_CATALOG_ID;
     this.isDraftEdited = false;
     this.lastSynchronizedLayout = null;
     this.previousCatalogId = effectiveCatalogId;

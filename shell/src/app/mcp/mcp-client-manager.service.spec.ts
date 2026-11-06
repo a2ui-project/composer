@@ -367,4 +367,22 @@ describe('McpClientManagerService', () => {
     expect(service.doesCatalogSupportMcp({$defs: {callMcpTool: {}}})).toBe(true);
     expect(service.doesCatalogSupportMcp({$defs: {catalog_callMcpTool: {}}})).toBe(true);
   });
+
+  it('finds callMcpTool in a catalog that lists its functions', () => {
+    const listedFunction = (name: string) => ({
+      name,
+      description: `Calls ${name}.`,
+      parameters: {type: 'object'},
+      returnType: 'any',
+    });
+
+    expect(service.doesCatalogSupportMcp({functions: [listedFunction('formatString')]})).toBe(
+      false,
+    );
+    expect(
+      service.doesCatalogSupportMcp({
+        functions: [listedFunction('formatString'), listedFunction('callMcpTool')],
+      }),
+    ).toBe(true);
+  });
 });

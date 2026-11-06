@@ -29,6 +29,7 @@ import {signal} from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
 class MockChatState {
+  readonly isProgrammaticStreamActive = signal(false);
   private readonly _chatHistory: LlmMessage[] = [];
   readonly chatHistory = vi.fn(() => this._chatHistory);
   setChatHistory = vi.fn((history: LlmMessage[]) => {
@@ -208,6 +209,32 @@ describe('StateSync Autosave Draft Integrations', () => {
         isSnapshot: true,
       },
     ]);
+  });
+
+  it('does not add a canvas reset to the conversation while a response is streaming', () => {
+    service.syncActiveDraftToHistory();
+    chatStateMock.updateChatHistory(history => [
+      ...history,
+      {role: MessageRole.USER, content: 'Create a Slack approval message'},
+      {role: MessageRole.MODEL, content: ' ●●●'},
+    ]);
+    chatStateMock.isProgrammaticStreamActive.set(true);
+    const slackSample = '[{"version":"v0.9","createSurface":{"surfaceId":"slack-sample"}}]';
+    startupConfigStateMock.activeRenderer.set({samplePayload: slackSample});
+
+    catalogManagementMock.activeCatalog.set({catalogId: 'slack-catalog'});
+    TestBed.tick();
+    service.flushDraft();
+    vi.advanceTimersByTime(300);
+
+    expect(service.activeDraft()).toBe(slackSample);
+    expect(chatStateMock.chatHistory()).toHaveLength(3);
+    expect(chatStateMock.chatHistory().at(-1)?.role).toBe(MessageRole.MODEL);
+
+    chatStateMock.isProgrammaticStreamActive.set(false);
+    service.syncActiveDraftToHistory();
+
+    expect(chatStateMock.chatHistory().at(-1)?.content).toContain('slack-sample');
   });
 
   it('updates target layout node in-place if last message is also user layout snapshot', () => {

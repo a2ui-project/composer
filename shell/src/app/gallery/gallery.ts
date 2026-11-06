@@ -50,7 +50,11 @@ import {PreviewBridgeMessageType, ComponentUsage, RenderA2uiItem} from 'a2ui-bri
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {stableStringify} from '../storage/stable-stringify/stable-stringify';
-import {Catalog, CatalogComponentSchema} from '../storage/models/catalog-storage.model';
+import {
+  Catalog,
+  CatalogComponentSchema,
+  getCatalogId,
+} from '../storage/models/catalog-storage.model';
 import {CatalogSchemaResolver, ParsedProperty} from './schema/catalog-schema-resolver';
 import {
   createDefaultGalleryValue,
@@ -316,7 +320,7 @@ export class Gallery implements OnInit, OnDestroy {
   }
 
   private createDraft(preset: ComponentUsage | null, catalog: Catalog | null): ExampleDraft {
-    const id = catalog?.catalogId || catalog?.$id;
+    const id = catalog && getCatalogId(catalog);
     if (!preset || !Array.isArray(preset.usage) || !catalog || !id) {
       return {text: '', preset: null, payload: null, error: null};
     }
@@ -775,7 +779,7 @@ export class Gallery implements OnInit, OnDestroy {
     if (!catalog) {
       return null;
     }
-    return catalog.catalogId || catalog.$id || null;
+    return getCatalogId(catalog) || null;
   });
 
   /**

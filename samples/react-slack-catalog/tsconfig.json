@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "sourceMap": true,
+    "jsx": "react-jsx",
+    // Some dependencies' typings don't compile in this browser-only sample:
+    // @slack/web-api, which @copilotkit/channels-slack's render types import, needs
+    // Node's types, and the Storybook addon's typings import @storybook/react-vite,
+    // which isn't installed.
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*"]
+}

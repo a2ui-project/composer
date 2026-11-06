@@ -17,7 +17,7 @@
 import {Injectable, inject, signal} from '@angular/core';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
-import {Catalog} from '../storage/models/catalog-storage.model';
+import {Catalog, catalogDeclaresFunction} from '../storage/models/catalog-storage.model';
 import {LocalStorageKey} from '../storage/models/local-storage-keys';
 import {MCP_SERVER_CONNECTOR, McpServerConnection} from './mcp-server-connector';
 
@@ -72,7 +72,7 @@ export class McpClientManagerService {
     if (!catalog) {
       return false;
     }
-    if (catalog.functions && 'callMcpTool' in catalog.functions) {
+    if (catalogDeclaresFunction(catalog, 'callMcpTool')) {
       return true;
     }
     if (

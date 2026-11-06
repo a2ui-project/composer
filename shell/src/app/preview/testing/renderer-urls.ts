@@ -26,4 +26,5 @@ export const RENDERER_URLS = {
   angular: 'http://localhost:3456',
   lit: 'http://localhost:3457',
   react: 'http://localhost:3458',
+  slack: 'http://localhost:3460',
 } as const;

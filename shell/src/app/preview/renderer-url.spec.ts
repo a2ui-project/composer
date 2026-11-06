@@ -14,25 +14,39 @@
  * limitations under the License.
  */
 
-import {afterEach, describe, it, expect, vi} from 'vitest';
+import {TestBed} from '@angular/core/testing';
+import {afterEach, beforeEach, describe, it, expect, vi} from 'vitest';
 import {ThemePreference} from 'a2ui-bridge';
 import {TaggedLogger} from '../debug/error-logger.service';
+import {EnvironmentContextService} from '../shell/startup-resolution/state/environment-context.service';
 import {PreviewUrlParam} from './preview-url-param';
 import {buildRendererUrl} from './renderer-url';
 
 describe('buildRendererUrl', () => {
   const logger: TaggedLogger = {error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn()};
+  let environmentContext: EnvironmentContextService;
+
+  beforeEach(() => {
+    environmentContext = TestBed.inject(EnvironmentContextService);
+  });
 
   it('returns null when the resolved URL is not a valid http(s) URL', () => {
-    expect(buildRendererUrl('javascript:alert(1)', ThemePreference.LIGHT, logger)).toBeNull();
+    expect(
+      buildRendererUrl('javascript:alert(1)', ThemePreference.LIGHT, environmentContext, logger),
+    ).toBeNull();
   });
 
   it('returns null when the renderer URL is null', () => {
-    expect(buildRendererUrl(null, ThemePreference.LIGHT, logger)).toBeNull();
+    expect(buildRendererUrl(null, ThemePreference.LIGHT, environmentContext, logger)).toBeNull();
   });
 
   it('appends the origin query param and the requested theme', () => {
-    const result = buildRendererUrl('http://localhost:3000/renderer', ThemePreference.DARK, logger);
+    const result = buildRendererUrl(
+      'http://localhost:3000/renderer',
+      ThemePreference.DARK,
+      environmentContext,
+      logger,
+    );
     expect(result).toBe(
       'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000&theme=dark',
     );
@@ -42,6 +56,7 @@ describe('buildRendererUrl', () => {
     const result = buildRendererUrl(
       'http://localhost:3000/renderer?origin=https://evil.example.com',
       ThemePreference.LIGHT,
+      environmentContext,
       logger,
     );
     expect(result).toBe(
@@ -52,19 +67,57 @@ describe('buildRendererUrl', () => {
   it('adds only the query parameters listed in PreviewUrlParam', () => {
     // RendererSelection removes these before comparing the iframe's URL with a
     // renderer's, so a parameter added without being listed would break that match.
-    const src = new URL(buildRendererUrl('/renderer', ThemePreference.LIGHT, logger)!);
+    const src = new URL(
+      buildRendererUrl('/renderer', ThemePreference.LIGHT, environmentContext, logger)!,
+    );
     const listed: string[] = Object.values(PreviewUrlParam);
     expect([...new Set(src.searchParams.keys())].filter(key => !listed.includes(key))).toEqual([]);
   });
 
   it('returns null for a malformed URL', () => {
-    expect(buildRendererUrl('http://[invalid]', ThemePreference.LIGHT, logger)).toBeNull();
+    expect(
+      buildRendererUrl('http://[invalid]', ThemePreference.LIGHT, environmentContext, logger),
+    ).toBeNull();
   });
 
   it('resolves a relative renderer URL against the current origin', () => {
-    expect(buildRendererUrl('/renderer', ThemePreference.LIGHT, logger)).toBe(
+    expect(buildRendererUrl('/renderer', ThemePreference.LIGHT, environmentContext, logger)).toBe(
       'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
     );
+  });
+
+  describe('with a page-relative renderer URL', () => {
+    let base: HTMLBaseElement;
+
+    // A renderer deployed with Composer can be configured relative to the page;
+    // see `RendererConfig.rendererUrl`.
+    function buildWithBase(href: string): string | null {
+      base = document.createElement('base');
+      base.href = href;
+      document.head.appendChild(base);
+      return buildRendererUrl(
+        'samples/bundled-renderer/',
+        ThemePreference.LIGHT,
+        environmentContext,
+        logger,
+      );
+    }
+
+    afterEach(() => {
+      base.remove();
+    });
+
+    it('resolves it against the GitHub Pages base path', () => {
+      expect(buildWithBase('http://localhost:3000/composer/')).toBe(
+        'http://localhost:3000/composer/samples/bundled-renderer/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    });
+
+    it('resolves it against a PR preview base path', () => {
+      expect(buildWithBase('http://localhost:3000/composer/pr/216/')).toBe(
+        'http://localhost:3000/composer/pr/216/samples/bundled-renderer/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    });
   });
 
   describe('ancestor origins', () => {
@@ -78,7 +131,7 @@ describe('buildRendererUrl', () => {
         ancestorOrigins: ['https://proxy.googlers.com', 'https://jetski.corp.google.com'],
       });
 
-      const src = buildRendererUrl('/renderer', ThemePreference.LIGHT, logger);
+      const src = buildRendererUrl('/renderer', ThemePreference.LIGHT, environmentContext, logger);
 
       expect(src).toContain('origin=http%3A%2F%2Flocalhost%3A3000');
       expect(src).toContain('origin=https%3A%2F%2Fproxy.googlers.com');
@@ -95,7 +148,7 @@ describe('buildRendererUrl', () => {
         ],
       });
 
-      const src = buildRendererUrl('/renderer', ThemePreference.LIGHT, logger);
+      const src = buildRendererUrl('/renderer', ThemePreference.LIGHT, environmentContext, logger);
 
       expect(src!.match(/origin=http%3A%2F%2Flocalhost%3A3000/g)?.length).toBe(1);
       expect(src!.match(/origin=https%3A%2F%2Fproxy\.googlers\.com/g)?.length).toBe(1);
@@ -104,7 +157,7 @@ describe('buildRendererUrl', () => {
     it('handles a location without ancestorOrigins (e.g. Firefox)', () => {
       vi.stubGlobal('location', {origin: 'http://localhost:3000'});
 
-      const src = buildRendererUrl('/renderer', ThemePreference.LIGHT, logger);
+      const src = buildRendererUrl('/renderer', ThemePreference.LIGHT, environmentContext, logger);
 
       expect(src).toContain('origin=http%3A%2F%2Flocalhost%3A3000');
       expect(src!.match(/origin=/g)?.length).toBe(1);
@@ -114,14 +167,21 @@ describe('buildRendererUrl', () => {
       vi.stubGlobal('location', undefined);
 
       expect(
-        buildRendererUrl('http://localhost:3000/renderer', ThemePreference.LIGHT, logger),
+        buildRendererUrl(
+          'http://localhost:3000/renderer',
+          ThemePreference.LIGHT,
+          environmentContext,
+          logger,
+        ),
       ).toBe('http://localhost:3000/renderer?theme=light');
     });
 
     it('returns null for a relative URL where there is no location (SSR)', () => {
       vi.stubGlobal('location', undefined);
 
-      expect(buildRendererUrl('/renderer', ThemePreference.LIGHT, logger)).toBeNull();
+      expect(
+        buildRendererUrl('/renderer', ThemePreference.LIGHT, environmentContext, logger),
+      ).toBeNull();
     });
   });
 });

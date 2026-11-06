@@ -20,6 +20,15 @@ import {Injectable, computed, signal} from '@angular/core';
  * Represents the configuration options for an application renderer.
  */
 export declare interface RendererConfig {
+  /**
+   * Where the renderer is served. It may be relative to Composer's page, for a
+   * renderer that is deployed with Composer. Composer is served from a
+   * different path in each deployment (/composer/ on GitHub Pages,
+   * /composer/pr/<n>/ for a pull request's preview), and a relative URL loads
+   * the copy deployed alongside it. An absolute URL to the GitHub Pages
+   * deployment wouldn't exist in a pull request's preview until the pull
+   * request is merged.
+   */
   rendererUrl?: string;
   displayName?: string;
   id?: string;

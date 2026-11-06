@@ -15,6 +15,7 @@
  */
 
 import type {TaggedLogger} from '../../debug/error-logger.service';
+import type {EnvironmentContextService} from '../startup-resolution/state/environment-context.service';
 
 export interface SharedA2uiParseResult {
   payload: string | null;
@@ -28,9 +29,32 @@ export interface SharedA2uiParseResult {
 export class QueryParser {
   private static readonly PAYLOAD_PREFIX = 'd1.';
 
-  /** @nocollapse */
+  /**
+   * Matches the scheme at the start of a URL, such as `https:` (RFC 3986,
+   * section 3.1). A `renderer` parameter that starts with one names an
+   * absolute URL rather than a path.
+   */
+  private static readonly URL_SCHEME_PATTERN = /^[a-z][a-z\d+.-]*:/i;
+
+  /** Matches the renderer IDs a `rendererId` parameter may name. */
+  private static readonly RENDERER_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+  /**
+   * Returns the first `renderer` parameter that is an HTTP(S) URL, resolved the
+   * same way as a configured renderer URL, so a link may name a renderer
+   * relative to Composer's page (see `RendererConfig.rendererUrl`).
+   *
+   * A parameter must name a renderer location: an absolute URL, a root-relative
+   * path (`/samples/x/`), or a page-relative path with at least one `/`
+   * (`samples/x/`, `./x/`). An empty parameter or a single word such as `slack`
+   * is rejected, because it would resolve to a page of Composer's own origin
+   * instead of a renderer.
+   *
+   * @nocollapse
+   */
   static parseRendererUrl(
     searchOrHashString: string,
+    environmentContext: Pick<EnvironmentContextService, 'resolveRendererUrl'>,
     logger: Pick<TaggedLogger, 'warn'>,
   ): string | null {
     const clean = searchOrHashString ? searchOrHashString.replace(/^[?#]/, '') : '';
@@ -40,23 +64,48 @@ export class QueryParser {
       return null;
     }
 
-    const baseOrigin = globalThis.location?.origin || '';
-    for (const uriCandidate of renderers) {
+    for (const param of renderers) {
+      const uriCandidate = param.trim();
+      if (!QueryParser.namesRendererLocation(uriCandidate)) {
+        QueryParser.warnMalformedRenderer(uriCandidate, logger);
+        continue;
+      }
       try {
-        const validUrl = uriCandidate.startsWith('/')
-          ? new URL(uriCandidate, baseOrigin)
-          : new URL(uriCandidate);
+        const validUrl = environmentContext.resolveRendererUrl(uriCandidate);
         if (validUrl.protocol === 'http:' || validUrl.protocol === 'https:') {
           return validUrl.toString();
         }
-      } catch (err) {
-        logger.warn(
-          `Malformed renderer parameter string encountered: '${uriCandidate}'. Stripping invalid URI.`,
-        );
+      } catch {
+        QueryParser.warnMalformedRenderer(uriCandidate, logger);
       }
     }
 
     return null;
+  }
+
+  /**
+   * Whether a trimmed `renderer` parameter is shaped like a renderer location: it
+   * names a URL scheme, or it is a path with at least one `/`. Whether the scheme
+   * is HTTP(S) is checked after the parameter is resolved.
+   */
+  private static namesRendererLocation(candidate: string): boolean {
+    return QueryParser.URL_SCHEME_PATTERN.test(candidate) || candidate.includes('/');
+  }
+
+  /**
+   * Warns that a `renderer` parameter was ignored. A value that is a valid
+   * renderer ID was most likely meant for `rendererId`, so the warning says so.
+   */
+  private static warnMalformedRenderer(
+    candidate: string,
+    logger: Pick<TaggedLogger, 'warn'>,
+  ): void {
+    const hint = QueryParser.RENDERER_ID_PATTERN.test(candidate)
+      ? ` Did you mean rendererId=${candidate}?`
+      : '';
+    logger.warn(
+      `Malformed renderer parameter string encountered: '${candidate}'. Stripping invalid URI.${hint}`,
+    );
   }
 
   /** @nocollapse */
@@ -68,7 +117,7 @@ export class QueryParser {
       return null;
     }
 
-    if (/^[a-zA-Z0-9_-]+$/.test(candidate)) {
+    if (QueryParser.RENDERER_ID_PATTERN.test(candidate)) {
       return candidate;
     }
 

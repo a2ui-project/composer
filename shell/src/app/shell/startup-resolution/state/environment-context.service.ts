@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, inject} from '@angular/core';
+import {DOCUMENT, Injectable, inject} from '@angular/core';
 import {LocalStorageInteractions} from '../../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../../storage/models/local-storage-keys';
 import {ErrorLogger} from '../../../debug/error-logger.service';
@@ -25,9 +25,32 @@ import {ErrorLogger} from '../../../debug/error-logger.service';
 export class EnvironmentContextService {
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
   private readonly logger = inject(ErrorLogger).withTag('[EnvironmentContextService]');
+  private readonly document = inject(DOCUMENT);
 
-  getBaseOrigin(): string {
-    return globalThis.location?.origin || 'http://localhost';
+  /**
+   * Resolves a renderer URL against Composer's base URL, so every place that
+   * loads or compares a renderer agrees on where it is. Absolute URLs are
+   * unchanged. A page-relative URL resolves under the path Composer is served
+   * from, not just its origin; see `RendererConfig.rendererUrl`.
+   *
+   * @throws TypeError If the URL can't be parsed.
+   */
+  resolveRendererUrl(url: string): URL {
+    return new URL(url, this.document.baseURI);
+  }
+
+  /**
+   * Whether two renderer URLs load the same page once resolved with
+   * `resolveRendererUrl`, so a page-relative URL from the app config matches the
+   * absolute URL a `?renderer=` link resolved to. URLs that can't be parsed match
+   * only when they're written the same.
+   */
+  isSameRendererUrl(first: string, second: string): boolean {
+    try {
+      return this.resolveRendererUrl(first).href === this.resolveRendererUrl(second).href;
+    } catch {
+      return first === second;
+    }
   }
 
   isLocalhost(hostname: string): boolean {

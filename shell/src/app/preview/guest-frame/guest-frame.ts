@@ -40,6 +40,7 @@ import {
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 import {buildRendererUrl} from '../renderer-url';
 
@@ -76,6 +77,7 @@ import {buildRendererUrl} from '../renderer-url';
 export class GuestFrame implements OnInit {
   private readonly sanitizer = inject(DomSanitizer);
   private readonly startupResolution = inject(StartupResolution);
+  private readonly environmentContext = inject(EnvironmentContextService);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly destroyRef = inject(DestroyRef);
@@ -136,6 +138,7 @@ export class GuestFrame implements OnInit {
     const built = buildRendererUrl(
       this.startupResolution.resolvedUrl(),
       untracked(() => this.configProvider.themePreference()),
+      this.environmentContext,
       this.logger,
     );
     return built ? this.sanitizer.bypassSecurityTrustResourceUrl(built) : null;

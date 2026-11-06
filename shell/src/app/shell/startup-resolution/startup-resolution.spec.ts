@@ -181,6 +181,24 @@ describe('StartupResolution', () => {
     expect(url).toBe('http://query:3000/');
   });
 
+  // Either would resolve to a page of Composer's own origin, which needs no approval.
+  it.each(['?renderer=', '?renderer=slack'])(
+    'neither selects nor saves a custom renderer for %s',
+    async search => {
+      mockFetchConfig({renderers: {default: {rendererUrl: 'http://base:3000'}}});
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(search);
+      const originCheck = vi.spyOn(service, 'isOriginAllowed');
+
+      const url = await service.resolveStartupConfiguration();
+
+      expect(url).toBe('http://base:3000');
+      expect(originCheck).not.toHaveBeenCalled();
+      expect(stateService.selectedRendererId()).toBe('default');
+      expect(localStorage.getItem(LocalStorageKey.CUSTOM_RENDERERS)).toBeNull();
+      expect(localStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
+    },
+  );
+
   describe('sharedA2uiPayload signal', () => {
     it('parses compressed d1. payload from window hash fragment and assigns decompressed JSON string to sharedA2uiPayload', async () => {
       mockFetchConfig({});
@@ -656,6 +674,25 @@ describe('StartupResolution', () => {
       expect(service.resolvedUrl()).toBe('/standard/');
     });
 
+    it('does not apply a renderer after the caller cancels pending approval', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed').mockReturnValue(
+        new Promise(resolve => {
+          approve = resolve;
+        }),
+      );
+      const controller = new AbortController();
+      const cancellation = new Error('Stopped');
+      cancellation.name = 'CancelError';
+      const selection = service.setSelectedRendererId('lit', controller.signal);
+      const rejection = expect(selection).rejects.toBe(cancellation);
+      controller.abort(cancellation);
+      approve(true);
+      await rejection;
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+    });
+
     it('does not overwrite a newer selection when an older approval completes', async () => {
       let approve!: (allowed: boolean) => void;
       vi.spyOn(service, 'isOriginAllowed')
@@ -690,6 +727,15 @@ describe('StartupResolution', () => {
       expect(service.resolvedUrl()).toBe('/standard/');
     });
 
+    it('selects a configured page-relative renderer without origin confirmation', async () => {
+      stateService.setRenderers({lit: {rendererUrl: 'samples/lit-basic-catalog/'}});
+      const confirmation = vi.spyOn(service, 'confirmOrigin');
+      expect(await service.setSelectedRendererId('lit')).toBe(true);
+      expect(stateService.selectedRendererId()).toBe('lit');
+      expect(service.resolvedUrl()).toBe('samples/lit-basic-catalog/');
+      expect(confirmation).not.toHaveBeenCalled();
+    });
+
     it.each(['javascript:alert(1)', 'data:text/html,preview', 'ftp://localhost/renderer'])(
       'rejects non-HTTP renderer URL %s',
       async rendererUrl => {
@@ -699,6 +745,44 @@ describe('StartupResolution', () => {
         expect(service.resolvedUrl()).toBe('/standard/');
       },
     );
+
+    it('neither asks about an origin nor selects a renderer for a canceled request', async () => {
+      localStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'external', name: 'External', rendererUrl: 'https://external.example/preview'},
+        ]),
+      );
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        service.setSelectedRendererId('external', controller.signal),
+      ).rejects.toMatchObject({name: 'AbortError'});
+
+      expect(service.dialog.openDialogs).toHaveLength(0);
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+    });
+
+    it('closes a pending origin dialog when the selection is canceled', async () => {
+      localStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'external', name: 'External', rendererUrl: 'https://external.example/preview'},
+        ]),
+      );
+      const controller = new AbortController();
+      const selection = service.setSelectedRendererId('external', controller.signal);
+      const rejection = expect(selection).rejects.toMatchObject({name: 'AbortError'});
+      expect(service.dialog.openDialogs).toHaveLength(1);
+      controller.abort();
+      await rejection;
+      expect(service.dialog.openDialogs).toHaveLength(0);
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+      expect(localStorage.getItem(LocalStorageKey.ALLOWED_ORIGINS)).toBeNull();
+    });
   });
 
   describe('renderer resolution', () => {
@@ -1360,6 +1444,35 @@ describe('StartupResolution', () => {
       expect(stateService.selectedRendererId()).toBe('angular-dev');
     });
 
+    describe('with Composer served from a sub-path', () => {
+      let base: HTMLBaseElement;
+
+      beforeEach(() => {
+        base = document.createElement('base');
+        base.href = `${globalThis.location.origin}/composer/pr/7/`;
+        document.head.appendChild(base);
+      });
+
+      afterEach(() => {
+        base.remove();
+      });
+
+      it('1c1. selects the configured renderer a page-relative ?renderer= link names', async () => {
+        mockFetchConfig({
+          renderers: {
+            default: {rendererUrl: 'https://default.example.com'},
+            bundled: {rendererUrl: 'samples/bundled-renderer/'},
+          },
+        });
+        vi.spyOn(service, 'getWindowSearch').mockReturnValue('?renderer=samples/bundled-renderer/');
+
+        const url = await service.resolveRenderer();
+
+        expect(url).toBe(`${globalThis.location.origin}/composer/pr/7/samples/bundled-renderer/`);
+        expect(stateService.selectedRendererId()).toBe('bundled');
+      });
+    });
+
     it('1d. matches custom renderer ID when query contains matching custom renderer URL', async () => {
       mockFetchConfig({
         renderers: {
@@ -1483,7 +1596,7 @@ describe('StartupResolution', () => {
         'https://untrusted-custom.example.com/other-path',
       );
       expect(isAllowed).toBe(false);
-      expect(confirmSpy).toHaveBeenCalledWith('https://untrusted-custom.example.com');
+      expect(confirmSpy).toHaveBeenCalledWith('https://untrusted-custom.example.com', undefined);
     });
 
     it('2a. auto-allows localhost, 127.0.0.1, and [::1] origins in ?renderer= without prompting confirmation', async () => {
@@ -1522,7 +1635,7 @@ describe('StartupResolution', () => {
       const isAllowed = await service.isOriginAllowed('http://custom-renderer.com:3000/test');
 
       expect(isAllowed).toBe(true);
-      expect(confirmSpy).toHaveBeenCalledWith('http://custom-renderer.com:3000');
+      expect(confirmSpy).toHaveBeenCalledWith('http://custom-renderer.com:3000', undefined);
     });
 
     it('2a3. does not auto-allow custom-renderer.com without confirmation', async () => {
@@ -1530,7 +1643,7 @@ describe('StartupResolution', () => {
       const isAllowed = await service.isOriginAllowed('http://custom-renderer.com:3000/test');
 
       expect(isAllowed).toBe(false);
-      expect(confirmSpy).toHaveBeenCalledWith('http://custom-renderer.com:3000');
+      expect(confirmSpy).toHaveBeenCalledWith('http://custom-renderer.com:3000', undefined);
     });
 
     it('2b. auto-allows origin present in LocalStorage a2ui_composer_allowed_origins', async () => {
@@ -1550,7 +1663,7 @@ describe('StartupResolution', () => {
 
       const isAllowed = await service.isOriginAllowed('https://untrusted.example.com/app');
       expect(isAllowed).toBe(true);
-      expect(confirmSpy).toHaveBeenCalledWith('https://untrusted.example.com');
+      expect(confirmSpy).toHaveBeenCalledWith('https://untrusted.example.com', undefined);
 
       const storedOrigins = JSON.parse(
         localStorage.getItem(LocalStorageKey.ALLOWED_ORIGINS) || '[]',
