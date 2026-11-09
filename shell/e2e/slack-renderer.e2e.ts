@@ -161,12 +161,12 @@ test.describe('Slack renderer in the Components Gallery', () => {
     await openSlackGallery(page);
 
     await selectGalleryComponent(page, 'Chart');
-    await expectExampleJson(page, ['"component": "Chart"', '"type": "pie"']);
     const galleryChart = slackPreviewSurface(page).getByRole('img', {
       name: 'Pie chart, Illustrative possession split: Argentina 70, Mexico 30',
     });
     await expect(galleryChart).toBeVisible();
     await expect(galleryChart).toHaveAttribute('src', /^blob:/);
+    await expectExampleJson(page, ['"component": "Chart"', '"type": "pie"']);
 
     expect(unexpectedErrors).toEqual([]);
   });
