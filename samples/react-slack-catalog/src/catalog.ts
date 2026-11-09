@@ -84,16 +84,18 @@ const StringFunctionCallSchema = z
   .strict();
 
 /**
- * How the published catalog checks a `StringFunctionCallSchema`: the
- * function-call member of `common_types.json`'s `DynamicString`. Its
- * `FunctionCall` takes only a call to one of this catalog's functions, as listed
- * in `$defs.anyFunction`.
+ * How the published catalog checks a `StringFunctionCallSchema` or a
+ * `NumberFunctionCallSchema`: the function-call member of `common_types.json`'s
+ * `DynamicString` or `DynamicNumber`. Its `FunctionCall` takes only a call to one
+ * of this catalog's functions, as listed in `$defs.anyFunction`.
+ *
+ * @param returnType What the call must return: the prop's type.
  */
-function stringFunctionCallJsonSchema(): Record<string, unknown> {
+function functionCallJsonSchema(returnType: 'string' | 'number'): Record<string, unknown> {
   return {
     allOf: [
       {$ref: 'common_types.json#/$defs/FunctionCall'},
-      {properties: {returnType: {const: 'string'}}},
+      {properties: {returnType: {const: returnType}}},
     ],
   };
 }
@@ -109,6 +111,33 @@ function dynamicString(description?: string) {
   return z
     .union([z.string(), DataBindingSchema, StringFunctionCallSchema])
     .describe(`REF:common_types.json#/$defs/DynamicString${description ? `|${description}` : ''}`);
+}
+
+/**
+ * A call to one of the catalog's functions, for a number prop. `returnType`,
+ * when given, must be `number`. The published catalog also checks the function
+ * name and its arguments (see `publishedSchemaFor`).
+ */
+const NumberFunctionCallSchema = z
+  .object({
+    call: z.string(),
+    args: z.record(z.unknown()),
+    returnType: z.literal('number').optional(),
+  })
+  .strict();
+
+/**
+ * A number prop's schema: a literal number, a data binding, or a call to one of
+ * the catalog's functions that returns a number. The published catalog refers to
+ * `common_types.json`'s `DynamicNumber` for it, as `dynamicString` does for
+ * strings.
+ *
+ * @param description What the prop is for, published with the reference.
+ */
+function dynamicNumber(description?: string) {
+  return z
+    .union([z.number(), DataBindingSchema, NumberFunctionCallSchema])
+    .describe(`REF:common_types.json#/$defs/DynamicNumber${description ? `|${description}` : ''}`);
 }
 
 /**
@@ -283,21 +312,6 @@ const TableSchema = z
 
 const TableApi = slackComponentApi('Table', TableSchema);
 
-const DynamicNumberSchema = z.union([
-  z.number(),
-  z.object({path: z.string()}).strict(),
-  z
-    .object({
-      call: z.string(),
-      args: z.record(z.unknown()),
-      returnType: z
-        .enum(['string', 'number', 'boolean', 'array', 'object', 'any', 'void'])
-        .default('number')
-        .optional(),
-    })
-    .strict(),
-]);
-
 const ChartSchema = z
   .object({
     ...CommonProps,
@@ -307,21 +321,19 @@ const ChartSchema = z
       .describe(
         'Chart kind. Defaults to verticalBar. Use pie or donut for shares of a whole, line for trends, and bars to compare categories.',
       ),
-    title: DynamicStringSchema.optional().describe('Title drawn above the chart.'),
-    xAxisTitle: DynamicStringSchema.optional().describe(
+    title: dynamicString('Title drawn above the chart.').optional(),
+    xAxisTitle: dynamicString(
       'Axis title under bar and line charts. Ignored for pie and donut.',
-    ),
-    yAxisTitle: DynamicStringSchema.optional().describe(
+    ).optional(),
+    yAxisTitle: dynamicString(
       'Axis title beside bar and line charts. Ignored for pie and donut.',
-    ),
+    ).optional(),
     data: z
       .array(
         z
           .object({
-            label: DynamicStringSchema.describe('Category, slice name, or x value.'),
-            value: DynamicNumberSchema.describe(
-              'Number or binding. Pie and donut values must be zero or more.',
-            ),
+            label: dynamicString('Category, slice name, or x value.'),
+            value: dynamicNumber('Number or binding. Pie and donut values must be zero or more.'),
           })
           .strict(),
       )
@@ -336,12 +348,22 @@ const ChartSchema = z
 
 const ChartApi = slackComponentApi('Chart', ChartSchema);
 
-/** A score: a number, or anything a DynamicString accepts, such as "3 (4)" or a binding. */
-const DynamicScoreSchema = z.union([z.number(), ...DynamicStringSchema.options]);
+/**
+ * A score: anything a DynamicNumber or a DynamicString accepts, such as 3, "3 (4)" or a
+ * binding. It lists the members of both in one union, because web_core resolves a binding
+ * only in a union that holds the binding itself, or in one published as a `Dynamic` type.
+ */
+const DynamicScoreSchema = z.union([
+  z.number(),
+  z.string(),
+  DataBindingSchema,
+  NumberFunctionCallSchema,
+  StringFunctionCallSchema,
+]);
 
 const ScorecardTeamSchema = z
   .object({
-    name: DynamicStringSchema.describe('Team or player name.'),
+    name: dynamicString('Team or player name.'),
     score: DynamicScoreSchema.describe(
       'Score as a number, as text such as "3 (4)" for a penalty shootout, or a binding.',
     ),
@@ -353,12 +375,8 @@ const ScorecardSchema = z
     ...CommonProps,
     home: ScorecardTeamSchema.describe('The home team and its score, drawn on the left.'),
     away: ScorecardTeamSchema.describe('The away team and its score, drawn on the right.'),
-    status: DynamicStringSchema.optional().describe(
-      'Where the match stands, such as "Full time" or "72\'".',
-    ),
-    competition: DynamicStringSchema.optional().describe(
-      'Competition or stage, such as "World Cup, Group C".',
-    ),
+    status: dynamicString('Where the match stands, such as "Full time" or "72\'".').optional(),
+    competition: dynamicString('Competition or stage, such as "World Cup, Group C".').optional(),
   })
   .strict()
   .describe(
@@ -457,9 +475,9 @@ const PUBLISHED_PATTERNS = new Map<unknown, string>([
 /**
  * Called by zod-to-json-schema with each zod schema (`def`) and the JSON
  * Schema it made from it. Adds the pattern from `PUBLISHED_PATTERNS`, replaces
- * the JSON Schema made from `StringFunctionCallSchema` with
- * `stringFunctionCallJsonSchema`, and returns every other JSON Schema
- * unchanged.
+ * the JSON Schema made from `StringFunctionCallSchema` or
+ * `NumberFunctionCallSchema` with `functionCallJsonSchema`, and returns every
+ * other JSON Schema unchanged.
  */
 function publishedSchemaFor(jsonSchema: unknown, def: unknown): unknown {
   const pattern = PUBLISHED_PATTERNS.get(def);
@@ -467,7 +485,10 @@ function publishedSchemaFor(jsonSchema: unknown, def: unknown): unknown {
     return {...(jsonSchema as Record<string, unknown>), pattern};
   }
   if (def === StringFunctionCallSchema._def) {
-    return stringFunctionCallJsonSchema();
+    return functionCallJsonSchema('string');
+  }
+  if (def === NumberFunctionCallSchema._def) {
+    return functionCallJsonSchema('number');
   }
   return jsonSchema;
 }

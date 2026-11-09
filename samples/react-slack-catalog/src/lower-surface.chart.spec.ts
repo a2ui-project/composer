@@ -245,7 +245,7 @@ describe('Slack charts', () => {
 
     expect(session.getSnapshot()).toMatchObject({
       status: PreviewStatus.ERROR,
-      diagnostics: [expect.objectContaining({code: DiagnosticCode.A2UI_INVALID_PROPS})],
+      diagnostics: [expect.objectContaining({code: DiagnosticCode.A2UI_PROCESS_MESSAGE_ERROR})],
     });
   });
 
