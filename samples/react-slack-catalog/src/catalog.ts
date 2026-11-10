@@ -31,7 +31,7 @@ import {
 import {z} from 'zod/v3';
 import {zodToJsonSchema} from 'zod-to-json-schema';
 import {SLACK_LIMITS} from '@copilotkit/channels-slack/render';
-import {ChartType} from './chart-image';
+import {ChartType, PIE_CHART_MAX_SLICES} from './chart-image';
 import {InputComponentType, InputKind} from './form-input';
 import {HTTP_URL_PATTERN} from './http-url';
 import {
@@ -312,6 +312,13 @@ const TableSchema = z
 
 const TableApi = slackComponentApi('Table', TableSchema);
 
+/**
+ * The most points a Chart can have. It is this catalog's own limit, not Slack's: Slack
+ * gets only the drawn image, never the points. It matches the most points a series can
+ * have in Slack's native chart block, `data_visualization`.
+ */
+export const CHART_MAX_POINTS = 20;
+
 const ChartSchema = z
   .object({
     ...CommonProps,
@@ -319,7 +326,7 @@ const ChartSchema = z
       .nativeEnum(ChartType)
       .optional()
       .describe(
-        'Chart kind. Defaults to verticalBar. Use pie or donut for shares of a whole, line for trends, and bars to compare categories.',
+        `Chart kind. Defaults to verticalBar. Use pie or donut for shares of a whole, with at most ${PIE_CHART_MAX_SLICES} slices, line for trends, and bars to compare categories.`,
       ),
     title: dynamicString('Title drawn above the chart.').optional(),
     xAxisTitle: dynamicString(
@@ -338,8 +345,10 @@ const ChartSchema = z
           .strict(),
       )
       .min(1)
-      .max(20)
-      .describe('One entry per category, slice, or point, in display order (1 to 20).'),
+      .max(CHART_MAX_POINTS)
+      .describe(
+        `One entry per category, slice, or point, in display order: 1 to ${CHART_MAX_POINTS}, or 1 to ${PIE_CHART_MAX_SLICES} for pie and donut.`,
+      ),
   })
   .strict()
   .describe(

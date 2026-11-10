@@ -152,7 +152,7 @@ demo wall (`/demos`) has no Slack demos yet.
 | `TextField`      | Slack input block with `plain_text_input`               | Writable data binding; `shortText` or `longText`.                                                                                                                                |
 | `DateTimeInput`  | Slack input block with `datepicker`                     | Writable data binding; date only, in `YYYY-MM-DD` format.                                                                                                                        |
 | `Table`          | Slack table block                                       | Aligned headers and body cells, including data bindings. Supports 1–20 columns and 1–99 body rows with matching cell counts.                                                     |
-| `Chart`          | Slack image block, drawn by the renderer                | Bar, line, pie, or donut chart from 1–20 labeled values, literal or bound. Drawn as an image; see React components drawn as images.                                              |
+| `Chart`          | Slack image block, drawn by the renderer                | Bar, line, pie, or donut chart from 1–20 labeled values (1–8 for pie and donut), literal or bound. Drawn as an image; see React components drawn as images.                      |
 | `Scorecard`      | Slack image block, drawn by the renderer                | One match result: two teams with names and scores, plus an optional status and competition, literal or bound. Drawn as an image, like `Chart`.                                   |
 | `MarketSnapshot` | Header, summary, table, context, and acknowledge button | Custom component: three market rows with HTTP(S) source links, `whyItMatters`, and `searchedAt`. Source URLs can't hold `*`; names can't hold `<`, `>`, `[`, `]` or line breaks. |
 
@@ -208,10 +208,13 @@ on purpose, which also covers the donut and horizontal bar charts the native
 block lacks. Like `Scorecard`, the chart is drawn while its A2UI component is
 lowered, so its diagnostics appear in document order with the others.
 
-Every value must be a number, pie and donut values must be zero or more, and at
-least one value must be non-zero. Otherwise the chart is skipped with a
-`A2UI_INVALID_CHART_DATA` or `A2UI_EMPTY_CHART` warning, and the rest of the
-message still renders.
+The catalog schema allows 1 to 20 values, a limit of this catalog rather than of
+Slack. Every value must be a number. A pie or donut chart can have at most 8
+values, one for each of its colors, so no two slices look alike, and its values
+must be zero or more, with at least one above zero. Otherwise the chart is
+skipped with an `A2UI_INVALID_CHART_DATA` or `A2UI_EMPTY_CHART` warning, and the
+rest of the message still renders. A bar or line chart whose values are all zero
+is drawn, with its axes and labels.
 
 ### Scorecard
 

@@ -153,6 +153,19 @@ describe('renderChartSvg', () => {
     expect(svg).toContain('>-2</text>');
   });
 
+  it('draws a bar chart whose values are all zero on an axis from 0 to 1', () => {
+    const svg = renderChartSvg({
+      type: ChartType.VERTICAL_BAR,
+      data: [
+        {label: 'Q1', value: 0},
+        {label: 'Q2', value: 0},
+      ],
+    });
+
+    expect(countOf(svg, BAR)).toBe(2);
+    expect(svg).toContain('>1</text>');
+  });
+
   it('extends the axis a step below the lowest value, to leave room for its label', () => {
     // The axis reaches one step below -2, so the -2 label never sits on the "Loss" label.
     expect(renderChartSvg(gainAndLoss)).toContain('>-4</text>');

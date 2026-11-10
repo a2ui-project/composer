@@ -20,7 +20,7 @@ import {describe, expect, it} from 'vitest';
 // web_core doesn't export its JSON schemas, so this reads the copy it ships from
 // the workspace's root node_modules, as vitest.config.ts does for React.
 import commonTypesJson from '../../../node_modules/@a2ui/web_core/src/v0_9/schemas/common_types.json';
-import {SLACK_CATALOG_ID, slackCatalog, slackCatalogJson} from './catalog';
+import {CHART_MAX_POINTS, SLACK_CATALOG_ID, slackCatalog, slackCatalogJson} from './catalog';
 import dataBoundActionJson from '../public/examples/data-bound-action.json';
 import marketSnapshotJson from '../public/examples/market-snapshot.json';
 import {SLACK_COMPONENT_USAGES} from './examples';
@@ -713,10 +713,13 @@ describe('Slack Chart component', () => {
     expect(ChartSchema.safeParse({...usageProps, type: 'scatter'}).success).toBe(false);
   });
 
-  it('rejects more than 20 points', () => {
+  it(`rejects more than ${CHART_MAX_POINTS} points`, () => {
     expect(
       ChartSchema.safeParse({
-        data: Array.from({length: 21}, (_, index) => ({label: `P${index}`, value: index})),
+        data: Array.from({length: CHART_MAX_POINTS + 1}, (_, index) => ({
+          label: `P${index}`,
+          value: index,
+        })),
       }).success,
     ).toBe(false);
   });
