@@ -110,8 +110,11 @@ const STATUS_FONT_SIZE = 13;
 const STATUS_HEIGHT = 26;
 /** The space between the status text and each end of its label. */
 const STATUS_PADDING = 14;
-/** The most characters of the status the card shows. */
-const STATUS_MAX_CHARACTERS = 40;
+/** The most characters of the status that fit in a label as wide as the card's content. */
+const STATUS_MAX_CHARACTERS = charactersThatFit(
+  WIDTH - 2 * PADDING - 2 * STATUS_PADDING,
+  STATUS_FONT_SIZE,
+);
 /** Ways to lay out a team name, from largest to smallest. */
 const NAME_LAYOUTS: readonly NameLayout[] = [
   {fontSize: 24, maxLines: 1},
@@ -243,10 +246,7 @@ function TeamColumn({team, side}: TeamColumnProps) {
 /** The match status in a rounded label under the scores. */
 function StatusPill({status}: {readonly status: string}) {
   const text = clipText(status, STATUS_MAX_CHARACTERS);
-  const width = Math.min(
-    WIDTH - 2 * PADDING,
-    estimateTextWidth(text, STATUS_FONT_SIZE) + 2 * STATUS_PADDING,
-  );
+  const width = estimateTextWidth(text, STATUS_FONT_SIZE) + 2 * STATUS_PADDING;
   return (
     <g>
       <rect

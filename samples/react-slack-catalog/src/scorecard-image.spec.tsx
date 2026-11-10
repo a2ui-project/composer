@@ -15,7 +15,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {DrawnImageColor} from './drawn-image-style';
+import {DrawnImageColor, FontWeight, estimateTextWidth} from './drawn-image-style';
 import {describeScorecard, renderScorecardSvg, type ScorecardImageProps} from './scorecard-image';
 
 const final: ScorecardImageProps = {
@@ -39,6 +39,18 @@ function teamNames(svg: string): Array<{fontSize: string | null; lines: string[]
     lines: [...name.querySelectorAll('tspan')].map(line => line.textContent ?? ''),
   }));
 }
+
+/** The scorecard's width, which no text may run past. */
+const WIDTH = 560;
+
+/** The left and right edges of centered text, by the drawings' estimate of text width. */
+function centeredExtent(text: Element): {left: number; right: number} {
+  const x = Number(text.getAttribute('x'));
+  const width = estimateTextWidth(text.textContent ?? '', Number(text.getAttribute('font-size')));
+  return {left: x - width / 2, right: x + width / 2};
+}
+
+const LONG_TEXT = 'An unusually long piece of text that no scorecard has room for in one line';
 
 /** How the scorecard lays out `name` as the home team's name. */
 const homeName = (name: string) =>
@@ -107,6 +119,36 @@ describe('renderScorecardSvg', () => {
       fontSize: '16',
       lines: ['One Two Three', 'Four Five Six…'],
     });
+  });
+
+  it('shrinks a score too wide for the largest size, such as a penalty shootout', () => {
+    const svg = renderScorecardSvg({...final, home: {name: 'Argentina', score: '3 (4)'}});
+    // Scores are the only bold text.
+    const homeScore = parse(svg).querySelector(`text[font-weight="${FontWeight.BOLD}"]`)!;
+
+    expect(homeScore.textContent).toBe('3 (4)');
+    expect(homeScore.getAttribute('font-size')).toBe('21');
+  });
+
+  it('cuts a long status with an ellipsis so that its label fits on the card', () => {
+    const doc = parse(renderScorecardSvg({...final, status: LONG_TEXT}));
+    const label = doc.querySelector(`rect[fill="${DrawnImageColor.SURFACE}"]`)!;
+    const status = [...doc.querySelectorAll('text')].at(-1)!;
+    const labelLeft = Number(label.getAttribute('x'));
+
+    expect(status.textContent).toMatch(/^An unusually.*…$/);
+    expect(labelLeft).toBeGreaterThanOrEqual(0);
+    expect(labelLeft + Number(label.getAttribute('width'))).toBeLessThanOrEqual(WIDTH);
+  });
+
+  it('cuts a long competition with an ellipsis so that it fits across the card', () => {
+    const competition = parse(renderScorecardSvg({...final, competition: LONG_TEXT})).querySelector(
+      'text',
+    )!;
+
+    expect(competition.textContent).toMatch(/^An unusually.*…$/);
+    expect(centeredExtent(competition).left).toBeGreaterThanOrEqual(0);
+    expect(centeredExtent(competition).right).toBeLessThanOrEqual(WIDTH);
   });
 
   it('clips each team name to its own column', () => {
