@@ -35,6 +35,7 @@ import {AppConfigProvider} from '../../settings/app-config-provider/app-config-p
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {createMockCatalogManagement} from '../../storage/catalog-management/testing/catalog-management-fake';
 import {signal, WritableSignal} from '@angular/core';
 import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {bridgeEnvelope, surfaceResizeEnvelope} from '../testing/bridge-envelopes';
@@ -151,10 +152,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
         },
         {
           provide: CatalogManagement,
-          useValue: {
-            hasReceivedCatalogResponse: signal(true),
-            activeProtocolVersion: signal('v0.9'),
-          },
+          useValue: createMockCatalogManagement(),
         },
         {
           provide: AppConfigProvider,
