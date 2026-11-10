@@ -42,7 +42,6 @@ const EXPECTED_COMPONENTS = [
   'MarketSnapshot',
 ].sort();
 const TableSchema = slackCatalog.components.get('Table')!.schema;
-const ChartSchema = slackCatalog.components.get('Chart')!.schema;
 const ScorecardSchema = slackCatalog.components.get('Scorecard')!.schema;
 
 /** Where the Slack-specific components take a string: each builds props holding `text` there. */
@@ -77,7 +76,87 @@ const STRING_PROPS = [
     component: 'Table',
     props: (text: unknown) => ({columns: [{header: 'Score'}], rows: [[text]]}),
   },
+  {
+    name: 'Chart title',
+    component: 'Chart',
+    props: (text: unknown) => ({title: text, data: [{label: 'Q1', value: 1}]}),
+  },
+  {
+    name: 'Chart xAxisTitle',
+    component: 'Chart',
+    props: (text: unknown) => ({xAxisTitle: text, data: [{label: 'Q1', value: 1}]}),
+  },
+  {
+    name: 'Chart yAxisTitle',
+    component: 'Chart',
+    props: (text: unknown) => ({yAxisTitle: text, data: [{label: 'Q1', value: 1}]}),
+  },
+  {
+    name: 'Chart data label',
+    component: 'Chart',
+    props: (text: unknown) => ({data: [{label: text, value: 1}]}),
+  },
+  {
+    name: 'Scorecard team name',
+    component: 'Scorecard',
+    props: (text: unknown) => ({
+      home: {name: text, score: 2},
+      away: {name: 'Mexico', score: 0},
+    }),
+  },
+  {
+    name: 'Scorecard status',
+    component: 'Scorecard',
+    props: (text: unknown) => ({
+      home: {name: 'Argentina', score: 2},
+      away: {name: 'Mexico', score: 0},
+      status: text,
+    }),
+  },
+  {
+    name: 'Scorecard competition',
+    component: 'Scorecard',
+    props: (text: unknown) => ({
+      home: {name: 'Argentina', score: 2},
+      away: {name: 'Mexico', score: 0},
+      competition: text,
+    }),
+  },
 ];
+
+/** Where the Slack-specific components take a number: each builds props holding `value` there. */
+const NUMBER_PROPS = [
+  {
+    name: 'Chart data value',
+    component: 'Chart',
+    props: (value: unknown) => ({data: [{label: 'Q1', value}]}),
+  },
+  {
+    name: 'Scorecard score',
+    component: 'Scorecard',
+    props: (value: unknown) => ({
+      home: {name: 'Argentina', score: value},
+      away: {name: 'Mexico', score: 0},
+    }),
+  },
+];
+
+/** A call to a catalog function that returns a number. */
+const SUM_CALL = {call: 'add', args: {a: {path: '/home'}, b: 1}, returnType: 'number'};
+/** A call to a catalog function that returns a string. */
+const FORMATTED_CALL = {call: 'formatNumber', args: {value: {path: '/home'}}, returnType: 'string'};
+
+/** Whether `component`'s runtime schema and its published schema each accept `props`. */
+function acceptedBy(component: string, props: Record<string, unknown>) {
+  return {
+    runtime: slackCatalog.components.get(component)!.schema.safeParse(props).success,
+    published: compileComponentSchema(slackCatalogJson.components[component])({
+      id: 'target',
+      component,
+      ...props,
+    }),
+  };
+}
 /**
  * A validator that has web_core's v0.9 `common_types.json` and the Slack catalog,
  * under the names Composer's JSON editor gives them: `common_types.json` and
@@ -475,6 +554,42 @@ describe('Slack catalog schema payload', () => {
     },
   );
 
+  it.each(NUMBER_PROPS)(
+    'accepts a call to a catalog function returning a number in $name',
+    ({component, props}) => {
+      expect(acceptedBy(component, props(SUM_CALL))).toEqual({runtime: true, published: true});
+    },
+  );
+
+  // The runtime schema takes any function name, as it does for string props; the published
+  // catalog checks the name against the catalog's functions.
+  it.each(NUMBER_PROPS)(
+    'rejects a call to openUrl or to a function the catalog lacks in $name in the published schema',
+    ({component, props}) => {
+      const openUrl = {call: 'openUrl', args: {url: 'https://example.com'}, returnType: 'number'};
+      const missing = {call: 'missingFunction', args: {}, returnType: 'number'};
+
+      expect(acceptedBy(component, props(openUrl)).published).toBe(false);
+      expect(acceptedBy(component, props(missing)).published).toBe(false);
+    },
+  );
+
+  it('rejects a call returning a string in Chart data value', () => {
+    expect(acceptedBy('Chart', {data: [{label: 'Q1', value: FORMATTED_CALL}]})).toEqual({
+      runtime: false,
+      published: false,
+    });
+  });
+
+  it('accepts a call returning a string in Scorecard score, which can be text', () => {
+    expect(
+      acceptedBy('Scorecard', {
+        home: {name: 'Argentina', score: FORMATTED_CALL},
+        away: {name: 'Mexico', score: 0},
+      }),
+    ).toEqual({runtime: true, published: true});
+  });
+
   it('requires a Button action and accepts only the variants Slack draws', () => {
     const button = slackCatalog.components.get('Button')!;
     const validateButton = compileComponentSchema(slackCatalogJson.components.Button);
@@ -695,33 +810,29 @@ describe('Slack Chart component', () => {
     });
   });
 
-  it('accepts the Gallery example', () => {
-    expect(ChartSchema.safeParse(usageProps).success).toBe(true);
-    expect(compileComponentSchema(slackCatalogJson.components.Chart)(usage)).toBe(true);
-  });
-
   it('accepts bound labels and values', () => {
     expect(
-      ChartSchema.safeParse({
+      acceptedBy('Chart', {
         type: 'line',
         data: [{label: {path: '/days/0'}, value: {path: '/visits/0'}}],
-      }).success,
-    ).toBe(true);
+      }),
+    ).toEqual({runtime: true, published: true});
   });
 
   it('rejects an unknown chart type', () => {
-    expect(ChartSchema.safeParse({...usageProps, type: 'scatter'}).success).toBe(false);
+    expect(acceptedBy('Chart', {...usageProps, type: 'scatter'})).toEqual({
+      runtime: false,
+      published: false,
+    });
   });
 
   it(`rejects more than ${CHART_MAX_POINTS} points`, () => {
-    expect(
-      ChartSchema.safeParse({
-        data: Array.from({length: CHART_MAX_POINTS + 1}, (_, index) => ({
-          label: `P${index}`,
-          value: index,
-        })),
-      }).success,
-    ).toBe(false);
+    const data = Array.from({length: CHART_MAX_POINTS + 1}, (_, index) => ({
+      label: `P${index}`,
+      value: index,
+    }));
+
+    expect(acceptedBy('Chart', {data})).toEqual({runtime: false, published: false});
   });
 });
 
@@ -742,11 +853,6 @@ describe('Slack Scorecard component', () => {
     expect(slackCatalogJson.description).toContain(
       'Use Scorecard to show one match result; Slack has no block for it',
     );
-  });
-
-  it('accepts the Gallery example', () => {
-    expect(ScorecardSchema.safeParse(usageProps).success).toBe(true);
-    expect(validateScorecard(usage)).toBe(true);
   });
 
   it.each([
