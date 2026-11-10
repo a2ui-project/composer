@@ -55,7 +55,13 @@ export function lowerChart(
   });
 }
 
-/** Reads the chart's points, or explains in a warning why the chart can't be drawn. */
+/**
+ * Reads the chart's points, or explains in a warning why the chart can't be drawn.
+ * Points the schema accepts but that can't be drawn, such as a value bound to text that
+ * isn't a number, leave out only this chart, so the rest of the message still renders.
+ * `lowerTable` throws for a cell it can't lower instead; drawn-component-props.ts says
+ * why the two differ.
+ */
 function chartData(
   value: unknown,
   type: ChartType,
@@ -74,14 +80,14 @@ function chartData(
     if (!Number.isFinite(number)) {
       return skipWithWarning(
         context,
-        DiagnosticCode.SLACK_CHART_INVALID_DATA,
+        DiagnosticCode.A2UI_INVALID_CHART_DATA,
         `Chart "${context.componentId}" has a value for "${label}" that isn't a number. Use a number such as 70.`,
       );
     }
     if ((type === ChartType.PIE || type === ChartType.DONUT) && number < 0) {
       return skipWithWarning(
         context,
-        DiagnosticCode.SLACK_CHART_INVALID_DATA,
+        DiagnosticCode.A2UI_INVALID_CHART_DATA,
         `Chart "${context.componentId}" has a negative value for "${label}". Pie and donut slices must be zero or more.`,
       );
     }
@@ -90,7 +96,7 @@ function chartData(
   if (points.every(point => point.value === 0)) {
     return skipWithWarning(
       context,
-      DiagnosticCode.SLACK_CHART_EMPTY,
+      DiagnosticCode.A2UI_EMPTY_CHART,
       `Chart "${context.componentId}" has only zero values, so there is nothing to draw. Give at least one value that isn't zero.`,
     );
   }

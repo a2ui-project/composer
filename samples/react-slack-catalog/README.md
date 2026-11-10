@@ -210,7 +210,7 @@ lowered, so its diagnostics appear in document order with the others.
 
 Every value must be a number, pie and donut values must be zero or more, and at
 least one value must be non-zero. Otherwise the chart is skipped with a
-`SLACK_CHART_INVALID_DATA` or `SLACK_CHART_EMPTY` warning, and the rest of the
+`A2UI_INVALID_CHART_DATA` or `A2UI_EMPTY_CHART` warning, and the rest of the
 message still renders.
 
 ### Scorecard
@@ -223,8 +223,8 @@ Channels UI has no scorecard component either, so the sample draws it. It
 shows that a component Channels UI doesn't have can be sent this way too, as
 long as its React component renders to static SVG as described above.
 
-If a team's name or score is empty or missing, the scorecard is skipped with a
-`SLACK_SCORECARD_INVALID` warning, and the rest of the message still renders.
+If a team's name or score is empty or missing, the scorecard is skipped with an
+`A2UI_INVALID_SCORECARD` warning, and the rest of the message still renders.
 
 ## Actions
 

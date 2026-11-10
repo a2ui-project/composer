@@ -30,9 +30,15 @@ export enum PreviewStatus {
 
 /** How serious a preview diagnostic is. */
 export enum DiagnosticLevel {
-  /** Nothing is wrong; the preview is reporting progress. */
+  /**
+   * Nothing is wrong. The preview notes something about the render, such as a component
+   * it is waiting for, or images the app that sends the message must upload.
+   */
   INFO = 'info',
-  /** The preview rendered, but Slack can't show part of the surface as authored. */
+  /**
+   * The preview rendered, but not all of the surface as authored: part of it is
+   * approximated, cut to fit Slack's limits, or left out.
+   */
   WARNING = 'warning',
   /** The preview could not render, or an interaction failed. */
   ERROR = 'error',
@@ -45,8 +51,12 @@ export enum DiagnosticLevel {
  */
 export enum DiagnosticCode {
   A2UI_COMPONENT_CYCLE = 'A2UI_COMPONENT_CYCLE',
+  /** A Chart was left out because all of its values are zero. */
+  A2UI_EMPTY_CHART = 'A2UI_EMPTY_CHART',
   A2UI_INPUT_ERROR = 'A2UI_INPUT_ERROR',
   A2UI_INVALID_ACTION = 'A2UI_INVALID_ACTION',
+  /** A Chart was left out because a value isn't a number, or a pie or donut value is negative. */
+  A2UI_INVALID_CHART_DATA = 'A2UI_INVALID_CHART_DATA',
   A2UI_INVALID_IMAGE_ALT_TEXT = 'A2UI_INVALID_IMAGE_ALT_TEXT',
   A2UI_INVALID_IMAGE_URL = 'A2UI_INVALID_IMAGE_URL',
   /** A TextField or DateTimeInput whose value isn't bound to a data model path. */
@@ -59,6 +69,8 @@ export enum DiagnosticCode {
   A2UI_INVALID_MARKET_SOURCE_NAME = 'A2UI_INVALID_MARKET_SOURCE_NAME',
   /** A MarketSnapshot `sourceUrl` that isn't an HTTP(S) URL its source link can hold. */
   A2UI_INVALID_MARKET_SOURCE_URL = 'A2UI_INVALID_MARKET_SOURCE_URL',
+  /** A Scorecard was left out because a team's name or score is empty or missing. */
+  A2UI_INVALID_SCORECARD = 'A2UI_INVALID_SCORECARD',
   A2UI_INVALID_TABLE_CELL = 'A2UI_INVALID_TABLE_CELL',
   A2UI_INVALID_TABLE_HEADER = 'A2UI_INVALID_TABLE_HEADER',
   A2UI_INVALID_TABLE_ROW = 'A2UI_INVALID_TABLE_ROW',
@@ -77,10 +89,6 @@ export enum DiagnosticCode {
   SLACK_BLOCKS_TRIMMED = 'SLACK_BLOCKS_TRIMMED',
   SLACK_BUTTON_TEXT_LIMIT_EXCEEDED = 'SLACK_BUTTON_TEXT_LIMIT_EXCEEDED',
   SLACK_BUTTON_TEXT_TRUNCATED = 'SLACK_BUTTON_TEXT_TRUNCATED',
-  /** A Chart was left out because all of its values are zero. */
-  SLACK_CHART_EMPTY = 'SLACK_CHART_EMPTY',
-  /** A Chart was left out because a value isn't a number, or a pie or donut value is negative. */
-  SLACK_CHART_INVALID_DATA = 'SLACK_CHART_INVALID_DATA',
   SLACK_CONTEXT_ELEMENTS_LIMIT_EXCEEDED = 'SLACK_CONTEXT_ELEMENTS_LIMIT_EXCEEDED',
   SLACK_CONTEXT_IMAGE_URL_LIMIT_EXCEEDED = 'SLACK_CONTEXT_IMAGE_URL_LIMIT_EXCEEDED',
   SLACK_CONTEXT_TEXT_LIMIT_EXCEEDED = 'SLACK_CONTEXT_TEXT_LIMIT_EXCEEDED',
@@ -98,8 +106,6 @@ export enum DiagnosticCode {
   SLACK_IMAGE_URL_LIMIT_EXCEEDED = 'SLACK_IMAGE_URL_LIMIT_EXCEEDED',
   /** A Row, Column or Card was drawn as a plain sequence of Slack blocks. */
   SLACK_LAYOUT_FLATTENED = 'SLACK_LAYOUT_FLATTENED',
-  /** A Scorecard was left out because a team's name or score is empty or missing. */
-  SLACK_SCORECARD_INVALID = 'SLACK_SCORECARD_INVALID',
   SLACK_SECTION_FIELD_TEXT_LIMIT_EXCEEDED = 'SLACK_SECTION_FIELD_TEXT_LIMIT_EXCEEDED',
   SLACK_SECTION_FIELDS_LIMIT_EXCEEDED = 'SLACK_SECTION_FIELDS_LIMIT_EXCEEDED',
   SLACK_SECTION_TEXT_LIMIT_EXCEEDED = 'SLACK_SECTION_TEXT_LIMIT_EXCEEDED',
