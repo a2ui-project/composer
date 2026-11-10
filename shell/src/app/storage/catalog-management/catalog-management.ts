@@ -28,6 +28,7 @@ import {ErrorLogger} from '../../debug/error-logger.service';
 import {
   HostCommunication,
   MessageEnvelope,
+  isCatalogHandshakeErrorPayload,
 } from '../../shell/host-communication/host-communication';
 import {
   Catalog,
@@ -487,10 +488,10 @@ export class CatalogManagement {
               return of(null);
             }
 
-            if ('error' in rawPayload && (rawPayload as {error?: unknown}).error) {
-              const errorObj = (rawPayload as {error: {message?: string}}).error;
+            if (isCatalogHandshakeErrorPayload(rawPayload)) {
               const errorMsg =
-                errorObj?.message || 'Unknown error occurred in preview bridge during handshake.';
+                rawPayload.error.message ||
+                'Unknown error occurred in preview bridge during handshake.';
               this._catalogError.set(errorMsg);
               this.logger.error('Handshake failed with bridge error:', errorMsg);
               this._isHandshakeInProgress.set(false);
@@ -558,12 +559,27 @@ export class CatalogManagement {
             }
 
             let catalogsArr: Catalog[];
-            if (Array.isArray(rawCatalogs)) {
-              catalogsArr = (rawCatalogs as Catalog[]).map(c =>
-                c === primary ? catalogObj : sanitizeCatalog(c),
-              );
-            } else {
-              catalogsArr = [catalogObj];
+            try {
+              if (Array.isArray(rawCatalogs)) {
+                catalogsArr = [];
+                for (const c of rawCatalogs) {
+                  if (!c || typeof c !== 'object') {
+                    continue;
+                  }
+                  catalogsArr.push(c === primary ? catalogObj : sanitizeCatalog(c as Catalog));
+                }
+                if (catalogsArr.length === 0) {
+                  catalogsArr = [catalogObj];
+                }
+              } else {
+                catalogsArr = [catalogObj];
+              }
+            } catch (err: unknown) {
+              const errorMsg = 'Failed to clone or serialize catalog payload.';
+              this._catalogError.set(errorMsg);
+              this.logger.error(errorMsg, err);
+              this._isHandshakeInProgress.set(false);
+              return of(null);
             }
 
             let catalogString: string;

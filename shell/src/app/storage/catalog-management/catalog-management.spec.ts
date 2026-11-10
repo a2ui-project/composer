@@ -20,6 +20,7 @@ import {CatalogManagement} from './catalog-management';
 import {
   HostCommunication,
   MessageEnvelope,
+  isCatalogHandshakeErrorPayload,
 } from '../../shell/host-communication/host-communication';
 import {IndexedDbStorage} from '../indexed-db-storage/indexed-db-storage';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
@@ -744,6 +745,48 @@ describe('CatalogManagement', () => {
     errorSpy.mockRestore();
   });
 
+  it('keeps messageStream$ alive after ingesting a malformed A2UI_CATALOG payload', async () => {
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      payload: {
+        error: {message: 'Initial bridge failure'},
+      },
+      origin: 'http://localhost',
+      timestamp: 4001,
+    });
+    TestBed.tick();
+
+    expect(service.catalogError()).toBe('Initial bridge failure');
+    expect(service.isHandshakeInProgress()).toBe(false);
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      payload: {
+        catalogId: 'recovered-catalog',
+        title: 'Recovered Title',
+      },
+      origin: 'http://localhost',
+      timestamp: 4002,
+    });
+    TestBed.tick();
+
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
+
+    expect(service.activeCatalog()).toEqual(
+      expect.objectContaining({
+        catalogId: 'recovered-catalog',
+        title: 'Recovered Title',
+      }),
+    );
+    expect(service.catalogError()).toBeNull();
+    errorSpy.mockRestore();
+  });
+
   it('updates activeCatalog from cached record when resolvedUrl signal changes to a cached renderer URL', async () => {
     const cachedCatalog = {catalogId: 'cached-cat', title: 'Cached Title', components: {}};
     indexedDbStorageMock.getCatalogRecord.mockImplementation(async (url: string) => {
@@ -1231,6 +1274,46 @@ describe('CatalogManagement', () => {
       expect(multiV2String).toBe(stableStringify([primaryCat, secondaryCatV2]));
       expect(multiV2String).not.toBe(multiV1String);
       expect(multiV2Hash).not.toBe(multiV1Hash);
+    });
+  });
+
+  describe('isCatalogHandshakeErrorPayload', () => {
+    it('accepts valid handshake error payloads with explicit message', () => {
+      expect(isCatalogHandshakeErrorPayload({error: {message: 'boom'}})).toBe(true);
+      expect(isCatalogHandshakeErrorPayload({error: {message: ''}})).toBe(true);
+    });
+
+    it('accepts valid handshake error payloads with optional or omitted message', () => {
+      expect(isCatalogHandshakeErrorPayload({error: {}})).toBe(true);
+      expect(isCatalogHandshakeErrorPayload({error: {message: undefined}})).toBe(true);
+    });
+
+    it('rejects null, undefined, and non-object primitive values', () => {
+      expect(isCatalogHandshakeErrorPayload(null)).toBe(false);
+      expect(isCatalogHandshakeErrorPayload(undefined)).toBe(false);
+      expect(isCatalogHandshakeErrorPayload(123)).toBe(false);
+      expect(isCatalogHandshakeErrorPayload('error')).toBe(false);
+      expect(isCatalogHandshakeErrorPayload(true)).toBe(false);
+    });
+
+    it('rejects arrays and objects without an error object property', () => {
+      expect(isCatalogHandshakeErrorPayload([])).toBe(false);
+      expect(isCatalogHandshakeErrorPayload(['error'])).toBe(false);
+      expect(isCatalogHandshakeErrorPayload({catalogId: 'x'})).toBe(false);
+      expect(isCatalogHandshakeErrorPayload({error: null})).toBe(false);
+      expect(isCatalogHandshakeErrorPayload({error: 'string'})).toBe(false);
+      expect(isCatalogHandshakeErrorPayload({error: []})).toBe(false);
+      expect(isCatalogHandshakeErrorPayload({error: {message: 123}})).toBe(false);
+    });
+
+    it('rejects prototype-polluted payload structures', () => {
+      const pollutedRoot = JSON.parse('{"error":{},"__proto__":{"polluted":true}}') as unknown;
+      expect(isCatalogHandshakeErrorPayload(pollutedRoot)).toBe(false);
+
+      const pollutedChild = JSON.parse(
+        '{"error":{"message":"bad","__proto__":{"polluted":true}}}',
+      ) as unknown;
+      expect(isCatalogHandshakeErrorPayload(pollutedChild)).toBe(false);
     });
   });
 });

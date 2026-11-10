@@ -28,6 +28,42 @@ import {V09WireValidator} from './v0-9-wire-validator';
 import {V10WireValidator} from './v1-0-wire-validator';
 
 /**
+ * Error payload substituted when an incoming A2UI_CATALOG fails validation or
+ * bridge resolution.
+ */
+export interface CatalogHandshakeErrorPayload {
+  readonly error: {readonly message?: string};
+}
+
+/**
+ * Type guard verifying whether an incoming catalog handshake payload represents
+ * an error payload sent by the preview bridge or synthesized by the host frame.
+ */
+export function isCatalogHandshakeErrorPayload(
+  value: unknown,
+): value is CatalogHandshakeErrorPayload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  if (hasPrototypePollution(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  if (!('error' in candidate)) {
+    return false;
+  }
+  const errorObj = candidate['error'];
+  if (!errorObj || typeof errorObj !== 'object' || Array.isArray(errorObj)) {
+    return false;
+  }
+  if ('message' in errorObj) {
+    const msg = (errorObj as Record<string, unknown>)['message'];
+    return msg === undefined || typeof msg === 'string';
+  }
+  return true;
+}
+
+/**
  * Hardens postMessage channels by validating outgoing layout schemas,
  * component hierarchies, and data binding payloads prior to transmission.
  */
@@ -407,13 +443,13 @@ export class CrossFrameValidator {
 
     const payloadObj = payload as Record<string, unknown>;
 
-    if (payloadObj['error'] !== undefined) {
-      if (
-        !payloadObj['error'] ||
-        typeof payloadObj['error'] !== 'object' ||
-        Array.isArray(payloadObj['error'])
-      ) {
-        recordError('Malformed error in A2UI_CATALOG: must be an object.', errors, logger);
+    if ('error' in payloadObj && payloadObj['error'] !== undefined) {
+      if (!isCatalogHandshakeErrorPayload(payloadObj)) {
+        recordError(
+          'Malformed error in A2UI_CATALOG: must match { error: { message?: string } }.',
+          errors,
+          logger,
+        );
         return false;
       }
       return true;

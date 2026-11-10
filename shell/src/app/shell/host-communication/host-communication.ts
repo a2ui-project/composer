@@ -20,7 +20,10 @@ import {ReplaySubject, Subject, Observable, filter} from 'rxjs';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {EnvironmentContextService} from '../startup-resolution/state/environment-context.service';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {CrossFrameValidator} from '../cross-frame-validator/cross-frame-validator';
+import {
+  CrossFrameValidator,
+  type CatalogHandshakeErrorPayload,
+} from '../cross-frame-validator/cross-frame-validator';
 import {
   PreviewBridgeMessageType,
   McpRequestPayload,
@@ -31,6 +34,7 @@ import type {
   V10CallAgentFunctionPayload,
   V10RendererFunctionResponsePayload,
 } from '../cross-frame-validator/v1-0-wire-validator';
+import {hasPrototypePollution} from '../cross-frame-validator/wire-version-validator';
 import {ErrorLogger, ErrorLogLevel} from '../../debug/error-logger.service';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
@@ -61,13 +65,8 @@ export declare interface SendToServerEnvelope<T = SendToServerPayload> {
   timestamp: number;
 }
 
-/**
- * Error payload substituted when an incoming A2UI_CATALOG fails validation or
- * bridge resolution.
- */
-export interface CatalogHandshakeErrorPayload {
-  readonly error: {readonly message: string};
-}
+export type {CatalogHandshakeErrorPayload} from '../cross-frame-validator/cross-frame-validator';
+export {isCatalogHandshakeErrorPayload} from '../cross-frame-validator/cross-frame-validator';
 
 /**
  * What registering a frame does to the default target: the frame that
@@ -384,7 +383,7 @@ export class HostCommunication implements OnDestroy {
     const data = event.data;
     if (data && typeof data === 'object' && data.type) {
       const type = data.type as string;
-      const envelope: MessageEnvelope = {
+      let envelope: MessageEnvelope = {
         type,
         payload: data.payload,
         origin: event.origin,
@@ -479,6 +478,16 @@ export class HostCommunication implements OnDestroy {
         }
       }
 
+      if (
+        type !== PreviewBridgeMessageType.A2UI_CATALOG &&
+        envelope.payload &&
+        typeof envelope.payload === 'object' &&
+        hasPrototypePollution(envelope.payload)
+      ) {
+        this.logger.warn(`Dropped prototype-polluted ${type} envelope`);
+        return;
+      }
+
       if (type === PreviewBridgeMessageType.A2UI_CATALOG) {
         const errors: string[] = [];
         if (!CrossFrameValidator.validateIncomingMessage(envelope, errors, this.logger)) {
@@ -489,7 +498,7 @@ export class HostCommunication implements OnDestroy {
           const errorPayload: CatalogHandshakeErrorPayload = {
             error: {message: errors[0] ?? 'Malformed A2UI_CATALOG payload.'},
           };
-          envelope.payload = errorPayload;
+          envelope = {...envelope, payload: errorPayload};
         }
       }
 

@@ -16,6 +16,7 @@
 
 import {TestBed} from '@angular/core/testing';
 import {DefaultTarget, HostCommunication, MessageEnvelope} from './host-communication';
+import {CrossFrameValidator} from '../cross-frame-validator/cross-frame-validator';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
@@ -840,6 +841,32 @@ describe('HostCommunication', () => {
       const forwarded = forwardedCatalogEnvelopes();
       expect(forwarded.length).toBe(1);
       expect(forwarded[0].payload).toBe(catalogPayload);
+    });
+
+    it('does not mutate incoming event.data or payload object in-place when synthesizing error envelope', () => {
+      const validateSpy = vi.spyOn(CrossFrameValidator, 'validateIncomingMessage');
+      const originalPayload = {catalog: 'not an object'};
+      const eventData = {type: PreviewBridgeMessageType.A2UI_CATALOG, payload: originalPayload};
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: eventData,
+        }),
+      );
+
+      expect(eventData.payload).toBe(originalPayload);
+      expect(originalPayload).toEqual({catalog: 'not an object'});
+      const forwarded = forwardedCatalogEnvelopes();
+      expect(forwarded.length).toBe(1);
+      const validatedEnvelope = validateSpy.mock.calls[0][0] as MessageEnvelope;
+      expect(validatedEnvelope.payload).toBe(originalPayload);
+      expect(forwarded[0]).not.toBe(validatedEnvelope);
+      expect(forwarded[0].payload).not.toBe(originalPayload);
+      expect(forwarded[0].payload).toEqual({
+        error: {message: expect.stringContaining('must be an object')},
+      });
+      validateSpy.mockRestore();
     });
   });
 
@@ -2561,6 +2588,43 @@ describe('HostCommunication', () => {
       window.dispatchEvent(event);
 
       expect(emitted.length).toBe(0);
+    });
+
+    it('drops prototype-polluted SEND_TO_SERVER before recordEnvelope without emitting or buffering', () => {
+      const emittedMessages: MessageEnvelope[] = [];
+      const emittedSendToServer: unknown[] = [];
+      service.messageStream$.subscribe(e => emittedMessages.push(e));
+      service.sendToServer$.subscribe(e => emittedSendToServer.push(e));
+
+      const pollutedPayload = JSON.parse(
+        '{"version":"1.0","action":{"name":"x","__proto__":{"polluted":true}}}',
+      ) as unknown;
+
+      const event = new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: pollutedPayload,
+        },
+      });
+      window.dispatchEvent(event);
+
+      expect(emittedSendToServer.length).toBe(0);
+      expect(emittedMessages.length).toBe(0);
+      expect(service.getEnvelopeHistory().length).toBe(0);
+
+      const validEvent = new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {
+          type: PreviewBridgeMessageType.RENDERER_READY,
+          payload: {index: 1},
+        },
+      });
+      window.dispatchEvent(validEvent);
+      expect(service.getEnvelopeHistory().length).toBe(1);
+      expect(service.getEnvelopeHistory()[0].payload).toEqual({index: 1});
     });
 
     it('forwards A2UI_CATALOG with multi-catalog array on messageStream$', () => {
