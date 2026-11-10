@@ -46,6 +46,14 @@ describe('Slack charts', () => {
 
   const PIE_ALT = 'Pie chart, Possession: Argentina 70, Mexico 30';
 
+  const NEGATIVE_SLICE = {
+    ...PIE,
+    data: [
+      {label: 'Argentina', value: 70},
+      {label: 'Mexico', value: -30},
+    ],
+  };
+
   it('draws a chart as an image next to native blocks', async () => {
     const session = createSlackPreviewSession();
 
@@ -72,6 +80,67 @@ describe('Slack charts', () => {
     ]);
   });
 
+  it('keeps the URL of an Image next to a drawn chart in the export', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      updateComponents([
+        {id: 'root', component: 'Column', children: ['logo', 'possession']},
+        {
+          id: 'logo',
+          component: 'Image',
+          url: 'https://example.com/logo.png',
+          description: 'Team logo',
+        },
+        {id: 'possession', component: 'Chart', ...PIE},
+      ]),
+    ]);
+
+    expect(session.getSnapshot().exportBlocks).toEqual([
+      {type: 'image', image_url: 'https://example.com/logo.png', alt_text: 'Team logo'},
+      {type: 'image', slack_file: {id: 'RENDERED_AT_SEND'}, alt_text: PIE_ALT},
+    ]);
+  });
+
+  const QUARTERS = [
+    {label: 'Q1', value: 12},
+    {label: 'Q2', value: 18},
+  ];
+  const THREE_CHARTS = [
+    {id: 'root', component: 'Column', children: ['bars', 'line', 'donut']},
+    {id: 'bars', component: 'Chart', type: 'verticalBar', data: QUARTERS},
+    {id: 'line', component: 'Chart', type: 'line', data: QUARTERS},
+    {id: 'donut', component: 'Chart', type: 'donut', data: QUARTERS},
+  ];
+
+  it('draws every chart in a message, in message order', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, updateComponents(THREE_CHARTS)]);
+
+    expect(session.getSnapshot().blocks).toEqual([
+      {type: 'image', image_url: 'blob:image-1', alt_text: 'Bar chart: Q1 12, Q2 18'},
+      {type: 'image', image_url: 'blob:image-2', alt_text: 'Line chart: Q1 12, Q2 18'},
+      {type: 'image', image_url: 'blob:image-3', alt_text: 'Donut chart: Q1 12, Q2 18'},
+    ]);
+  });
+
+  it('names every drawn chart in one note that they must be uploaded to Slack', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, updateComponents(THREE_CHARTS)]);
+
+    expect(
+      session
+        .getSnapshot()
+        .diagnostics.filter(({code}) => code === DiagnosticCode.SLACK_IMAGE_RENDERED_AT_SEND)
+        .map(({message}) => message),
+    ).toEqual([
+      expect.stringMatching(/^Chart "bars", Chart "line", and Chart "donut" are drawn as images/),
+    ]);
+  });
+
   it('says the chart is drawn in the preview and must be uploaded to Slack', () => {
     const session = createSlackPreviewSession();
 
@@ -80,7 +149,6 @@ describe('Slack charts', () => {
     expect(session.getSnapshot().diagnostics).toContainEqual({
       level: DiagnosticLevel.INFO,
       code: DiagnosticCode.SLACK_IMAGE_RENDERED_AT_SEND,
-      componentId: 'possession',
       message:
         'Chart "possession" is drawn as an image in this preview. The app that sends the message to Slack must render it to a PNG and upload it. The Generated Block Kit export marks it with the placeholder file ID RENDERED_AT_SEND, which that app replaces with the ID of the uploaded file.',
     });
@@ -93,7 +161,7 @@ describe('Slack charts', () => {
       createSurface,
       updateComponents([
         {id: 'root', component: 'Column', children: ['possession', 'note']},
-        {id: 'possession', component: 'Chart', ...PIE},
+        {id: 'possession', component: 'Chart', ...NEGATIVE_SLICE},
         {id: 'note', component: 'Card', child: 'note-text'},
         {id: 'note-text', component: 'Text', text: 'Illustrative numbers'},
       ]),
@@ -159,14 +227,6 @@ describe('Slack charts', () => {
       alt_text: 'Pie chart, Possession: Argentina 60, Mexico 30',
     });
   });
-
-  const NEGATIVE_SLICE = {
-    ...PIE,
-    data: [
-      {label: 'Argentina', value: 70},
-      {label: 'Mexico', value: -30},
-    ],
-  };
 
   it('leaves out a pie chart with a negative slice and renders the rest', () => {
     const session = createSlackPreviewSession();

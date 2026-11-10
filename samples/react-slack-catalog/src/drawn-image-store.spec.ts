@@ -38,6 +38,28 @@ describe('createBlobImageStore', () => {
     expect(blobUrls.createObjectURL).toHaveBeenCalledOnce();
   });
 
+  it('has the URL it serves markup from', () => {
+    const store = createBlobImageStore();
+
+    expect(store.has(store.urlFor('<svg>a</svg>'))).toBe(true);
+  });
+
+  it('does not have a URL it did not hand out', () => {
+    const store = createBlobImageStore();
+    store.urlFor('<svg>a</svg>');
+
+    expect(store.has('https://example.com/chart.png')).toBe(false);
+  });
+
+  it('no longer has a URL it freed', () => {
+    const store = createBlobImageStore();
+    const first = store.urlFor('<svg>a</svg>');
+    store.release(new Set());
+    store.release(new Set());
+
+    expect(store.has(first)).toBe(false);
+  });
+
   it('frees a URL once two calls to release in a row leave it out', () => {
     const store = createBlobImageStore();
     const first = store.urlFor('<svg>a</svg>');

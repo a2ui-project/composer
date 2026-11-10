@@ -48,7 +48,7 @@ import {
   type InputDispatchEntry,
 } from './form-input';
 import {parseHttpUrl} from './http-url';
-import {exportDrawnImages, placeDrawnImage} from './drawn-image-blocks';
+import {exportDrawnImages, noteDrawnImages, placeDrawnImage} from './drawn-image-blocks';
 import {type DrawnImageStore} from './drawn-image-store';
 import {lowerChart} from './lower-chart';
 import {lowerImage} from './lower-image';
@@ -124,12 +124,13 @@ export function lowerSurface(
     actions: new Map(),
     inputs: new Map(),
     drawnImages,
-    drawnImageUrls: new Set(),
+    drawnComponents: [],
     nextActionOrdinal: 1,
   };
 
   try {
     const ir = wrapTopLevelButtons(lowerComponent(surface, 'root', '/', new Set(), state));
+    noteDrawnImages(state);
     const limitEvidence = collectOutputLimitEvidence(ir);
     const blocks = renderBlockKit(ir);
     const actions = filterActionsForBlocks(state.actions, blocks, state.diagnostics);
@@ -147,7 +148,7 @@ export function lowerSurface(
         surfaceId: surface.id,
         status: PreviewStatus.READY,
         blocks,
-        exportBlocks: exportDrawnImages(blocks, state.drawnImageUrls),
+        exportBlocks: exportDrawnImages(blocks, drawnImages),
         diagnostics: state.diagnostics,
       },
       actions,
@@ -294,7 +295,8 @@ function lowerComponent(
           return entry;
         },
         diagnostics: state.diagnostics,
-        placeDrawnImage: image => placeDrawnImage(state, image),
+        placeDrawnImage: image =>
+          placeDrawnImage(state, {componentType: model.type, componentId}, image),
       }),
     );
   } finally {

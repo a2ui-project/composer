@@ -50,8 +50,6 @@ export function lowerScorecard(
     competition: optionalText(props.competition),
   };
   return context.placeDrawnImage({
-    componentType: 'Scorecard',
-    componentId: context.componentId,
     svg: renderScorecardSvg(scorecard),
     alt: drawnImageAltText(props, describeScorecard(scorecard), context),
   });

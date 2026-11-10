@@ -54,8 +54,6 @@ export function lowerChart(
     data,
   };
   return context.placeDrawnImage({
-    componentType: 'Chart',
-    componentId: context.componentId,
     svg: renderChartSvg(image),
     alt: drawnImageAltText(props, describeChart(image), context),
   });
