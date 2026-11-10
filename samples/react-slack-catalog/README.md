@@ -202,6 +202,14 @@ renderer, which draws the preview (see Actions), use the preview blocks, so a
 drawn image there carries a local `blob:` URL that only loads inside the
 preview. Copy from `Generated Block Kit` instead.
 
+The Tightknit renderer draws with `slack-blocks-to-jsx`, which the root
+`package.json` pins through `resolutions` to 1.1.2, the version this sample
+uses itself. Version 1.4.1, which the renderer's own version range resolves to,
+accepts only some URL schemes in an image's `src`, and not `blob:`, so the drawn
+images would show no picture. Its `<Message>` takes a `urlTransform` prop that
+can allow more schemes, but the Tightknit renderer's `Renderer` doesn't pass one
+through, so the pin can go once it does.
+
 ### Chart
 
 Slack's native chart block, `data_visualization` (`Slack.Block.DataVisualization`
@@ -242,11 +250,7 @@ IDs become inert after replacement, deletion, or recreation.
 
 The preview is drawn by the Tightknit renderer: the `Renderer` component of
 the `@tightknitai/storybook-addon-slack-block-kit` package, which draws Block
-Kit JSON the way Slack would. It draws with `slack-blocks-to-jsx`, which the
-root `package.json` pins through `resolutions` to 1.1.2, the version this sample
-uses itself. Version 1.4 accepts only some URL schemes in an image's `src`, and
-not `blob:`, so the images drawn for `Chart` and `Scorecard` would show no
-picture. Clicking a Slack button in the preview and
+Kit JSON the way Slack would. Clicking a Slack button in the preview and
 clicking that button's `Simulate` control, which the renderer lists under the
 message, both call the same local renderer dispatch path. Event actions
 resolve against the current live A2UI surface and are delivered back to
