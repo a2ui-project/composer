@@ -255,7 +255,7 @@ export function provideA2uiSandbox(
   catalogs: Array<Type<unknown> | unknown>,
   options?: AngularSandboxOptions,
 ): EnvironmentProviders {
-  const classProviders = (catalogs ?? []).filter(
+  const classProviders = catalogs.filter(
     (c): c is Type<unknown> => typeof c === 'function',
   ) as Provider[];
 

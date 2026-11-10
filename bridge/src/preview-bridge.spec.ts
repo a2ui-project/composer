@@ -3164,6 +3164,26 @@ describe('PreviewBridge Core API Runtime', () => {
     });
   });
 
+  describe('aliasSingleCatalogId', () => {
+    it('stamps the resolved catalogId onto a single mutable catalog', () => {
+      const catalog: {id?: string} = {};
+      bridge.aliasSingleCatalogId('resolved-cat', [catalog]);
+      expect(catalog.id).toBe('resolved-cat');
+    });
+
+    it('tolerates a frozen catalog object without throwing', () => {
+      const frozenCatalog = Object.freeze({id: 'original-cat', components: {}});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        expect(() => bridge.aliasSingleCatalogId('resolved-cat', frozenCatalog)).not.toThrow();
+        expect(frozenCatalog.id).toBe('original-cat');
+        expect(warnSpy).toHaveBeenCalledOnce();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+  });
+
   describe('Multi-Surface Reset and v1.0 Initial Content', () => {
     it('resets all surface IDs in a multi-surface batch', () => {
       vi.useFakeTimers();
