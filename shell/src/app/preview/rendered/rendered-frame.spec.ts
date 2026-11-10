@@ -789,7 +789,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
           callAgentFunction: {
             surfaceId: 'surf-1',
             functionCallId: 'call-1',
-            call: 'testFunc',
+            callFunction: {call: 'testFunc'},
           },
         },
       });
@@ -818,7 +818,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
           callAgentFunction: {
             surfaceId: 'surf-1',
             functionCallId: 'call-xyz-123',
-            call: 'testFunc',
+            callFunction: {call: 'testFunc'},
           },
         },
       });
@@ -857,7 +857,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
           callAgentFunction: {
             surfaceId: 'surf-1',
             functionCallId: 'call-xyz-123',
-            call: 'testFunc',
+            callFunction: {call: 'testFunc'},
           },
         },
       });

@@ -86,7 +86,11 @@ describe('A2aChatView', () => {
         {provide: AppConfigProvider, useValue: mockConfigProvider},
         {
           provide: CatalogManagement,
-          useValue: {activeCatalog: mockActiveCatalogSignal},
+          useValue: {
+            activeCatalog: mockActiveCatalogSignal,
+            hasReceivedCatalogResponse: signal(true),
+            activeProtocolVersion: signal('v0.9'),
+          },
         },
         {
           provide: StartupResolution,
