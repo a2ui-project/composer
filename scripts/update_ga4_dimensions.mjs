@@ -38,6 +38,7 @@ const DEFAULT_SOURCE_PATH = path.resolve(
 export const EXCLUDED_PARAMS = new Set([
   'send_to',
   'page_path',
+  'page_location',
   'event_category',
   'event_label',
   'send_page_view',
@@ -223,12 +224,59 @@ export function extractParametersFromSource(sourceContent) {
   const payloadRegions = [];
 
   // 1. Identify target payload regions: getBaselineDimensions, dispatchGtagEvent, customParams
-  // Anchor getBaselineDimensions to method signature so JSDoc comments mentioning it are ignored
-  const baselineRegex =
-    /(?:protected|public|private)\s+getBaselineDimensions\s*\([^)]*\)[^{]*\{([\s\S]*?\n\s*\})/g;
+  // Mask comments and string/template literals with equal-length neutral text so unbalanced braces
+  // inside comments or strings never misalign brace-depth counting while offsets match 1-to-1.
+  const maskedSource = sourceContent.replace(
+    /\/\/[^\n]*|\/\*[\s\S]*?\*\/|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`/g,
+    match =>
+      match.startsWith('//') || match.startsWith('/*')
+        ? ' '.repeat(match.length)
+        : `'${' '.repeat(Math.max(0, match.length - 2))}'`,
+  );
+
+  // Anchor getBaselineDimensions declarations (with or without an explicit access modifier, and
+  // including subclass `override` declarations) to the start of a line, and stop at `;` so call
+  // sites such as `this.getBaselineDimensions();` or `...super.getBaselineDimensions()` are never
+  // mistaken for a method body. Then extract balanced `return { ... }` object literals inside it.
+  const baselineSigRegex =
+    /^[ \t]*(?:(?:protected|public|private)\s+)?(?:override\s+)?getBaselineDimensions\s*\([^)]*\)[^{;]*\{/gm;
   let match;
-  while ((match = baselineRegex.exec(sourceContent)) !== null) {
-    payloadRegions.push(match[1]);
+  while ((match = baselineSigRegex.exec(maskedSource)) !== null) {
+    const bodyStart = match.index + match[0].length;
+    let depth = 1;
+    let idx = bodyStart;
+    while (idx < maskedSource.length && depth > 0) {
+      const ch = maskedSource[idx];
+      if (ch === '{') {
+        depth++;
+      } else if (ch === '}') {
+        depth--;
+      }
+      idx++;
+    }
+    if (depth === 0) {
+      const bodyEnd = idx - 1;
+      const maskedBody = maskedSource.slice(bodyStart, bodyEnd);
+      const returnObjRegex = /\breturn\s*\{/g;
+      let retMatch;
+      while ((retMatch = returnObjRegex.exec(maskedBody)) !== null) {
+        const retBraceOpen = bodyStart + retMatch.index + retMatch[0].length;
+        let retDepth = 1;
+        let retIdx = retBraceOpen;
+        while (retIdx < bodyEnd && retDepth > 0) {
+          const ch = maskedSource[retIdx];
+          if (ch === '{') {
+            retDepth++;
+          } else if (ch === '}') {
+            retDepth--;
+          }
+          retIdx++;
+        }
+        if (retDepth === 0) {
+          payloadRegions.push(sourceContent.slice(retBraceOpen, retIdx - 1));
+        }
+      }
+    }
   }
 
   // dispatchGtagEvent call blocks

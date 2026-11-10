@@ -774,6 +774,99 @@ describe('Ga4UsageTrackingService', () => {
       expect((calls[1][2] as Record<string, unknown>)['source_tag']).toEqual('[Unknown]');
     });
   });
+
+  describe('page_location and page_path URL sanitization', () => {
+    it('strips sensitive query parameters and hash fragments from page_location in both config and event payloads', () => {
+      mockWindow.location = {
+        origin: 'https://a2ui-composer.corp.google.com',
+        pathname: '/composer/workspace',
+        hostname: 'a2ui-composer.corp.google.com',
+        search: '?token=secret-sidecar-token&conversationId=conv-99&share=compressedPii',
+        hash: '#private-fragment',
+        href: 'https://a2ui-composer.corp.google.com/composer/workspace?token=secret-sidecar-token&conversationId=conv-99&share=compressedPii#private-fragment',
+      } as Location;
+
+      service.initialize();
+      const calls = mockWindow.gtag!.mock.calls;
+      const configCall = calls.find(call => call[0] === 'config');
+      expect(configCall).toBeDefined();
+      const configOptions = configCall![2] as Record<string, unknown>;
+      expect(configOptions['page_location']).toBe(
+        'https://a2ui-composer.corp.google.com/composer/workspace',
+      );
+      expect(JSON.stringify(configOptions)).not.toContain('secret-sidecar-token');
+      expect(JSON.stringify(configOptions)).not.toContain('conv-99');
+      expect(JSON.stringify(configOptions)).not.toContain('compressedPii');
+      expect(JSON.stringify(configOptions)).not.toContain('private-fragment');
+
+      mockWindow.gtag!.mockClear();
+      service.trackGalleryView();
+      const eventPayload = mockWindow.gtag!.mock.calls[0][2] as Record<string, unknown>;
+      expect(eventPayload['page_location']).toBe(
+        'https://a2ui-composer.corp.google.com/composer/workspace',
+      );
+      expect(JSON.stringify(eventPayload)).not.toContain('secret-sidecar-token');
+    });
+
+    it('strips query parameters and hash fragments from page_path in trackPageView', () => {
+      service.trackPageView({
+        pagePath: '/?share=secretPayload&token=tok123&conversationId=conv1#frag',
+      });
+      expect(mockWindow.gtag).toHaveBeenCalledWith(
+        'event',
+        'page_view',
+        expect.objectContaining({
+          page_path: '/',
+        }),
+      );
+      expect(JSON.stringify(mockWindow.gtag!.mock.calls[0][2])).not.toContain('secretPayload');
+      expect(JSON.stringify(mockWindow.gtag!.mock.calls[0][2])).not.toContain('tok123');
+      expect(JSON.stringify(mockWindow.gtag!.mock.calls[0][2])).not.toContain('frag');
+
+      mockWindow.gtag!.mockClear();
+      service.trackPageView({
+        pagePath: '/gallery?renderer=http://secret.local#section',
+      });
+      expect(mockWindow.gtag).toHaveBeenCalledWith(
+        'event',
+        'page_view',
+        expect.objectContaining({
+          page_path: '/gallery',
+        }),
+      );
+    });
+
+    it('omits page_location property on partial DOCUMENT mocks or opaque null origins without emitting undefinedundefined or nullblank', () => {
+      // Partial mock in beforeEach only sets hostname (no origin/pathname)
+      service.initialize();
+      let configCall = mockWindow.gtag!.mock.calls.find(call => call[0] === 'config');
+      let configOptions = configCall![2] as Record<string, unknown>;
+      expect('page_location' in configOptions).toBe(false);
+
+      service.trackGalleryView();
+      const partialEventCall = mockWindow.gtag!.mock.calls.find(call => call[0] === 'event');
+      const partialEventPayload = partialEventCall![2] as Record<string, unknown>;
+      expect('page_location' in partialEventPayload).toBe(false);
+
+      // Opaque origin ('null', e.g. about:blank or sandboxed iframe)
+      mockWindow.gtag!.mockClear();
+      mockWindow.location = {
+        origin: 'null',
+        pathname: 'blank',
+        hostname: '',
+      } as Location;
+
+      service.initialize();
+      configCall = mockWindow.gtag!.mock.calls.find(call => call[0] === 'config');
+      configOptions = configCall![2] as Record<string, unknown>;
+      expect('page_location' in configOptions).toBe(false);
+
+      service.trackGalleryView();
+      const opaqueEventCall = mockWindow.gtag!.mock.calls.find(call => call[0] === 'event');
+      const opaqueEventPayload = opaqueEventCall![2] as Record<string, unknown>;
+      expect('page_location' in opaqueEventPayload).toBe(false);
+    });
+  });
 });
 
 describe('Ga4UsageTrackingService (Disabled)', () => {
