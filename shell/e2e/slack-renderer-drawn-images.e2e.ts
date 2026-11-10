@@ -59,6 +59,14 @@ test.describe('Slack renderer drawn images in Composer', () => {
         boxes[index - 1]!.y,
       );
     }
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('accepts the match report in the JSON editor without validation problems', async ({
+    page,
+  }) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openMatchReport(page);
 
     expect(await getJsonValidationProblems(page)).toEqual([]);
     expect(unexpectedErrors).toEqual([]);

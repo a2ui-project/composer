@@ -117,38 +117,64 @@ describe('Slack scorecards', () => {
     });
   });
 
-  it('redraws a scorecard whose names and scores are bound to the data model', async () => {
+  /**
+   * The match report, with a scorecard bound to `/match`, which holds a 1-0 lead. Each call
+   * builds new messages, as the data model keeps the objects it is given and later updates
+   * change them.
+   */
+  const boundReport = (): A2uiMessage[] => [
+    createSurface,
+    updateData({
+      match: {
+        home: {name: 'Argentina', score: 1},
+        away: {name: 'Mexico', score: 0},
+        status: "72'",
+      },
+    }),
+    matchReport({
+      home: {name: {path: '/match/home/name'}, score: {path: '/match/home/score'}},
+      away: {name: {path: '/match/away/name'}, score: {path: '/match/away/score'}},
+      status: {path: '/match/status'},
+    }),
+  ];
+  /** Ends the bound match 2-0. */
+  const fullTime = (): A2uiMessage[] => [
+    updateData(2, '/match/home/score'),
+    updateData('Full time', '/match/status'),
+  ];
+
+  it('draws a scorecard whose names and scores are bound to the data model', () => {
     const session = createSlackPreviewSession();
 
-    session.processMessages([
-      createSurface,
-      updateData({
-        match: {
-          home: {name: 'Argentina', score: 1},
-          away: {name: 'Mexico', score: 0},
-          status: "72'",
-        },
-      }),
-      matchReport({
-        home: {name: {path: '/match/home/name'}, score: {path: '/match/home/score'}},
-        away: {name: {path: '/match/away/name'}, score: {path: '/match/away/score'}},
-        status: {path: '/match/status'},
-      }),
-    ]);
+    session.processMessages(boundReport());
+
     expect(session.getSnapshot().blocks[1]).toMatchObject({
       alt_text: "Scorecard: Argentina 1, Mexico 0. 72'.",
     });
+  });
 
-    session.processMessages([
-      updateData(2, '/match/home/score'),
-      updateData('Full time', '/match/status'),
-    ]);
+  it('redraws a bound scorecard when its data changes', async () => {
+    const session = createSlackPreviewSession();
+    session.processMessages(boundReport());
 
-    // The chart didn't change, so it kept its image and only the scorecard was drawn again.
+    session.processMessages(fullTime());
+
     expect((await blobUrls.drawnSvgs()).at(-1)).toContain('>2</text>');
     expect(session.getSnapshot().blocks[1]).toMatchObject({
       alt_text: 'Scorecard: Argentina 2, Mexico 0. Full time.',
     });
+  });
+
+  it('keeps the image of a chart that did not change when the scorecard is redrawn', async () => {
+    const session = createSlackPreviewSession();
+    session.processMessages(boundReport());
+    const chart = session.getSnapshot().blocks[3];
+
+    session.processMessages(fullTime());
+
+    expect(session.getSnapshot().blocks[3]).toEqual(chart);
+    // The scorecard was drawn twice and the chart once.
+    expect(await blobUrls.drawnSvgs()).toHaveLength(3);
   });
 
   it('leaves out a scorecard with an empty team name and renders the rest', async () => {
@@ -183,20 +209,24 @@ describe('Slack scorecards', () => {
     });
   });
 
-  it('skips a scorecard whose bound score is missing', () => {
+  it('skips a scorecard whose bound score is missing', async () => {
     const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
       matchReport({...FINAL_SCORE, away: {name: 'Mexico', score: {path: '/missing'}}}),
     ]);
+    const snapshot = session.getSnapshot();
 
-    expect(session.getSnapshot().diagnostics).toContainEqual({
+    expect(snapshot.diagnostics).toContainEqual({
       level: DiagnosticLevel.WARNING,
       code: DiagnosticCode.A2UI_INVALID_SCORECARD,
       componentId: 'final-score',
       message:
         'Scorecard "final-score" has no score for the away team. Give both teams a name and a score, such as "Argentina" and 2.',
     });
+    expect(snapshot.blocks.map(({type}) => type)).toEqual(['header', 'table', 'image', 'actions']);
+    // Only the chart was drawn.
+    expect(await blobUrls.drawnSvgs()).toHaveLength(1);
   });
 });

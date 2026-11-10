@@ -64,7 +64,7 @@ describe('BlockKitExport', () => {
     });
   };
 
-  it('exports drawn chart images in the uploaded-file form instead of the preview URL', () => {
+  it('shows the export blocks, not the preview blocks', () => {
     renderExport({
       ...readySnapshot([{type: 'image', image_url: 'blob:chart-1', alt_text: 'Pie chart'}]),
       exportBlocks: [{type: 'image', slack_file: {id: 'RENDERED_AT_SEND'}, alt_text: 'Pie chart'}],
