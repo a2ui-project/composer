@@ -24,6 +24,7 @@ import {
   baselineCenteredOn,
   charactersThatFit,
   clipText,
+  estimateTextWidth,
   round,
 } from './drawn-image-style';
 
@@ -79,10 +80,6 @@ interface ChartAreaProps {
 /** The size of the drawing, in SVG units. Slack scales the image to fit the message. */
 const WIDTH = 600;
 const HEIGHT = 360;
-const INK = DrawnImageColor.INK;
-const MUTED = DrawnImageColor.MUTED;
-const GRID = DrawnImageColor.RULE;
-const BACKGROUND = DrawnImageColor.BACKGROUND;
 /** Every color has at least 3:1 contrast against the white background. */
 const PALETTE = [
   '#2563eb',
@@ -110,10 +107,10 @@ const TITLE_HEIGHT = 52;
 const TITLE_BASELINE = 32;
 /** The space above the chart when it has no title. */
 const UNTITLED_TOP_MARGIN = 20;
-/** The most characters of the title, or of the x-axis title, the chart shows. */
-const TITLE_MAX_CHARACTERS = 60;
-/** The most characters of the y-axis title the chart shows. */
-const Y_AXIS_TITLE_MAX_CHARACTERS = 40;
+/** The space kept clear between the title and each side of the image. */
+const TITLE_SIDE_MARGIN = 20;
+/** The most characters of the title that fit across the image between its side margins. */
+const TITLE_MAX_CHARACTERS = charactersThatFit(WIDTH - 2 * TITLE_SIDE_MARGIN, TITLE_FONT_SIZE);
 /** The extra room left of the plot that a y-axis title takes. */
 const Y_AXIS_TITLE_WIDTH = 16;
 /** The extra room below the plot that an x-axis title takes. */
@@ -139,8 +136,14 @@ const HORIZONTAL_PLOT_BOTTOM = 36;
 const AXIS_LABEL_GAP = 8;
 /** The fewest characters a vertical chart's category label keeps, however narrow its band. */
 const MIN_CATEGORY_LABEL_CHARACTERS = 4;
-/** The most characters of a horizontal bar chart's category label, which sits left of the plot. */
-const HORIZONTAL_CATEGORY_LABEL_MAX_CHARACTERS = 18;
+/**
+ * The most characters of a horizontal bar chart's category label that fit in the room
+ * left of the plot.
+ */
+const HORIZONTAL_CATEGORY_LABEL_MAX_CHARACTERS = charactersThatFit(
+  HORIZONTAL_PLOT_LEFT - AXIS_LABEL_GAP,
+  LABEL_FONT_SIZE,
+);
 /** The width of the gridline at each number on the value axis. */
 const GRID_LINE_WIDTH = 1;
 /** About how many steps the value axis is split into; see `niceDomain`. */
@@ -187,8 +190,13 @@ const LEGEND_MAX_ROW_HEIGHT = 22;
 const SWATCH_SIZE = 12;
 /** The space between a legend swatch and its text. */
 const SWATCH_GAP = 8;
-/** The most characters of a slice's label the legend shows, leaving room for its value. */
-const LEGEND_LABEL_MAX_CHARACTERS = 28;
+/** The space between the legend and the image's right edge. */
+const LEGEND_RIGHT_MARGIN = 16;
+/**
+ * The fewest characters a legend label keeps, however long its value: one, which a cut
+ * label spends on the ellipsis.
+ */
+const MIN_LEGEND_LABEL_CHARACTERS = 1;
 
 const TYPE_NAMES: Record<ChartType, string> = {
   [ChartType.VERTICAL_BAR]: 'Bar chart',
@@ -231,7 +239,7 @@ function ChartSvg({chart}: {readonly chart: ChartImageProps}) {
       height={HEIGHT}
       fontFamily={DRAWN_IMAGE_FONT_FAMILY}
     >
-      <rect width={WIDTH} height={HEIGHT} fill={BACKGROUND} />
+      <rect width={WIDTH} height={HEIGHT} fill={DrawnImageColor.BACKGROUND} />
       {chart.title ? (
         <text
           x={WIDTH / 2}
@@ -239,7 +247,7 @@ function ChartSvg({chart}: {readonly chart: ChartImageProps}) {
           textAnchor="middle"
           fontSize={TITLE_FONT_SIZE}
           fontWeight={FontWeight.SEMIBOLD}
-          fill={INK}
+          fill={DrawnImageColor.INK}
         >
           {clipText(chart.title, TITLE_MAX_CHARACTERS)}
         </text>
@@ -264,6 +272,8 @@ function PieChart({chart, top}: ChartAreaProps) {
   const slices = sliceAngles(chart.data.map(point => point.value));
   const rowHeight = Math.min(LEGEND_MAX_ROW_HEIGHT, available / chart.data.length);
   const legendX = cx + radius + LEGEND_GAP;
+  const legendTextX = legendX + SWATCH_SIZE + SWATCH_GAP;
+  const legendTextWidth = WIDTH - LEGEND_RIGHT_MARGIN - legendTextX;
 
   return (
     <g>
@@ -287,7 +297,7 @@ function PieChart({chart, top}: ChartAreaProps) {
             key={index}
             d={slicePath(cx, cy, radius, start, end)}
             fill={paletteColor(index)}
-            stroke={BACKGROUND}
+            stroke={DrawnImageColor.BACKGROUND}
             strokeWidth={SLICE_SEPARATOR_WIDTH}
           />
         );
@@ -297,12 +307,21 @@ function PieChart({chart, top}: ChartAreaProps) {
           cx={round(cx)}
           cy={round(cy)}
           r={round(radius * DONUT_HOLE_RATIO)}
-          fill={BACKGROUND}
+          fill={DrawnImageColor.BACKGROUND}
         />
       ) : null}
       {chart.data.map((point, index) => {
         const y = top + LEGEND_TOP_PADDING + rowHeight * index;
         const share = total > 0 ? Math.round((point.value / total) * 100) : 0;
+        // The label is cut to the room its value and share leave on the line.
+        const valueText = ` · ${formatChartValue(point.value)} (${share}%)`;
+        const labelLength = Math.max(
+          MIN_LEGEND_LABEL_CHARACTERS,
+          charactersThatFit(
+            legendTextWidth - estimateTextWidth(valueText, LEGEND_FONT_SIZE),
+            LEGEND_FONT_SIZE,
+          ),
+        );
         return (
           <g key={index}>
             <rect
@@ -314,12 +333,12 @@ function PieChart({chart, top}: ChartAreaProps) {
               fill={paletteColor(index)}
             />
             <text
-              x={round(legendX + SWATCH_SIZE + SWATCH_GAP)}
+              x={round(legendTextX)}
               y={round(baselineCenteredOn(y + SWATCH_SIZE / 2, LEGEND_FONT_SIZE))}
               fontSize={LEGEND_FONT_SIZE}
-              fill={INK}
+              fill={DrawnImageColor.INK}
             >
-              {`${clipText(point.label, LEGEND_LABEL_MAX_CHARACTERS)} · ${formatChartValue(point.value)} (${share}%)`}
+              {`${clipText(point.label, labelLength)}${valueText}`}
             </text>
           </g>
         );
@@ -359,7 +378,7 @@ function VerticalChart({chart, top}: ChartAreaProps) {
             x2={plot.x + plot.width}
             y1={round(valueY(tick))}
             y2={round(valueY(tick))}
-            stroke={GRID}
+            stroke={DrawnImageColor.RULE}
             strokeWidth={GRID_LINE_WIDTH}
           />
           <text
@@ -367,7 +386,7 @@ function VerticalChart({chart, top}: ChartAreaProps) {
             y={round(baselineCenteredOn(valueY(tick), TICK_FONT_SIZE))}
             textAnchor="end"
             fontSize={TICK_FONT_SIZE}
-            fill={MUTED}
+            fill={DrawnImageColor.MUTED}
           >
             {formatChartValue(tick)}
           </text>
@@ -397,7 +416,7 @@ function VerticalChart({chart, top}: ChartAreaProps) {
                 y={round(valueY(point.value) - POINT_RADIUS - VALUE_LABEL_GAP)}
                 textAnchor="middle"
                 fontSize={LABEL_FONT_SIZE}
-                fill={INK}
+                fill={DrawnImageColor.INK}
               >
                 {formatChartValue(point.value)}
               </text>
@@ -427,7 +446,7 @@ function VerticalChart({chart, top}: ChartAreaProps) {
                 )}
                 textAnchor="middle"
                 fontSize={LABEL_FONT_SIZE}
-                fill={INK}
+                fill={DrawnImageColor.INK}
               >
                 {formatChartValue(point.value)}
               </text>
@@ -442,7 +461,7 @@ function VerticalChart({chart, top}: ChartAreaProps) {
           y={round(baselineBelow(plot.y + plot.height + AXIS_LABEL_GAP, LABEL_FONT_SIZE))}
           textAnchor="middle"
           fontSize={LABEL_FONT_SIZE}
-          fill={MUTED}
+          fill={DrawnImageColor.MUTED}
         >
           {clipText(point.label, labelLength)}
         </text>
@@ -478,7 +497,7 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
             x2={round(valueX(tick))}
             y1={plot.y}
             y2={plot.y + plot.height}
-            stroke={GRID}
+            stroke={DrawnImageColor.RULE}
             strokeWidth={GRID_LINE_WIDTH}
           />
           <text
@@ -486,7 +505,7 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
             y={round(baselineBelow(plot.y + plot.height + AXIS_LABEL_GAP, TICK_FONT_SIZE))}
             textAnchor="middle"
             fontSize={TICK_FONT_SIZE}
-            fill={MUTED}
+            fill={DrawnImageColor.MUTED}
           >
             {formatChartValue(tick)}
           </text>
@@ -503,7 +522,7 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
               y={baseline}
               textAnchor="end"
               fontSize={LABEL_FONT_SIZE}
-              fill={MUTED}
+              fill={DrawnImageColor.MUTED}
             >
               {clipText(point.label, HORIZONTAL_CATEGORY_LABEL_MAX_CHARACTERS)}
             </text>
@@ -520,7 +539,7 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
               y={baseline}
               textAnchor={point.value >= 0 ? 'start' : 'end'}
               fontSize={LABEL_FONT_SIZE}
-              fill={INK}
+              fill={DrawnImageColor.INK}
             >
               {formatChartValue(point.value)}
             </text>
@@ -532,6 +551,10 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
   );
 }
 
+/**
+ * The axis titles, each centered on the side of the plot it runs along and cut to fit
+ * that side.
+ */
 function AxisTitles({chart, plot}: {readonly chart: ChartImageProps; readonly plot: Plot}) {
   const middleY = round(plot.y + plot.height / 2);
   return (
@@ -542,9 +565,9 @@ function AxisTitles({chart, plot}: {readonly chart: ChartImageProps; readonly pl
           y={HEIGHT - X_AXIS_TITLE_BOTTOM}
           textAnchor="middle"
           fontSize={LABEL_FONT_SIZE}
-          fill={MUTED}
+          fill={DrawnImageColor.MUTED}
         >
-          {clipText(chart.xAxisTitle, TITLE_MAX_CHARACTERS)}
+          {clipText(chart.xAxisTitle, charactersThatFit(plot.width, LABEL_FONT_SIZE))}
         </text>
       ) : null}
       {chart.yAxisTitle ? (
@@ -554,9 +577,9 @@ function AxisTitles({chart, plot}: {readonly chart: ChartImageProps; readonly pl
           transform={`rotate(-90 ${Y_AXIS_TITLE_LEFT} ${middleY})`}
           textAnchor="middle"
           fontSize={LABEL_FONT_SIZE}
-          fill={MUTED}
+          fill={DrawnImageColor.MUTED}
         >
-          {clipText(chart.yAxisTitle, Y_AXIS_TITLE_MAX_CHARACTERS)}
+          {clipText(chart.yAxisTitle, charactersThatFit(plot.height, LABEL_FONT_SIZE))}
         </text>
       ) : null}
     </g>

@@ -16,7 +16,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {ChartType, describeChart, renderChartSvg, type ChartImageProps} from './chart-image';
-import {DrawnImageColor} from './drawn-image-style';
+import {DrawnImageColor, estimateTextWidth} from './drawn-image-style';
 
 const possession: ChartImageProps = {
   type: ChartType.PIE,
@@ -27,9 +27,33 @@ const possession: ChartImageProps = {
   ],
 };
 
+const parse = (svg: string): Document => new DOMParser().parseFromString(svg, 'image/svg+xml');
+
 /** How many elements of the drawing match `selector`. */
 const countOf = (markup: string, selector: string): number =>
-  new DOMParser().parseFromString(markup, 'image/svg+xml').querySelectorAll(selector).length;
+  parse(markup).querySelectorAll(selector).length;
+
+/** The chart's width, which no text may run past. */
+const WIDTH = 600;
+
+/**
+ * The left and right edges of a text element, by the estimate of text width the drawings
+ * lay text out with.
+ */
+function horizontalExtent(text: Element): {left: number; right: number} {
+  const x = Number(text.getAttribute('x'));
+  const width = estimateTextWidth(text.textContent ?? '', Number(text.getAttribute('font-size')));
+  switch (text.getAttribute('text-anchor')) {
+    case 'middle':
+      return {left: x - width / 2, right: x + width / 2};
+    case 'end':
+      return {left: x - width, right: x};
+    default:
+      return {left: x, right: x + width};
+  }
+}
+
+const LONG_TEXT = 'An unusually long piece of text that no chart has room for in one line';
 
 /** A pie slice is a path, or a circle when one value holds the whole pie. */
 const SLICE = 'path';
@@ -146,6 +170,46 @@ describe('renderChartSvg', () => {
 
     expect(countOf(svg, 'polyline')).toBe(1);
     expect(countOf(svg, 'circle')).toBe(3);
+  });
+});
+
+describe('renderChartSvg with long text', () => {
+  it('cuts a long title with an ellipsis so that it fits across the image', () => {
+    const title = parse(renderChartSvg({...possession, title: LONG_TEXT})).querySelector(
+      'svg > text',
+    )!;
+
+    expect(title.textContent).toMatch(/…$/);
+    expect(horizontalExtent(title).left).toBeGreaterThanOrEqual(0);
+    expect(horizontalExtent(title).right).toBeLessThanOrEqual(WIDTH);
+  });
+
+  it("cuts a long legend label with an ellipsis so that it fits beside the slice's value", () => {
+    const svg = renderChartSvg({
+      type: ChartType.PIE,
+      data: [
+        {label: LONG_TEXT, value: 1234.56},
+        {label: 'Other', value: 765.44},
+      ],
+    });
+    const legend = [...parse(svg).querySelectorAll('text')].find(text =>
+      text.textContent?.endsWith(' · 1,234.56 (62%)'),
+    )!;
+
+    expect(legend.textContent).toMatch(/^An unusually.*… · 1,234\.56 \(62%\)$/);
+    expect(horizontalExtent(legend).right).toBeLessThanOrEqual(WIDTH);
+  });
+
+  it('cuts a long horizontal bar label with an ellipsis so that it fits left of the plot', () => {
+    const svg = renderChartSvg({
+      type: ChartType.HORIZONTAL_BAR,
+      data: [{label: LONG_TEXT, value: 5}],
+    });
+    // The category label is the only text right-aligned against the plot.
+    const label = parse(svg).querySelector('text[text-anchor="end"]')!;
+
+    expect(label.textContent).toMatch(/^An unusually.*…$/);
+    expect(horizontalExtent(label).left).toBeGreaterThanOrEqual(0);
   });
 });
 
