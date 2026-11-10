@@ -232,7 +232,11 @@ IDs become inert after replacement, deletion, or recreation.
 
 The preview is drawn by the Tightknit renderer: the `Renderer` component of
 the `@tightknitai/storybook-addon-slack-block-kit` package, which draws Block
-Kit JSON the way Slack would. Clicking a Slack button in the preview and
+Kit JSON the way Slack would. It draws with `slack-blocks-to-jsx`, which the
+root `package.json` pins through `resolutions` to 1.1.2, the version this sample
+uses itself. Version 1.4 accepts only some URL schemes in an image's `src`, and
+not `blob:`, so the images drawn for `Chart` and `Scorecard` would show no
+picture. Clicking a Slack button in the preview and
 clicking that button's `Simulate` control, which the renderer lists under the
 message, both call the same local renderer dispatch path. Event actions
 resolve against the current live A2UI surface and are delivered back to
