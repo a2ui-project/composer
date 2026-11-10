@@ -126,6 +126,8 @@ Complete example message arrays are also served by the renderer:
 - `/examples/car-booking.json`
 - `/examples/data-bound-action.json`
 - `/examples/market-snapshot.json`
+- `/examples/match-report.json`, which mixes native blocks with a `Scorecard`
+  and a `Chart` drawn as images
 
 With the dev server running, fetch one of those files from
 `http://localhost:3460/examples/...`, paste the JSON into the workspace A2UI

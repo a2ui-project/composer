@@ -14,27 +14,13 @@
  * limitations under the License.
  */
 
-import {type A2uiMessage, type UpdateComponentsMessage} from '@a2ui/web_core/v0_9';
-import {afterEach, beforeEach, describe, expect, it, vi, type MockInstance} from 'vitest';
-import {SLACK_CATALOG_ID} from './catalog';
+import {type A2uiMessage} from '@a2ui/web_core/v0_9';
+import {describe, expect, it} from 'vitest';
+import {stubBlobUrls, surfaceMessages} from './drawn-images.helpers';
 import {createSlackPreviewSession} from './preview-session';
 import {DiagnosticCode, DiagnosticLevel, PreviewStatus} from './preview-snapshot';
 
-const SURFACE = 'charts';
-
-const createSurface: A2uiMessage = {
-  version: 'v0.9',
-  createSurface: {surfaceId: SURFACE, catalogId: SLACK_CATALOG_ID},
-};
-
-const updateComponents = (
-  components: UpdateComponentsMessage['updateComponents']['components'],
-): A2uiMessage => ({version: 'v0.9', updateComponents: {surfaceId: SURFACE, components}});
-
-const updateData = (value: unknown, path = '/'): A2uiMessage => ({
-  version: 'v0.9',
-  updateDataModel: {surfaceId: SURFACE, path, value},
-});
+const {createSurface, updateComponents, updateData} = surfaceMessages('charts');
 
 const chartMessage = (chart: Record<string, unknown>): A2uiMessage =>
   updateComponents([
@@ -53,24 +39,7 @@ const PIE = {
 };
 
 describe('Slack charts', () => {
-  let createObjectURL: MockInstance<typeof URL.createObjectURL>;
-  let revokeObjectURL: MockInstance<typeof URL.revokeObjectURL>;
-
-  beforeEach(() => {
-    let created = 0;
-    createObjectURL = vi
-      .spyOn(URL, 'createObjectURL')
-      .mockImplementation(() => `blob:image-${++created}`);
-    revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  /** The SVG markup of each image drawn so far, in the order it was drawn. */
-  const drawnSvgs = (): Promise<string[]> =>
-    Promise.all(createObjectURL.mock.calls.map(([blob]) => (blob as Blob).text()));
+  const blobUrls = stubBlobUrls();
 
   const PIE_ALT = 'Pie chart, Possession: Argentina 70, Mexico 30';
 
@@ -85,7 +54,7 @@ describe('Slack charts', () => {
       expect.objectContaining({type: 'header'}),
       {type: 'image', image_url: 'blob:image-1', alt_text: PIE_ALT},
     ]);
-    expect((await drawnSvgs())[0]).toContain('Argentina · 70 (70%)');
+    expect((await blobUrls.drawnSvgs())[0]).toContain('Argentina · 70 (70%)');
   });
 
   it('exports a drawn chart as an uploaded file', () => {
@@ -162,7 +131,7 @@ describe('Slack charts', () => {
     ]);
     session.processMessages([updateData(60, '/argentina')]);
 
-    expect((await drawnSvgs()).at(-1)).toContain('Argentina · 60 (67%)');
+    expect((await blobUrls.drawnSvgs()).at(-1)).toContain('Argentina · 60 (67%)');
     expect(session.getSnapshot().blocks[1]).toMatchObject({
       alt_text: 'Pie chart, Possession: Argentina 60, Mexico 30',
     });
@@ -184,7 +153,7 @@ describe('Slack charts', () => {
 
     expect(snapshot.status).toBe(PreviewStatus.READY);
     expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
-    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(blobUrls.createObjectURL).not.toHaveBeenCalled();
   });
 
   it('says why it left out a pie chart with a negative slice', () => {
@@ -257,12 +226,12 @@ describe('Slack charts', () => {
       updateComponents([{id: 'root', component: 'Text', text: 'No chart now'}]),
     ]);
     // The render before still showed the chart, which React may not have replaced yet.
-    expect(revokeObjectURL).not.toHaveBeenCalled();
+    expect(blobUrls.revokeObjectURL).not.toHaveBeenCalled();
     session.processMessages([
       updateComponents([{id: 'root', component: 'Text', text: 'Still no chart'}]),
     ]);
 
-    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:image-1');
+    expect(blobUrls.revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:image-1');
   });
 
   it('revokes the URL of every chart image it still shows when disposed', () => {
@@ -271,6 +240,6 @@ describe('Slack charts', () => {
 
     session.dispose();
 
-    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:image-1');
+    expect(blobUrls.revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:image-1');
   });
 });
