@@ -39,6 +39,7 @@ import {A2A_TRANSPORT} from '../chat/a2a/a2a-transport.token';
 import {A2aMessage, A2aTransport} from '../chat/a2a/a2a-types';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
+import {createMockCatalogManagement} from '../storage/catalog-management/testing/catalog-management-fake';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {A2aChatView} from './a2a-chat-view';
 import {A2aChatViewHarness} from './test/a2a-chat-view.harness';
@@ -129,11 +130,10 @@ describe('A2aChatView', () => {
         {provide: AppConfigProvider, useValue: mockConfigProvider},
         {
           provide: CatalogManagement,
-          useValue: {
+          useValue: createMockCatalogManagement({
             activeCatalog: mockActiveCatalogSignal,
             activeProtocolVersion: mockActiveProtocolVersionSignal,
-            hasReceivedCatalogResponse: signal(true),
-          },
+          }),
         },
         {
           provide: StartupResolution,

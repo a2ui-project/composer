@@ -36,6 +36,7 @@ import {
 } from './settings/app-config-provider/app-config-provider';
 import {LlmClient} from './chat/llm-client/llm-client';
 import {CatalogManagement} from './storage/catalog-management/catalog-management';
+import {createMockCatalogManagement} from './storage/catalog-management/testing/catalog-management-fake';
 import {LocalStorageInteractions} from './storage/local-storage-interactions/local-storage-interactions';
 import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
 import {UsageTrackingService} from './usage-tracking/usage-tracking.service';
@@ -113,21 +114,7 @@ describe('App Routes Active Verification', () => {
         {provide: LlmClient, useValue: {chat: vi.fn(), chatStream: vi.fn()}},
         {
           provide: CatalogManagement,
-          useValue: {
-            activeCatalogTitle: signal(''),
-            activeCatalogDescription: signal(''),
-            activeCatalog: signal(null),
-            activeCatalogs: signal([]),
-            activeProtocolVersion: signal('v0.9'),
-            mergedActiveCatalog: signal(null),
-            catalogError: signal(null),
-            isHandshakeInProgress: signal(false),
-            watchdogFired: signal(false),
-            lastCatalogString: signal(''),
-            lastChecksumHash: signal(''),
-            catalogHashDelta: signal(false),
-            hasReceivedCatalogResponse: signal(true),
-          },
+          useValue: createMockCatalogManagement(),
         },
         {
           provide: LocalStorageInteractions,
