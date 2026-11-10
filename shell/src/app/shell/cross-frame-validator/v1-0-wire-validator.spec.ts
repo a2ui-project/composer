@@ -360,6 +360,82 @@ describe('V10WireValidator', () => {
     });
   });
 
+  describe('UpdateDataModel payload', () => {
+    it('accepts updateDataModel with a non-empty string path and a value', () => {
+      const payload = {
+        version: '1.0',
+        updateDataModel: {surfaceId: 'surf-1', path: '/user/name', value: 'Ada'},
+      };
+      expect(validator.validateSendToServer(payload, undefined, mockLogger)).toBe(true);
+    });
+
+    it('accepts updateDataModel without a path (root replacement)', () => {
+      const payload = {
+        version: '1.0',
+        updateDataModel: {surfaceId: 'surf-1', value: {user: {name: 'Ada'}}},
+      };
+      expect(validator.validateSendToServer(payload, undefined, mockLogger)).toBe(true);
+    });
+
+    it('rejects updateDataModel with missing or empty surfaceId', () => {
+      const errors: string[] = [];
+      const payloadMissing = {
+        version: '1.0',
+        updateDataModel: {value: {user: {name: 'Ada'}}},
+      };
+      expect(validator.validateSendToServer(payloadMissing, errors, mockLogger)).toBe(false);
+      expect(errors[0]).toContain(
+        'Malformed v1.0 SEND_TO_SERVER: updateDataModel must contain a non-empty string surfaceId.',
+      );
+
+      const errorsEmpty: string[] = [];
+      const payloadEmpty = {
+        version: '1.0',
+        updateDataModel: {surfaceId: '   ', value: {user: {name: 'Ada'}}},
+      };
+      expect(validator.validateSendToServer(payloadEmpty, errorsEmpty, mockLogger)).toBe(false);
+      expect(errorsEmpty[0]).toContain(
+        'Malformed v1.0 SEND_TO_SERVER: updateDataModel must contain a non-empty string surfaceId.',
+      );
+    });
+
+    it('rejects updateDataModel with an empty string path', () => {
+      const errors: string[] = [];
+      const payload = {
+        version: '1.0',
+        updateDataModel: {surfaceId: 'surf-1', path: '   ', value: 'Ada'},
+      };
+      expect(validator.validateSendToServer(payload, errors, mockLogger)).toBe(false);
+      expect(errors[0]).toContain(
+        'Malformed v1.0 SEND_TO_SERVER: updateDataModel path, when present, must be a non-empty string.',
+      );
+    });
+
+    it('rejects updateDataModel with a non-string path', () => {
+      const errors: string[] = [];
+      const payload = {
+        version: '1.0',
+        updateDataModel: {surfaceId: 'surf-1', path: 42, value: 'Ada'},
+      };
+      expect(validator.validateSendToServer(payload, errors, mockLogger)).toBe(false);
+      expect(errors[0]).toContain(
+        'Malformed v1.0 SEND_TO_SERVER: updateDataModel path, when present, must be a non-empty string.',
+      );
+    });
+
+    it('rejects updateDataModel without a value', () => {
+      const errors: string[] = [];
+      const payload = {
+        version: '1.0',
+        updateDataModel: {surfaceId: 'surf-1', path: '/user/name'},
+      };
+      expect(validator.validateSendToServer(payload, errors, mockLogger)).toBe(false);
+      expect(errors[0]).toContain(
+        'Malformed v1.0 SEND_TO_SERVER: updateDataModel must contain a value.',
+      );
+    });
+  });
+
   describe('Envelope and Security validation', () => {
     it('rejects non-object or null payload', () => {
       expect(validator.validateSendToServer(null, undefined, mockLogger)).toBe(false);

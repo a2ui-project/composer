@@ -371,9 +371,22 @@ export class V10WireValidator implements A2uiWireVersionValidator {
         );
         return false;
       }
-      if (typeof dm['path'] !== 'string' || !dm['path'].trim()) {
+      if (
+        obj['updateDataModel'] !== undefined &&
+        (typeof dm['surfaceId'] !== 'string' || !dm['surfaceId'].trim())
+      ) {
         recordError(
-          'Malformed v1.0 SEND_TO_SERVER: updateDataModel must contain a non-empty string path.',
+          'Malformed v1.0 SEND_TO_SERVER: updateDataModel must contain a non-empty string surfaceId.',
+          errors,
+          logger,
+        );
+        return false;
+      }
+      // `path` is optional on the wire (an absent path means a root
+      // replacement), but when present it must be a non-empty string.
+      if (dm['path'] !== undefined && (typeof dm['path'] !== 'string' || !dm['path'].trim())) {
+        recordError(
+          'Malformed v1.0 SEND_TO_SERVER: updateDataModel path, when present, must be a non-empty string.',
           errors,
           logger,
         );
