@@ -1749,7 +1749,17 @@ export class PreviewBridge {
     ) {
       const firstCatalog = catalogs[0];
       if (firstCatalog && typeof firstCatalog === 'object') {
-        (firstCatalog as unknown as {id?: string}).id = targetCatalogId;
+        // Catalogs come from user-supplied renderer config and may be frozen;
+        // aliasing is a convenience, so a read-only object must not break
+        // catalog resolution.
+        try {
+          (firstCatalog as unknown as {id?: string}).id = targetCatalogId;
+        } catch (error: unknown) {
+          console.warn(
+            `PreviewBridge: Unable to alias catalog id to "${targetCatalogId}" (catalog is read-only):`,
+            error,
+          );
+        }
       }
     }
   }
