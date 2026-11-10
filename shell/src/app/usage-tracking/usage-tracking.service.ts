@@ -18,6 +18,7 @@ import {InjectionToken} from '@angular/core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ThemePreference} from '../settings/app-config-provider/app-config-provider';
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
+import {resolveUsageTrackingConfig} from './usage-tracking-config';
 
 /**
  * Classification tag separating Google-internal usage from 3P open-source users.
@@ -77,7 +78,7 @@ export const USAGE_TRACKING_CONFIG = new InjectionToken<UsageTrackingConfig>(
   'USAGE_TRACKING_CONFIG',
   {
     providedIn: 'root',
-    factory: () => DEFAULT_USAGE_TRACKING_CONFIG,
+    factory: () => resolveUsageTrackingConfig(DEFAULT_USAGE_TRACKING_CONFIG),
   },
 );
 
