@@ -184,7 +184,7 @@ describe('Slack scorecards', () => {
 
     expect(session.getSnapshot().diagnostics).toContainEqual({
       level: DiagnosticLevel.WARNING,
-      code: DiagnosticCode.SLACK_SCORECARD_INVALID,
+      code: DiagnosticCode.A2UI_INVALID_SCORECARD,
       componentId: 'final-score',
       message:
         'Scorecard "final-score" has no name for the home team. Give both teams a name and a score, such as "Argentina" and 2.',
@@ -201,7 +201,7 @@ describe('Slack scorecards', () => {
 
     expect(session.getSnapshot().diagnostics).toContainEqual({
       level: DiagnosticLevel.WARNING,
-      code: DiagnosticCode.SLACK_SCORECARD_INVALID,
+      code: DiagnosticCode.A2UI_INVALID_SCORECARD,
       componentId: 'final-score',
       message:
         'Scorecard "final-score" has no score for the away team. Give both teams a name and a score, such as "Argentina" and 2.',

@@ -163,7 +163,7 @@ describe('Slack charts', () => {
 
     expect(session.getSnapshot().diagnostics).toContainEqual({
       level: DiagnosticLevel.WARNING,
-      code: DiagnosticCode.SLACK_CHART_INVALID_DATA,
+      code: DiagnosticCode.A2UI_INVALID_CHART_DATA,
       componentId: 'possession',
       message:
         'Chart "possession" has a negative value for "Mexico". Pie and donut slices must be zero or more.',
@@ -180,7 +180,7 @@ describe('Slack charts', () => {
 
     expect(session.getSnapshot().diagnostics).toContainEqual({
       level: DiagnosticLevel.WARNING,
-      code: DiagnosticCode.SLACK_CHART_INVALID_DATA,
+      code: DiagnosticCode.A2UI_INVALID_CHART_DATA,
       componentId: 'possession',
       message: `Chart "possession" has a value for "Argentina" that isn't a number. Use a number such as 70.`,
     });
@@ -196,7 +196,7 @@ describe('Slack charts', () => {
 
     expect(session.getSnapshot().diagnostics).toContainEqual({
       level: DiagnosticLevel.WARNING,
-      code: DiagnosticCode.SLACK_CHART_EMPTY,
+      code: DiagnosticCode.A2UI_EMPTY_CHART,
       componentId: 'possession',
       message: `Chart "possession" has only zero values, so there is nothing to draw. Give at least one value that isn't zero.`,
     });

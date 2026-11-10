@@ -59,7 +59,10 @@ export function lowerScorecard(
 
 /**
  * Reads one team's name and score as text, or explains in a warning why the scorecard
- * can't be drawn.
+ * can't be drawn. A name or score the schema accepts but that is blank, or bound to a
+ * path with no value, leaves out only this scorecard, so the rest of the message still
+ * renders. `lowerTable` throws for a cell it can't lower instead; drawn-component-props.ts
+ * says why the two differ.
  *
  * @param side Which team this is, which the warning names.
  */
@@ -73,7 +76,7 @@ function scorecardTeam(
   if (name === undefined || score === undefined) {
     return skipWithWarning(
       context,
-      DiagnosticCode.SLACK_SCORECARD_INVALID,
+      DiagnosticCode.A2UI_INVALID_SCORECARD,
       `Scorecard "${context.componentId}" has no ${name === undefined ? 'name' : 'score'} for the ${side} team. Give both teams a name and a score, such as "Argentina" and 2.`,
     );
   }

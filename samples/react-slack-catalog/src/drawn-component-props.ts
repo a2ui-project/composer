@@ -16,9 +16,17 @@
 
 /**
  * @fileoverview Reads the bound props of the components the preview draws as images,
- * Chart and Scorecard. Unlike the other components, a drawn component whose props can't
- * be drawn is left out of the message with a warning, and the rest of the message still
- * renders.
+ * Chart and Scorecard.
+ *
+ * Props the schema accepts can still be impossible to draw: a bound value can resolve to
+ * text that isn't a number, or to nothing. Such a component is left out of the message
+ * with a warning, and the rest of the message still renders. Its image is an addition
+ * that the app that sends the message uploads, and the message's other blocks are
+ * complete without it. A component lowered to native Slack blocks throws a
+ * `LoweringError` for props it can't lower instead, which fails the whole render: a Table
+ * throws for a header or cell that doesn't resolve to text, or a row without one cell per
+ * column. Those blocks carry the message's text, and the preview shows none of the
+ * message rather than one with some of that text left out.
  */
 
 import {clipText} from './drawn-image-style';
