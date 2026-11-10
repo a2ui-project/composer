@@ -31,6 +31,11 @@ export const SLACK_CATALOG_ID = 'https://a2ui-project.github.io/composer/catalog
 
 export const DATA_BOUND_ACTION_JSON = readSlackExample('data-bound-action.json');
 export const MARKET_SNAPSHOT_JSON = readSlackExample('market-snapshot.json');
+/**
+ * A match report that mixes native Slack blocks (a header, a table, and a button) with two
+ * React components the renderer draws as images: a Scorecard and a Chart.
+ */
+export const MATCH_REPORT_JSON = readSlackExample('match-report.json');
 
 interface OpenSlackRendererOptions {
   forceAuthMode?: '1p' | '3p';

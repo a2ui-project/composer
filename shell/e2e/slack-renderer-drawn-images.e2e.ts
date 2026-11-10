@@ -15,78 +15,20 @@
  */
 
 import {expect, test, type Page} from '@playwright/test';
-import {type A2uiMessage} from '@a2ui/web_core/v0_9';
 import {
   collectUnexpectedErrors,
   getBlockKitJson,
   getJsonValidationProblems,
+  MATCH_REPORT_JSON,
   openComposerWithSlackRenderer,
   replaceMonacoJson,
-  SLACK_CATALOG_ID,
   slackPreviewFrame,
   slackPreviewSurface,
 } from './slack-renderer.helpers';
 import {waitForMonacoEditor} from './helpers';
 
-const SURFACE_ID = 'match-report';
 const SCORECARD_ALT = 'Scorecard: Argentina 2, Mexico 0. Full time. World Cup, Group C.';
 const CHART_ALT = 'Pie chart, Possession: Argentina 70, Mexico 30';
-
-/**
- * A match report that mixes native Slack blocks (a header, a table, and a button) with two
- * React components the renderer draws as images: a Scorecard and a Chart.
- */
-const MATCH_REPORT: A2uiMessage[] = [
-  {version: 'v0.9', createSurface: {surfaceId: SURFACE_ID, catalogId: SLACK_CATALOG_ID}},
-  {
-    version: 'v0.9',
-    updateComponents: {
-      surfaceId: SURFACE_ID,
-      components: [
-        {
-          id: 'root',
-          component: 'Column',
-          children: ['title', 'final-score', 'scorers', 'possession', 'share'],
-        },
-        {id: 'title', component: 'Text', variant: 'h1', text: 'Match report'},
-        {
-          id: 'final-score',
-          component: 'Scorecard',
-          home: {name: 'Argentina', score: 2},
-          away: {name: 'Mexico', score: 0},
-          status: 'Full time',
-          competition: 'World Cup, Group C',
-        },
-        {
-          id: 'scorers',
-          component: 'Table',
-          columns: [{header: 'Scorer'}, {header: 'Minute', align: 'right'}],
-          rows: [
-            ['Lionel Messi', "64'"],
-            ['Enzo Fernández', "87'"],
-          ],
-        },
-        {
-          id: 'possession',
-          component: 'Chart',
-          type: 'pie',
-          title: 'Possession',
-          data: [
-            {label: 'Argentina', value: 70},
-            {label: 'Mexico', value: 30},
-          ],
-        },
-        {
-          id: 'share',
-          component: 'Button',
-          child: 'share-label',
-          action: {event: {name: 'share_result'}},
-        },
-        {id: 'share-label', component: 'Text', text: 'Share result'},
-      ],
-    },
-  },
-];
 
 test.describe('Slack renderer drawn images in Composer', () => {
   test('shows a scorecard and a chart as images among native blocks, in message order', async ({
@@ -162,6 +104,6 @@ test.describe('Slack renderer drawn images in Composer', () => {
 async function openMatchReport(page: Page): Promise<void> {
   await openComposerWithSlackRenderer(page);
   await waitForMonacoEditor(page);
-  await replaceMonacoJson(page, JSON.stringify(MATCH_REPORT, null, 2));
+  await replaceMonacoJson(page, MATCH_REPORT_JSON);
   await expect(slackPreviewSurface(page).getByRole('img', {name: SCORECARD_ALT})).toBeVisible();
 }

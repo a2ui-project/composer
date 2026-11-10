@@ -14,101 +14,46 @@
  * limitations under the License.
  */
 
-import {type A2uiMessage, type UpdateComponentsMessage} from '@a2ui/web_core/v0_9';
-import {afterEach, beforeEach, describe, expect, it, vi, type MockInstance} from 'vitest';
-import {SLACK_CATALOG_ID} from './catalog';
+import {A2uiMessageListSchema, type A2uiMessage} from '@a2ui/web_core/v0_9';
+import {describe, expect, it} from 'vitest';
+import matchReportJson from '../public/examples/match-report.json';
+import {stubBlobUrls, surfaceMessages} from './drawn-images.helpers';
 import {createSlackPreviewSession} from './preview-session';
 import {DiagnosticCode, DiagnosticLevel, PreviewStatus} from './preview-snapshot';
 
-const SURFACE = 'match-report';
 const SCORECARD_ALT = 'Scorecard: Argentina 2, Mexico 0. Full time. World Cup, Group C.';
 const CHART_ALT = 'Pie chart, Possession: Argentina 70, Mexico 30';
 
-const createSurface: A2uiMessage = {
-  version: 'v0.9',
-  createSurface: {surfaceId: SURFACE, catalogId: SLACK_CATALOG_ID},
-};
-
-const updateComponents = (
-  components: UpdateComponentsMessage['updateComponents']['components'],
-): A2uiMessage => ({version: 'v0.9', updateComponents: {surfaceId: SURFACE, components}});
-
-const updateData = (value: unknown, path = '/'): A2uiMessage => ({
-  version: 'v0.9',
-  updateDataModel: {surfaceId: SURFACE, path, value},
-});
-
-const FINAL_SCORE = {
-  home: {name: 'Argentina', score: 2},
-  away: {name: 'Mexico', score: 0},
-  status: 'Full time',
-  competition: 'World Cup, Group C',
-};
-
 /**
  * A match report that mixes native Slack blocks with drawn images: a header, the
- * scorecard, a table of scorers, a possession chart, and a button.
+ * scorecard `final-score`, a table of scorers, a possession chart, and a button.
  */
-const matchReport = (scorecard: Record<string, unknown> = FINAL_SCORE): A2uiMessage =>
-  updateComponents([
-    {
-      id: 'root',
-      component: 'Column',
-      children: ['title', 'final-score', 'scorers', 'possession', 'share'],
-    },
-    {id: 'title', component: 'Text', variant: 'h1', text: 'Match report'},
-    {id: 'final-score', component: 'Scorecard', ...scorecard},
-    {
-      id: 'scorers',
-      component: 'Table',
-      columns: [{header: 'Scorer'}, {header: 'Minute', align: 'right'}],
-      rows: [
-        ['Lionel Messi', "64'"],
-        ['Enzo Fernández', "87'"],
-      ],
-    },
-    {
-      id: 'possession',
-      component: 'Chart',
-      type: 'pie',
-      title: 'Possession',
-      data: [
-        {label: 'Argentina', value: 70},
-        {label: 'Mexico', value: 30},
-      ],
-    },
-    {
-      id: 'share',
-      component: 'Button',
-      child: 'share-label',
-      action: {event: {name: 'share_result'}},
-    },
-    {id: 'share-label', component: 'Text', text: 'Share result'},
-  ]);
+const MATCH_REPORT = A2uiMessageListSchema.parse(matchReportJson);
+const REPORT_COMPONENTS = MATCH_REPORT.flatMap(message =>
+  'updateComponents' in message ? message.updateComponents.components : [],
+);
+const {createSurface, updateComponents, updateData} = surfaceMessages('match-report');
+const [{id: _id, component: _component, ...FINAL_SCORE}] = REPORT_COMPONENTS.filter(
+  ({id}) => id === 'final-score',
+);
+
+/** The match report's components, with `scorecard` as the props of its scorecard. */
+const matchReport = (scorecard: Record<string, unknown>): A2uiMessage =>
+  updateComponents(
+    REPORT_COMPONENTS.map(component =>
+      component.id === 'final-score'
+        ? {id: 'final-score', component: 'Scorecard', ...scorecard}
+        : component,
+    ),
+  );
 
 describe('Slack scorecards', () => {
-  let createObjectURL: MockInstance<typeof URL.createObjectURL>;
-
-  beforeEach(() => {
-    let created = 0;
-    createObjectURL = vi
-      .spyOn(URL, 'createObjectURL')
-      .mockImplementation(() => `blob:image-${++created}`);
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  /** The SVG markup of each image drawn so far, in the order it was drawn. */
-  const drawnSvgs = (): Promise<string[]> =>
-    Promise.all(createObjectURL.mock.calls.map(([blob]) => (blob as Blob).text()));
+  const blobUrls = stubBlobUrls();
 
   it('draws a scorecard as an image between native blocks in a message with a chart', async () => {
     const session = createSlackPreviewSession();
 
-    session.processMessages([createSurface, matchReport()]);
+    session.processMessages(MATCH_REPORT);
     const snapshot = session.getSnapshot();
 
     expect(snapshot.status).toBe(PreviewStatus.READY);
@@ -119,7 +64,7 @@ describe('Slack scorecards', () => {
       {type: 'image', image_url: 'blob:image-2', alt_text: CHART_ALT},
       expect.objectContaining({type: 'actions'}),
     ]);
-    const [scorecard, chart] = await drawnSvgs();
+    const [scorecard, chart] = await blobUrls.drawnSvgs();
     expect(scorecard).toContain('>Argentina</tspan>');
     expect(scorecard).toContain('>Full time</text>');
     expect(chart).toContain('Argentina · 70 (70%)');
@@ -128,7 +73,7 @@ describe('Slack scorecards', () => {
   it('exports both drawn images as uploaded files and keeps the native blocks', () => {
     const session = createSlackPreviewSession();
 
-    session.processMessages([createSurface, matchReport()]);
+    session.processMessages(MATCH_REPORT);
     const snapshot = session.getSnapshot();
 
     expect(snapshot.exportBlocks).toEqual([
@@ -143,7 +88,7 @@ describe('Slack scorecards', () => {
   it('says once for each drawn component that the app sending the message must upload it', () => {
     const session = createSlackPreviewSession();
 
-    session.processMessages([createSurface, matchReport()]);
+    session.processMessages(MATCH_REPORT);
 
     expect(
       session
@@ -208,7 +153,7 @@ describe('Slack scorecards', () => {
     ]);
 
     // The chart didn't change, so it kept its image and only the scorecard was drawn again.
-    expect((await drawnSvgs()).at(-1)).toContain('>2</text>');
+    expect((await blobUrls.drawnSvgs()).at(-1)).toContain('>2</text>');
     expect(session.getSnapshot().blocks[1]).toMatchObject({
       alt_text: 'Scorecard: Argentina 2, Mexico 0. Full time.',
     });
@@ -226,7 +171,7 @@ describe('Slack scorecards', () => {
     expect(snapshot.status).toBe(PreviewStatus.READY);
     expect(snapshot.blocks.map(({type}) => type)).toEqual(['header', 'table', 'image', 'actions']);
     // Only the chart was drawn.
-    expect(await drawnSvgs()).toHaveLength(1);
+    expect(await blobUrls.drawnSvgs()).toHaveLength(1);
   });
 
   it('says why it left out a scorecard with an empty team name', () => {
