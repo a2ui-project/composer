@@ -98,6 +98,8 @@ export enum DiagnosticCode {
   SLACK_HEADER_TEXT_LIMIT_EXCEEDED = 'SLACK_HEADER_TEXT_LIMIT_EXCEEDED',
   SLACK_HEADER_TEXT_TRUNCATED = 'SLACK_HEADER_TEXT_TRUNCATED',
   SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED = 'SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED',
+  /** A Chart's or Scorecard's accessibility label was cut to Slack's alt text limit. */
+  SLACK_IMAGE_ALT_TEXT_TRUNCATED = 'SLACK_IMAGE_ALT_TEXT_TRUNCATED',
   /**
    * A Chart or Scorecard is drawn as an image in the preview. The app that sends the
    * message to Slack renders it and uploads the image.

@@ -31,7 +31,7 @@
 
 import {clipText} from './drawn-image-style';
 import {type LowerComponentContext} from './lowering-context';
-import {DiagnosticLevel, type DiagnosticCode} from './preview-snapshot';
+import {DiagnosticCode, DiagnosticLevel} from './preview-snapshot';
 import {recordField} from './record-fields';
 import {SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} from './slack-limits';
 
@@ -53,13 +53,24 @@ export function skipWithWarning(
 /**
  * The alt text of a drawn image: the component's accessibility label when it has one,
  * otherwise `description`, the drawing described in words. Either is cut to Slack's alt
- * text limit, ending with an ellipsis when cut.
+ * text limit, ending with an ellipsis when cut. Cutting a label adds a warning, as the
+ * author wrote it; a description only repeats what the image shows, so it is cut without
+ * one.
  */
 export function drawnImageAltText(
   props: Readonly<Record<string, unknown>>,
   description: string,
+  context: Pick<LowerComponentContext, 'componentId' | 'diagnostics'>,
 ): string {
   const label = optionalText(recordField(props.accessibility, 'label'));
+  if (label !== undefined && label.length > SLACK_IMAGE_ALT_TEXT_MAX_LENGTH) {
+    context.diagnostics.push({
+      level: DiagnosticLevel.WARNING,
+      code: DiagnosticCode.SLACK_IMAGE_ALT_TEXT_TRUNCATED,
+      message: `The accessibility label is longer than Slack's alt text limit, so the image's alt text was cut to ${SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} characters.`,
+      componentId: context.componentId,
+    });
+  }
   return clipText(label ?? description, SLACK_IMAGE_ALT_TEXT_MAX_LENGTH);
 }
 

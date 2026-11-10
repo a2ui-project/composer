@@ -16,33 +16,67 @@
 
 import {describe, expect, it} from 'vitest';
 import {drawnImageAltText} from './drawn-component-props';
+import {DiagnosticCode, DiagnosticLevel, type PreviewDiagnostic} from './preview-snapshot';
 import {SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} from './slack-limits';
 
 describe('drawnImageAltText', () => {
   const description = 'Pie chart, Possession: Argentina 70, Mexico 30';
+  const tooLong = 'x'.repeat(SLACK_IMAGE_ALT_TEXT_MAX_LENGTH + 1);
+
+  /** What lowering the chart `possession` gives `drawnImageAltText`, with no diagnostics yet. */
+  const lowering = (): {componentId: string; diagnostics: PreviewDiagnostic[]} => ({
+    componentId: 'possession',
+    diagnostics: [],
+  });
 
   it('uses the accessibility label instead of the description', () => {
     expect(
-      drawnImageAltText({accessibility: {label: 'Argentina had most of the ball'}}, description),
+      drawnImageAltText(
+        {accessibility: {label: 'Argentina had most of the ball'}},
+        description,
+        lowering(),
+      ),
     ).toBe('Argentina had most of the ball');
   });
 
   it('uses the description when the accessibility label is blank', () => {
-    expect(drawnImageAltText({accessibility: {label: ' '}}, description)).toBe(description);
+    expect(drawnImageAltText({accessibility: {label: ' '}}, description, lowering())).toBe(
+      description,
+    );
   });
 
   it("cuts a label longer than Slack's alt text limit, ending it with an ellipsis", () => {
-    const alt = drawnImageAltText(
-      {accessibility: {label: 'x'.repeat(SLACK_IMAGE_ALT_TEXT_MAX_LENGTH + 1)}},
-      description,
-    );
+    const alt = drawnImageAltText({accessibility: {label: tooLong}}, description, lowering());
 
     expect(alt).toBe(`${'x'.repeat(SLACK_IMAGE_ALT_TEXT_MAX_LENGTH - 1)}…`);
   });
 
+  it("warns that it cut a label longer than Slack's alt text limit", () => {
+    const context = lowering();
+
+    drawnImageAltText({accessibility: {label: tooLong}}, description, context);
+
+    expect(context.diagnostics).toEqual([
+      {
+        level: DiagnosticLevel.WARNING,
+        code: DiagnosticCode.SLACK_IMAGE_ALT_TEXT_TRUNCATED,
+        componentId: 'possession',
+        message: `The accessibility label is longer than Slack's alt text limit, so the image's alt text was cut to ${SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} characters.`,
+      },
+    ]);
+  });
+
   it("cuts a description longer than Slack's alt text limit, ending it with an ellipsis", () => {
-    const alt = drawnImageAltText({}, 'x'.repeat(SLACK_IMAGE_ALT_TEXT_MAX_LENGTH + 1));
+    const alt = drawnImageAltText({}, tooLong, lowering());
 
     expect(alt).toBe(`${'x'.repeat(SLACK_IMAGE_ALT_TEXT_MAX_LENGTH - 1)}…`);
+  });
+
+  it("cuts a description longer than Slack's alt text limit without a warning", () => {
+    const context = lowering();
+
+    drawnImageAltText({}, tooLong, context);
+
+    expect(context.diagnostics).toEqual([]);
   });
 });

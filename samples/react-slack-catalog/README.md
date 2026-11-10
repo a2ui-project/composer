@@ -185,6 +185,9 @@ For each drawn component:
 
 - The preview draws it as SVG in the browser and shows it as a Slack image
   block, between the native blocks around it.
+- The image's alt text is the component's `accessibility.label`, or else the
+  drawing described in words, cut to Slack's 2,000-character alt text limit. A
+  label that is cut adds a `SLACK_IMAGE_ALT_TEXT_TRUNCATED` warning.
 - `Generated Block Kit` exports that block in Slack's uploaded-file form,
   `{"type": "image", "slack_file": {"id": "RENDERED_AT_SEND"}, ...}`. The app
   that sends the message renders the component to a PNG, uploads it, and puts
