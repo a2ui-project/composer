@@ -185,28 +185,27 @@ export async function setMonacoContent(
       .catch(() => null);
     const guestFrame = iframeHandle ? await iframeHandle.contentFrame().catch(() => null) : null;
     if (guestFrame) {
-      let timeoutId: ReturnType<typeof setTimeout> | undefined;
-      const timeoutPromise = new Promise<void>((_, reject) => {
-        timeoutId = setTimeout(
-          () => reject(new Error('Timed out waiting for RENDER_A2UI in preview frame')),
+      // The timeout lives inside the guest so the `message` listener is
+      // always removed, whether RENDER_A2UI arrives or the wait gives up.
+      renderPromise = guestFrame
+        .evaluate(
+          timeoutMs =>
+            new Promise<void>(resolve => {
+              const handler = (event: MessageEvent) => {
+                if ((event.data as {type?: string} | null)?.type === 'RENDER_A2UI') {
+                  window.removeEventListener('message', handler);
+                  clearTimeout(timeoutId);
+                  resolve();
+                }
+              };
+              const timeoutId = setTimeout(() => {
+                window.removeEventListener('message', handler);
+                resolve();
+              }, timeoutMs);
+              window.addEventListener('message', handler);
+            }),
           10_000,
-        );
-      });
-      const guestMessagePromise = guestFrame.evaluate(() => {
-        return new Promise<void>(resolve => {
-          const handler = (event: MessageEvent) => {
-            if ((event.data as {type?: string} | null)?.type === 'RENDER_A2UI') {
-              window.removeEventListener('message', handler);
-              resolve();
-            }
-          };
-          window.addEventListener('message', handler);
-        });
-      });
-      renderPromise = Promise.race([guestMessagePromise, timeoutPromise])
-        .finally(() => {
-          clearTimeout(timeoutId);
-        })
+        )
         .catch(() => {});
     }
   }
