@@ -16,6 +16,8 @@
 
 import type {ComponentUsages} from 'a2ui-bridge';
 
+const baseSchemaResolvers = new WeakMap<object, (this: unknown) => unknown>();
+
 /**
  * Attaches component usage examples and enriched metadata to an A2UI catalog's
  * runtime components and `catalogSchema` for Composer and Gallery inspection.
@@ -30,23 +32,37 @@ export function attachCatalogSchema<
     catalogSchema?: unknown;
   },
 >(catalog: T, usages: ComponentUsages): T {
+  const ownDesc = Object.getOwnPropertyDescriptor(catalog, 'catalogSchema');
+  if ((ownDesc && !ownDesc.configurable) || !Object.isExtensible(catalog)) {
+    return catalog;
+  }
+
   if (catalog.components && typeof catalog.components.entries === 'function') {
     for (const [name, comp] of catalog.components.entries()) {
-      if (usages[name] && comp && typeof comp === 'object') {
-        (comp as Record<string, unknown>)['examples'] = [usages[name]];
-        (comp as Record<string, unknown>)['example'] = usages[name];
+      if (usages[name] && comp && typeof comp === 'object' && Object.isExtensible(comp)) {
+        try {
+          (comp as Record<string, unknown>)['examples'] = [usages[name]];
+          (comp as Record<string, unknown>)['example'] = usages[name];
+        } catch {
+          // Degrade gracefully if component object cannot be mutated.
+        }
       }
     }
   }
 
-  const baseCatalogSchemaGetter = findPrototypeGetter(catalog, 'catalogSchema');
-  const initialSchema = baseCatalogSchemaGetter ? undefined : catalog.catalogSchema;
+  let resolveBaseSchema = baseSchemaResolvers.get(catalog);
+  if (!resolveBaseSchema) {
+    const baseGetter = findPropertyGetter(catalog, 'catalogSchema');
+    const initialSchema = baseGetter ? undefined : catalog.catalogSchema;
+    resolveBaseSchema = function (this: unknown) {
+      return baseGetter ? baseGetter.call(this) : initialSchema || {};
+    };
+    baseSchemaResolvers.set(catalog, resolveBaseSchema);
+  }
 
   Object.defineProperty(catalog, 'catalogSchema', {
     get() {
-      const base = (
-        baseCatalogSchemaGetter ? baseCatalogSchemaGetter.call(this) : initialSchema || {}
-      ) as Record<string, unknown>;
+      const base = (resolveBaseSchema!.call(this) ?? {}) as Record<string, unknown>;
       const schema: Record<string, unknown> = {
         title: 'Basic Catalog',
         description: 'Unified catalog of basic A2UI components and functions.',
@@ -78,17 +94,18 @@ export function attachCatalogSchema<
 }
 
 /**
- * Traverses the prototype chain of an object to find a property getter descriptor.
+ * Traverses an object and its prototype chain to find a property getter descriptor.
  *
- * @param obj The object whose prototype chain will be inspected.
+ * @param obj The object (and its prototype chain) to inspect.
  * @param prop The name of the property.
- * @returns The getter function if found on any prototype, otherwise undefined.
+ * @returns The getter function if found on the object or any prototype, otherwise undefined.
  */
-function findPrototypeGetter(obj: unknown, prop: string): (() => unknown) | undefined {
-  let curr = obj ? Object.getPrototypeOf(obj) : null;
+function findPropertyGetter(obj: unknown, prop: string): (() => unknown) | undefined {
+  let curr: object | null =
+    (typeof obj === 'object' && obj !== null) || typeof obj === 'function' ? (obj as object) : null;
   while (curr) {
     const desc = Object.getOwnPropertyDescriptor(curr, prop);
-    if (desc?.get) {
+    if (desc) {
       return desc.get;
     }
     curr = Object.getPrototypeOf(curr);
