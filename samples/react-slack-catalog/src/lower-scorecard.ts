@@ -53,7 +53,7 @@ export function lowerScorecard(
     componentType: 'Scorecard',
     componentId: context.componentId,
     svg: renderScorecardSvg(scorecard),
-    alt: drawnImageAltText(props, describeScorecard(scorecard)),
+    alt: drawnImageAltText(props, describeScorecard(scorecard), context),
   });
 }
 

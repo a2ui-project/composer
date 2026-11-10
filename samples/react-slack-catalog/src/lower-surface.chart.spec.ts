@@ -21,6 +21,7 @@ import {ChartType, PIE_CHART_MAX_SLICES} from './chart-image';
 import {stubBlobUrls, surfaceMessages} from './drawn-images.helpers';
 import {createSlackPreviewSession} from './preview-session';
 import {DiagnosticCode, DiagnosticLevel, PreviewStatus} from './preview-snapshot';
+import {SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} from './slack-limits';
 
 const {createSurface, updateComponents, updateData} = surfaceMessages('charts');
 
@@ -115,6 +116,26 @@ describe('Slack charts', () => {
     expect(session.getSnapshot().blocks[1]).toMatchObject({
       alt_text: 'Argentina had most of the ball',
     });
+  });
+
+  it("warns when it cuts the accessibility label to Slack's alt text limit", () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      chartMessage({
+        ...PIE,
+        accessibility: {label: 'x'.repeat(SLACK_IMAGE_ALT_TEXT_MAX_LENGTH + 1)},
+      }),
+    ]);
+
+    expect(session.getSnapshot().diagnostics).toContainEqual(
+      expect.objectContaining({
+        level: DiagnosticLevel.WARNING,
+        code: DiagnosticCode.SLACK_IMAGE_ALT_TEXT_TRUNCATED,
+        componentId: 'possession',
+      }),
+    );
   });
 
   it('redraws a chart whose values are bound to the data model', async () => {

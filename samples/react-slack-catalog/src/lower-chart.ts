@@ -57,7 +57,7 @@ export function lowerChart(
     componentType: 'Chart',
     componentId: context.componentId,
     svg: renderChartSvg(image),
-    alt: drawnImageAltText(props, describeChart(image)),
+    alt: drawnImageAltText(props, describeChart(image), context),
   });
 }
 
