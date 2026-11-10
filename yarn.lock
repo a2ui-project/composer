@@ -8213,28 +8213,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-markdown@npm:^10.1.0":
-  version: 10.1.0
-  resolution: "react-markdown@npm:10.1.0"
-  dependencies:
-    "@types/hast": "npm:^3.0.0"
-    "@types/mdast": "npm:^4.0.0"
-    devlop: "npm:^1.0.0"
-    hast-util-to-jsx-runtime: "npm:^2.0.0"
-    html-url-attributes: "npm:^3.0.0"
-    mdast-util-to-hast: "npm:^13.0.0"
-    remark-parse: "npm:^11.0.0"
-    remark-rehype: "npm:^11.0.0"
-    unified: "npm:^11.0.0"
-    unist-util-visit: "npm:^5.0.0"
-    vfile: "npm:^6.0.0"
-  peerDependencies:
-    "@types/react": ">=18"
-    react: ">=18"
-  checksum: 10c0/4a5dc7d15ca6d05e9ee95318c1904f83b111a76f7588c44f50f1d54d4c97193b84e4f64c4b592057c989228238a2590306cedd0c4d398e75da49262b2b5ae1bf
-  languageName: node
-  linkType: hard
-
 "react-markdown@npm:^9.1.0":
   version: 9.1.0
   resolution: "react-markdown@npm:9.1.0"
@@ -8955,20 +8933,6 @@ __metadata:
     react: ^17 || ^18 || ^19
     react-dom: ^17 || ^18 || ^19
   checksum: 10c0/2a8ecc8087d2f6d6653881a864529b7cb435435eb2c2a5141e2a44967d660ffb0356ba16738ca6bd5607ddae3baa17f4178b03937e7ef8541e0f3692314de464
-  languageName: node
-  linkType: hard
-
-"slack-blocks-to-jsx@npm:^1.0.4":
-  version: 1.4.1
-  resolution: "slack-blocks-to-jsx@npm:1.4.1"
-  dependencies:
-    node-emoji: "npm:^2.1.3"
-    react-markdown: "npm:^10.1.0"
-    remark-gfm: "npm:^4.0.1"
-  peerDependencies:
-    react: ^17 || ^18 || ^19
-    react-dom: ^17 || ^18 || ^19
-  checksum: 10c0/e83a1cb31be88591ad01679312e129f3a368941d5c720f3d1653aa2d110a4c4d7554495b8962c5a9562bd26e1e14b104b95ea56f915afb9a5dabf685cd360a59
   languageName: node
   linkType: hard
 
