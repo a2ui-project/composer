@@ -1116,5 +1116,38 @@ ${METRICS_END}
       assert.equal(realCheck.isUpToDate, true);
       assert.equal(realCheck.hasChanges, false);
     });
+
+    it('matches getBaselineDimensions declared without an access modifier but ignores call sites', () => {
+      const source = `
+        export class ImplicitPublicService {
+          getBaselineDimensions(): Record<string, unknown> {
+            return {
+              ['implicit_public_dim']: 'x',
+            };
+          }
+
+          protected getConfigOptions(): Record<string, unknown> {
+            const base = this.getBaselineDimensions();
+            if (base) {
+              return {['decoy_config_key']: 1};
+            }
+            return {...super.getBaselineDimensions(), ['decoy_spread_key']: 2};
+          }
+        }
+      `;
+      const extracted = extractParametersFromSource(source);
+      assert.ok(
+        extracted.has('implicit_public_dim'),
+        'getBaselineDimensions() without an explicit modifier must be extracted',
+      );
+      assert.ok(
+        !extracted.has('decoy_config_key'),
+        'a getBaselineDimensions() call site must not be treated as a method body',
+      );
+      assert.ok(
+        !extracted.has('decoy_spread_key'),
+        'a super.getBaselineDimensions() spread must not be treated as a method body',
+      );
+    });
   });
 });

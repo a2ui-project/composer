@@ -234,10 +234,12 @@ export function extractParametersFromSource(sourceContent) {
         : `'${' '.repeat(Math.max(0, match.length - 2))}'`,
   );
 
-  // Anchor getBaselineDimensions (including subclass `override` declarations) to method signature
-  // and extract balanced `return { ... }` object literals inside the method body.
+  // Anchor getBaselineDimensions declarations (with or without an explicit access modifier, and
+  // including subclass `override` declarations) to the start of a line, and stop at `;` so call
+  // sites such as `this.getBaselineDimensions();` or `...super.getBaselineDimensions()` are never
+  // mistaken for a method body. Then extract balanced `return { ... }` object literals inside it.
   const baselineSigRegex =
-    /(?:protected|public|private)\s+(?:override\s+)?getBaselineDimensions\s*\([^)]*\)[^{]*\{/g;
+    /^[ \t]*(?:(?:protected|public|private)\s+)?(?:override\s+)?getBaselineDimensions\s*\([^)]*\)[^{;]*\{/gm;
   let match;
   while ((match = baselineSigRegex.exec(maskedSource)) !== null) {
     const bodyStart = match.index + match[0].length;

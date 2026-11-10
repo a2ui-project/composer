@@ -18,8 +18,12 @@ import type {UsageTrackingConfig} from './usage-tracking.service';
 
 /**
  * User-Agent pattern matching headless and automated browser runners (such as
- * gbrowser, HeadlessChrome, Playwright, Puppeteer, PhantomJS, and Lighthouse)
- * so automated screenshot or health-check scripts do not inflate GA4 user counts.
+ * HeadlessChrome, Playwright, Puppeteer, PhantomJS, and Lighthouse) so automated
+ * screenshot or health-check scripts do not inflate GA4 user counts.
+ *
+ * Some drivers (for example, internal screenshot tooling) replace the User-Agent
+ * with a standard desktop Chrome string, so this pattern cannot catch them. Those
+ * are detected through `navigator.webdriver` instead, or can pass `?notrack=1`.
  */
 export const AUTOMATED_UA_REGEX = /HeadlessChrome|PhantomJS|Playwright|Puppeteer|Lighthouse/i;
 
