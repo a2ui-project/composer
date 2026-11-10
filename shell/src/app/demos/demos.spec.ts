@@ -29,6 +29,7 @@ import {StartupResolution} from '../shell/startup-resolution/startup-resolution'
 import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
 import {IndexedDbStorage} from '../storage/indexed-db-storage/indexed-db-storage';
+import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 
 class MockDemosCatalog {
   readonly demos = signal<TrackedDemo[] | null>(null);
@@ -788,7 +789,9 @@ describe('Demos Component', () => {
         },
       },
     });
-    await new Promise(resolve => setTimeout(resolve, 30));
+    const catalogManagement = TestBed.inject(CatalogManagement);
+    await vi.waitFor(() => expect(catalogManagement.hasReceivedCatalogResponse()).toBe(true));
+    expect(catalogManagement.activeProtocolVersion()).toBe('v0.9');
 
     const v1Demos: TrackedDemo[] = [
       {
@@ -853,7 +856,7 @@ describe('Demos Component', () => {
         },
       },
     });
-    await new Promise(resolve => setTimeout(resolve, 30));
+    await vi.waitFor(() => expect(catalogManagement.activeProtocolVersion()).toBe('v1.0'));
     fixture.detectChanges();
 
     expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(v1Demos[0].a2ui, nativeIframe);
