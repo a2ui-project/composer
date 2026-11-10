@@ -20,6 +20,7 @@ import {AppRoot} from './main';
 import {a2uiBridge, PreviewBridgeMessageType, MCP_FUNCTIONS_CATALOG_ID} from 'a2ui-bridge';
 import {COMPONENT_USAGES} from '../../shared/usages.js';
 import {assertValidV10ComponentUsages} from '../../shared/usages-test-helper.js';
+import {attachCatalogSchema} from '../../shared/attach-catalog-schema.js';
 
 describe('AppRoot Lit Element', () => {
   let element: AppRoot;
@@ -222,5 +223,98 @@ describe('AppRoot Lit Element', () => {
     it('validates every usage entry in usages.ts against v1.0 CreateSurfaceMessageSchema and BASIC_COMPONENTS', () => {
       assertValidV10ComponentUsages(COMPONENT_USAGES);
     });
+  });
+});
+
+describe('attachCatalogSchema', () => {
+  it('resolves dynamic own catalogSchema getter without eager snapshotting', () => {
+    let dynamicCount = 0;
+    const target = {
+      components: new Map(),
+      get catalogSchema() {
+        dynamicCount++;
+        return {title: `Dynamic Title ${dynamicCount}`};
+      },
+    };
+
+    attachCatalogSchema(target, {});
+    expect(dynamicCount).toBe(0);
+
+    const firstRead = target.catalogSchema as {title: string};
+    expect(firstRead.title).toBe('Dynamic Title 1');
+    expect(dynamicCount).toBe(1);
+
+    const secondRead = target.catalogSchema as {title: string};
+    expect(secondRead.title).toBe('Dynamic Title 2');
+    expect(dynamicCount).toBe(2);
+  });
+
+  it('allows own data catalogSchema property to shadow an inherited prototype getter', () => {
+    const proto = {
+      get catalogSchema() {
+        return {title: 'Proto Title'};
+      },
+    };
+    const target = Object.create(proto);
+    target.components = new Map();
+    Object.defineProperty(target, 'catalogSchema', {
+      value: {title: 'Instance Title'},
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+
+    attachCatalogSchema(target, {});
+    const schema = target.catalogSchema as {title: string};
+    expect(schema.title).toBe('Instance Title');
+  });
+
+  it('replaces component examples cleanly and avoids stacking wrapper getters when called twice on the same instance', () => {
+    let dynamicCount = 0;
+    const target = {
+      components: new Map(),
+      get catalogSchema() {
+        dynamicCount++;
+        return {
+          title: `Dynamic Title ${dynamicCount}`,
+          components: {Button: {type: 'object'}, Card: {type: 'object'}},
+        };
+      },
+    };
+
+    attachCatalogSchema(target, {Button: {component: 'Button'}} as never);
+    attachCatalogSchema(target, {Card: {component: 'Card'}} as never);
+    expect(dynamicCount).toBe(0);
+
+    const schema = target.catalogSchema as {
+      title: string;
+      components: Record<string, {examples?: unknown[]}>;
+    };
+    expect(schema.title).toBe('Dynamic Title 1');
+    expect(dynamicCount).toBe(1);
+    expect(schema.components['Card'].examples).toBeDefined();
+    expect(schema.components['Button'].examples).toBeUndefined();
+  });
+
+  it('gracefully handles frozen catalog and component objects without throwing', () => {
+    const frozenComp = Object.freeze({name: 'Text'});
+    const frozenCatalog = Object.freeze({
+      components: new Map([['Text', frozenComp]]),
+      catalogSchema: {title: 'Frozen Catalog'},
+    });
+
+    expect(() => {
+      attachCatalogSchema(frozenCatalog, {Text: {component: 'Text'}} as never);
+    }).not.toThrow();
+
+    const nonConfigurableCatalog = {};
+    Object.defineProperty(nonConfigurableCatalog, 'catalogSchema', {
+      value: {title: 'Locked'},
+      configurable: false,
+      writable: false,
+    });
+    expect(() => {
+      attachCatalogSchema(nonConfigurableCatalog, {});
+    }).not.toThrow();
   });
 });
