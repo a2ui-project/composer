@@ -146,11 +146,20 @@ describe('renderChartSvg', () => {
     ],
   };
 
-  it('draws a negative value as a labeled bar below the zero line', () => {
-    const svg = renderChartSvg(gainAndLoss);
+  it('draws a negative value as a bar that hangs below the zero line', () => {
+    const doc = parse(renderChartSvg(gainAndLoss));
+    // Each gridline is followed by its number on the value axis.
+    const zeroLine = [...doc.querySelectorAll('line')].find(
+      line => line.nextElementSibling?.textContent === '0',
+    )!;
+    const [, loss] = doc.querySelectorAll(BAR);
 
-    expect(countOf(svg, BAR)).toBe(2);
-    expect(svg).toContain('>-2</text>');
+    expect(Number(loss.getAttribute('y'))).toBe(Number(zeroLine.getAttribute('y1')));
+    expect(Number(loss.getAttribute('height'))).toBeGreaterThan(0);
+  });
+
+  it('labels a negative bar with its value', () => {
+    expect(renderChartSvg(gainAndLoss)).toContain('>-2</text>');
   });
 
   it('draws a bar chart whose values are all zero on an axis from 0 to 1', () => {

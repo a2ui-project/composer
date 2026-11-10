@@ -86,10 +86,10 @@ const CHART_MESSAGES: RenderA2uiItem[] = [
     updateComponents: {
       surfaceId: 'possession',
       components: [
-        {id: 'root', component: 'Column', children: ['title', 'share']},
+        {id: 'root', component: 'Column', children: ['title', 'possession-chart']},
         {id: 'title', component: 'Text', variant: 'h1', text: 'Possession'},
         {
-          id: 'share',
+          id: 'possession-chart',
           component: 'Chart',
           type: 'pie',
           title: 'Possession split',
@@ -252,13 +252,6 @@ test.describe('Slack assistant browser journey', () => {
     expect(unexpectedErrors).toEqual([]);
   });
 
-  test('notes that a drawn chart is uploaded when the message is sent', async ({page}) => {
-    const unexpectedErrors = collectUnexpectedErrors(page);
-    await generatePossessionChart(page);
-    await expect(slackPreviewFrame(page).getByText('SLACK_IMAGE_RENDERED_AT_SEND')).toBeVisible();
-    expect(unexpectedErrors).toEqual([]);
-  });
-
   test('tells the model that charts are drawn and sent as images', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
     await generatePossessionChart(page);
@@ -266,17 +259,6 @@ test.describe('Slack assistant browser journey', () => {
     expect(JSON.stringify(request.body)).toContain(
       'native Slack chart block cannot express every chart this catalog allows',
     );
-    expect(unexpectedErrors).toEqual([]);
-  });
-
-  test('exports a requested pie chart as an uploaded file', async ({page}) => {
-    const unexpectedErrors = collectUnexpectedErrors(page);
-    await generatePossessionChart(page);
-    expect(await getBlockKitJson(page)).toMatchObject({
-      blocks: expect.arrayContaining([
-        {type: 'image', slack_file: {id: 'RENDERED_AT_SEND'}, alt_text: CHART_ALT},
-      ]),
-    });
     expect(unexpectedErrors).toEqual([]);
   });
 

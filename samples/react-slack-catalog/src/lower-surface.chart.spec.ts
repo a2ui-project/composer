@@ -253,19 +253,60 @@ describe('Slack charts', () => {
     });
   });
 
-  it('skips a chart whose bound value is not a number', () => {
+  /** The possession pie, with Argentina's value bound to `/argentina`. */
+  const BOUND_PIE = {
+    ...PIE,
+    data: [
+      {label: 'Argentina', value: {path: '/argentina'}},
+      {label: 'Mexico', value: 30},
+    ],
+  };
+  const NOT_A_NUMBER_WARNING = {
+    level: DiagnosticLevel.WARNING,
+    code: DiagnosticCode.A2UI_INVALID_CHART_DATA,
+    componentId: 'possession',
+    message: `Chart "possession" has a value for "Argentina" that isn't a number. Use a number such as 70.`,
+  };
+
+  it('skips a chart whose bound value is missing', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, chartMessage(BOUND_PIE)]);
+    const snapshot = session.getSnapshot();
+
+    expect(snapshot.diagnostics).toContainEqual(NOT_A_NUMBER_WARNING);
+    expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
+    expect(blobUrls.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("skips a chart whose bound value is text that isn't a number", () => {
     const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
-      chartMessage({...PIE, data: [{label: 'Argentina', value: {path: '/missing'}}]}),
+      updateData({argentina: 'seventy'}),
+      chartMessage(BOUND_PIE),
+    ]);
+    const snapshot = session.getSnapshot();
+
+    expect(snapshot.diagnostics).toContainEqual(NOT_A_NUMBER_WARNING);
+    expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
+    expect(blobUrls.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('draws a bound value that is a number written as text', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      updateData({argentina: '70'}),
+      chartMessage(BOUND_PIE),
     ]);
 
-    expect(session.getSnapshot().diagnostics).toContainEqual({
-      level: DiagnosticLevel.WARNING,
-      code: DiagnosticCode.A2UI_INVALID_CHART_DATA,
-      componentId: 'possession',
-      message: `Chart "possession" has a value for "Argentina" that isn't a number. Use a number such as 70.`,
+    expect(session.getSnapshot().blocks[1]).toEqual({
+      type: 'image',
+      image_url: 'blob:image-1',
+      alt_text: PIE_ALT,
     });
   });
 
