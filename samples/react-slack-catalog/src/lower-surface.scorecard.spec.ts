@@ -85,7 +85,7 @@ describe('Slack scorecards', () => {
     ]);
   });
 
-  it('says once for each drawn component that the app sending the message must upload it', () => {
+  it('says once that the app sending the message must upload every drawn image', () => {
     const session = createSlackPreviewSession();
 
     session.processMessages(MATCH_REPORT);
@@ -98,16 +98,8 @@ describe('Slack scorecards', () => {
       {
         level: DiagnosticLevel.INFO,
         code: DiagnosticCode.SLACK_IMAGE_RENDERED_AT_SEND,
-        componentId: 'final-score',
         message:
-          'Scorecard "final-score" is drawn as an image in this preview. The app that sends the message to Slack must render it to a PNG and upload it. The Generated Block Kit export marks it with the placeholder file ID RENDERED_AT_SEND, which that app replaces with the ID of the uploaded file.',
-      },
-      {
-        level: DiagnosticLevel.INFO,
-        code: DiagnosticCode.SLACK_IMAGE_RENDERED_AT_SEND,
-        componentId: 'possession',
-        message:
-          'Chart "possession" is drawn as an image in this preview. The app that sends the message to Slack must render it to a PNG and upload it. The Generated Block Kit export marks it with the placeholder file ID RENDERED_AT_SEND, which that app replaces with the ID of the uploaded file.',
+          'Scorecard "final-score" and Chart "possession" are drawn as images in this preview. The app that sends the message to Slack must render each to a PNG and upload it. The Generated Block Kit export marks each with the placeholder file ID RENDERED_AT_SEND, which that app replaces with the ID of the uploaded file.',
       },
     ]);
   });

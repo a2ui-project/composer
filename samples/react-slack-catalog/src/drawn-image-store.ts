@@ -25,6 +25,8 @@
 export interface DrawnImageStore {
   /** Returns a URL serving the SVG markup, reusing the URL of identical markup. */
   urlFor(svg: string): string;
+  /** Whether `url` is one this store serves and hasn't freed: the URL of a drawn image. */
+  has(url: string): boolean;
   /** Frees URLs that are in neither `keep` nor the previous call's `keep`. */
   release(keep: ReadonlySet<string>): void;
   /** Frees every URL. */
@@ -45,6 +47,10 @@ export function createBlobImageStore(): DrawnImageStore {
       const url = URL.createObjectURL(new Blob([svg], {type: 'image/svg+xml'}));
       urlsByMarkup.set(svg, url);
       return url;
+    },
+
+    has(url) {
+      return [...urlsByMarkup.values()].includes(url);
     },
 
     release(keep) {

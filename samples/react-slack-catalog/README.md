@@ -192,8 +192,10 @@ For each drawn component:
   `{"type": "image", "slack_file": {"id": "RENDERED_AT_SEND"}, ...}`. The app
   that sends the message renders the component to a PNG, uploads it, and puts
   the uploaded file's ID in place of `RENDERED_AT_SEND`.
-- An info diagnostic, `SLACK_IMAGE_RENDERED_AT_SEND`, names the component and
-  says the same in the preview.
+
+One info diagnostic per render, `SLACK_IMAGE_RENDERED_AT_SEND`, names every
+drawn component and says that the app that sends the message must upload its
+image.
 
 The `Copy JSON` and `Open in Block Kit Builder` buttons of the Tightknit
 renderer, which draws the preview (see Actions), use the preview blocks, so a

@@ -101,8 +101,8 @@ export enum DiagnosticCode {
   /** A Chart's or Scorecard's accessibility label was cut to Slack's alt text limit. */
   SLACK_IMAGE_ALT_TEXT_TRUNCATED = 'SLACK_IMAGE_ALT_TEXT_TRUNCATED',
   /**
-   * A Chart or Scorecard is drawn as an image in the preview. The app that sends the
-   * message to Slack renders it and uploads the image.
+   * Charts or Scorecards are drawn as images in the preview, which one note per render
+   * names. The app that sends the message to Slack renders each and uploads the image.
    */
   SLACK_IMAGE_RENDERED_AT_SEND = 'SLACK_IMAGE_RENDERED_AT_SEND',
   /** Slack image blocks ignore the A2UI Image `fit` and `variant` hints. */

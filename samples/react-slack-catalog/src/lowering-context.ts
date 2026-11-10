@@ -16,7 +16,7 @@
 
 import {type ChannelNode, type Renderable} from '@copilotkit/channels-ui';
 import {type ActionDispatchEntry} from './action-dispatch';
-import {type DrawnImage} from './drawn-image-blocks';
+import {type DrawnComponent, type DrawnImage} from './drawn-image-blocks';
 import {type DrawnImageStore} from './drawn-image-store';
 import {type InputComponentType, type InputDispatchEntry} from './form-input';
 import {type PreviewDiagnostic} from './preview-snapshot';
@@ -31,13 +31,13 @@ export interface LoweringState {
   readonly diagnostics: PreviewDiagnostic[];
   readonly actions: Map<string, ActionDispatchEntry>;
   readonly inputs: Map<string, InputDispatchEntry>;
-  /** Serves the images drawn in this render. */
-  readonly drawnImages: DrawnImageStore;
   /**
-   * The URLs of the images drawn in this render, which the Generated Block Kit export
-   * swaps for uploaded files.
+   * Serves the images drawn in this render, and tells the Generated Block Kit export which
+   * image blocks show one, so it can swap them for uploaded files.
    */
-  readonly drawnImageUrls: Set<string>;
+  readonly drawnImages: DrawnImageStore;
+  /** The components drawn as images in this render, in document order. */
+  readonly drawnComponents: DrawnComponent[];
   nextActionOrdinal: number;
 }
 
@@ -50,6 +50,9 @@ export interface LowerComponentContext {
   readonly dispatch: (action: unknown) => string;
   readonly input: (type: InputComponentType) => InputDispatchEntry;
   readonly diagnostics: PreviewDiagnostic[];
-  /** Serves an image drawn while lowering and returns the Channels UI `Image` that shows it. */
+  /**
+   * Serves an image drawn for this component while lowering and returns the Channels UI
+   * `Image` that shows it.
+   */
   readonly placeDrawnImage: (image: DrawnImage) => ChannelNode;
 }

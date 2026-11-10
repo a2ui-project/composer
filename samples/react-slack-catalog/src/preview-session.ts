@@ -23,13 +23,13 @@ import {
   type ComponentApi,
   type SurfaceModel,
 } from '@a2ui/web_core/v0_9';
-import {type KnownBlock} from '@slack/types';
 import {
   dispatchCurrentEventAction,
   isCurrentActionEntry,
   type ActionDispatchEntry,
 } from './action-dispatch';
 import {slackCatalog, slackCatalogJson} from './catalog';
+import {imageUrls} from './drawn-image-blocks';
 import {createBlobImageStore} from './drawn-image-store';
 import {SLACK_COMPONENT_USAGES} from './examples';
 import {readFormInputValue, updateFormInput, type InputDispatchEntry} from './form-input';
@@ -119,7 +119,7 @@ export function createSlackPreviewSession(
     actions = nextActions;
     inputs = nextInputs;
     // Keep only the drawn images this snapshot, or the one before it, shows.
-    drawnImages.release(shownImageUrls(snapshot.blocks));
+    drawnImages.release(imageUrls(snapshot.blocks));
     for (const listener of listeners) {
       listener();
     }
@@ -425,15 +425,6 @@ function isSameDiagnostic(first: PreviewDiagnostic, second: PreviewDiagnostic): 
 /** The surface the preview shows: the most recently created one. */
 function lastSurface(processor: MessageProcessor<ComponentApi>): SurfaceModel | undefined {
   return [...processor.model.surfacesMap.values()].at(-1);
-}
-
-/** The `image_url` of every image block in `blocks`: the images a snapshot shows. */
-function shownImageUrls(blocks: readonly KnownBlock[]): Set<string> {
-  return new Set(
-    blocks.flatMap(block =>
-      block.type === 'image' && 'image_url' in block ? [block.image_url] : [],
-    ),
-  );
 }
 
 /**

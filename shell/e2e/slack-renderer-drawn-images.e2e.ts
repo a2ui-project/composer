@@ -64,18 +64,18 @@ test.describe('Slack renderer drawn images in Composer', () => {
     expect(unexpectedErrors).toEqual([]);
   });
 
-  test('notes for each drawn image that it is uploaded when the message is sent', async ({
-    page,
-  }) => {
+  test('notes once that the drawn images are uploaded when the message is sent', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
     await openMatchReport(page);
 
-    await expect(
-      slackPreviewFrame(page)
-        .getByRole('list', {name: 'Preview diagnostics'})
-        .getByRole('listitem')
-        .filter({hasText: 'SLACK_IMAGE_RENDERED_AT_SEND'}),
-    ).toHaveCount(2);
+    const notes = slackPreviewFrame(page)
+      .getByRole('list', {name: 'Preview diagnostics'})
+      .getByRole('listitem')
+      .filter({hasText: 'SLACK_IMAGE_RENDERED_AT_SEND'});
+    await expect(notes).toHaveCount(1);
+    await expect(notes).toContainText(
+      'Scorecard "final-score" and Chart "possession" are drawn as images',
+    );
     expect(unexpectedErrors).toEqual([]);
   });
 
