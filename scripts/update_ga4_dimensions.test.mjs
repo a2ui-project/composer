@@ -881,7 +881,9 @@ ${METRICS_END}
         assert.equal(syncResult.hasChanges, true);
         assert.deepEqual(syncResult.newDefinitions.addedDimensions, ['open_file_reason']);
         assert.deepEqual(syncResult.newDefinitions.addedMetrics, ['subclass_duration_seconds']);
-        const reasonDim = syncResult.newDefinitions.dimensions.find(d => d.paramName === 'open_file_reason');
+        const reasonDim = syncResult.newDefinitions.dimensions.find(
+          d => d.paramName === 'open_file_reason',
+        );
         assert.deepEqual(reasonDim, {
           paramName: 'open_file_reason',
           displayName: 'Open File Failure Reason',
@@ -923,7 +925,10 @@ ${METRICS_END}
     });
 
     it('preserves existing SUBCLASS_DESCRIPTIONS parameters during standalone sync but prunes them when subclassPaths are provided without them', () => {
-      assert.equal(SUBCLASS_DESCRIPTIONS.open_file_reason, 'Categorized failure reason for failure to open an A2UI file');
+      assert.equal(
+        SUBCLASS_DESCRIPTIONS.open_file_reason,
+        'Categorized failure reason for failure to open an A2UI file',
+      );
       const existing = {
         dimensions: new Map([
           [
@@ -995,7 +1000,9 @@ ${METRICS_END}
         });
         assert.equal(standaloneSync.isUpToDate, true);
         assert.equal(standaloneSync.hasChanges, false);
-        assert.ok(standaloneSync.newDefinitions.dimensions.some(d => d.paramName === 'open_file_reason'));
+        assert.ok(
+          standaloneSync.newDefinitions.dimensions.some(d => d.paramName === 'open_file_reason'),
+        );
 
         const subclassSync = syncDimensions({
           scriptPath: tempScript,
@@ -1005,7 +1012,9 @@ ${METRICS_END}
         });
         assert.equal(subclassSync.isUpToDate, false);
         assert.equal(subclassSync.hasChanges, true);
-        assert.ok(!subclassSync.newDefinitions.dimensions.some(d => d.paramName === 'open_file_reason'));
+        assert.ok(
+          !subclassSync.newDefinitions.dimensions.some(d => d.paramName === 'open_file_reason'),
+        );
       } finally {
         fs.rmSync(tempDir, {recursive: true, force: true});
       }
@@ -1047,6 +1056,65 @@ ${METRICS_END}
       } finally {
         fs.rmSync(tempDir, {recursive: true, force: true});
       }
+    });
+
+    it('excludes page_location and retains all baseline dimensions across override methods, comments with braces, and inner multi-line braces', () => {
+      const sourceWithInnerBraces = `
+        export class TestService {
+          protected getBaselineDimensions(): Record<string, unknown> {
+            const pageLocation = this.getSanitizedPageLocation();
+            // Comment with unbalanced brace: { should not confuse depth
+            const label = 'string literal with unbalanced } brace';
+            if (pageLocation) {
+              console.debug(label, { ['ignored_debug_only']: false });
+            }
+            return {
+              ['send_to']: 'G-TEST',
+              ['composer_session_id']: 'sid',
+              ['usage_type']: '1P',
+              ['env_mode']: 'standalone',
+              ['active_renderer_id']: 'lit',
+              ['catalog_id']: 'basic',
+              ...(pageLocation ? {['page_location']: pageLocation} : {}),
+            };
+          }
+        }
+
+        export class SubclassService extends TestService {
+          protected override getBaselineDimensions(): Record<string, unknown> {
+            return {
+              ...super.getBaselineDimensions(),
+              ['subclass_baseline_dim']: 'plugin',
+            };
+          }
+        }
+      `;
+      const extracted = extractParametersFromSource(sourceWithInnerBraces);
+      assert.ok(
+        !extracted.has('page_location'),
+        'page_location must be excluded as a standard GA4 param',
+      );
+      assert.ok(
+        !extracted.has('ignored_debug_only'),
+        'non-return object keys inside getBaselineDimensions must not be extracted',
+      );
+      assert.ok(extracted.has('composer_session_id'));
+      assert.ok(extracted.has('usage_type'));
+      assert.ok(extracted.has('env_mode'));
+      assert.ok(extracted.has('active_renderer_id'));
+      assert.ok(extracted.has('catalog_id'));
+      assert.ok(
+        extracted.has('subclass_baseline_dim'),
+        'protected override getBaselineDimensions() in subclasses must be extracted',
+      );
+
+      const realCheck = syncDimensions({
+        scriptPath: SCRIPT_PATH,
+        sourcePath: SERVICE_PATH,
+        check: true,
+      });
+      assert.equal(realCheck.isUpToDate, true);
+      assert.equal(realCheck.hasChanges, false);
     });
   });
 });

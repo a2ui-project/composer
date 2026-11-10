@@ -78,7 +78,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   private readonly appConfigProvider = inject(AppConfigProvider);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
-  private readonly document = inject(DOCUMENT);
+  protected readonly document = inject(DOCUMENT);
 
   /**
    * Ephemeral session identifier generated per tab load and regenerated upon workspace reset.
@@ -202,6 +202,25 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   }
 
   /**
+   * Returns the current page URL stripped of query parameters and hash fragments
+   * (`${origin}${pathname}`), preventing sensitive URL tokens, conversation IDs, or shared
+   * payloads from leaking to Google Analytics via `dl` (`page_location`). Returns `undefined`
+   * when `origin` or `pathname` is unavailable or opaque (`'null'`, e.g., `about:blank`).
+   */
+  protected getSanitizedPageLocation(): string | undefined {
+    const loc = this.document.defaultView?.location;
+    if (
+      typeof loc?.origin === 'string' &&
+      loc.origin !== 'null' &&
+      loc.origin.length > 0 &&
+      typeof loc?.pathname === 'string'
+    ) {
+      return `${loc.origin}${loc.pathname}`;
+    }
+    return undefined;
+  }
+
+  /**
    * Configuration options passed to `gtag('config', measurementId, options)`.
    *
    * Includes essential safeguards against cookie churn and multi-app collisions:
@@ -218,6 +237,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
    */
   protected getConfigOptions(): Record<string, unknown> {
     const hostname = this.document.defaultView?.location?.hostname;
+    const pageLocation = this.getSanitizedPageLocation();
     return {
       // Disable automatic page view so trackPageView() can attach baseline dimensions.
       ['send_page_view']: false,
@@ -231,6 +251,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       // (session_start, user_engagement, ...) that bypass getBaselineDimensions() carry them too.
       ['usage_type']: this.getUsageType(),
       ['env_mode']: this.appConfigProvider.envMode(),
+      ...(pageLocation ? {['page_location']: pageLocation} : {}),
     };
   }
 
@@ -238,6 +259,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     const activeRendererId = this.startupConfigState.selectedRendererId() || 'default';
     const catalogObj = this.catalogManagement.activeCatalog();
     const catalogId = (catalogObj && getCatalogId(catalogObj)) || '';
+    const pageLocation = this.getSanitizedPageLocation();
     return {
       ['send_to']: this.config.measurementId,
       ['composer_session_id']: this._composerSessionId,
@@ -245,6 +267,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       ['env_mode']: this.appConfigProvider.envMode(),
       ['active_renderer_id']: activeRendererId,
       ['catalog_id']: catalogId,
+      ...(pageLocation ? {['page_location']: pageLocation} : {}),
     };
   }
 
@@ -274,8 +297,9 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   }
 
   trackPageView(params: {pagePath: string}): void {
+    const sanitizedPath = params.pagePath.split(/[?#]/, 1)[0] || '/';
     this.dispatchGtagEvent('page_view', {
-      ['page_path']: params.pagePath,
+      ['page_path']: sanitizedPath,
     });
   }
 
