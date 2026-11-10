@@ -55,6 +55,8 @@ import type {
 } from '../shell/cross-frame-validator/v1-0-wire-validator';
 import {V09A2aStrategy} from './protocol/v0-9-a2a-strategy';
 import {V10A2aStrategy} from './protocol/v1-0-a2a-strategy';
+import {CrossFrameValidator} from '../shell/cross-frame-validator/cross-frame-validator';
+import {hasPrototypePollution} from '../shell/cross-frame-validator/wire-version-validator';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {asRecord} from '../utils/json';
@@ -154,6 +156,7 @@ export class A2aChatView implements OnInit {
   protected readonly configProvider = inject(AppConfigProvider);
   private readonly a2aTransport = inject(A2A_TRANSPORT);
   private readonly errorLogger = inject(ErrorLogger);
+  private readonly logger = this.errorLogger.withTag('A2aChatView');
   private readonly hostCommunication = inject(HostCommunication);
   private readonly catalogManagement = inject(CatalogManagement);
   /**
@@ -235,7 +238,7 @@ export class A2aChatView implements OnInit {
     string,
     {sourceWindow: Window; abortController: AbortController}
   >();
-  private readonly ownedWindows = new Set<Window>();
+  private readonly ownedWindows = new WeakSet<Window>();
   private activeAbortController?: AbortController;
   private configDialogRef?: MatDialogRef<void, void>;
 
@@ -246,6 +249,13 @@ export class A2aChatView implements OnInit {
         if (!envelope) return;
         if (envelope.timestamp && envelope.timestamp < this.initTimestamp) return;
         if (envelope.sourceWindow && !this.isOwnedWindow(envelope.sourceWindow)) return;
+        if (
+          envelope.payload &&
+          typeof envelope.payload === 'object' &&
+          hasPrototypePollution(envelope.payload)
+        ) {
+          return;
+        }
         this.handleSendToServerAction(envelope.payload);
       });
 
@@ -456,17 +466,42 @@ export class A2aChatView implements OnInit {
   }
 
   protected handleSendToServerAction(payload: unknown): void {
+    if (payload && typeof payload === 'object' && hasPrototypePollution(payload)) {
+      return;
+    }
+
     const rawPayload = payload as
       | {
           version?: string;
           action?: unknown;
           callAgentFunction?: unknown;
           rendererFunctionResponse?: unknown;
+          updateDataModel?: unknown;
+          dataModelChange?: unknown;
+          error?: unknown;
         }
       | undefined;
 
-    if (rawPayload && (rawPayload.callAgentFunction || rawPayload.rendererFunctionResponse)) {
+    if (
+      rawPayload &&
+      (rawPayload.callAgentFunction ||
+        rawPayload.rendererFunctionResponse ||
+        rawPayload.updateDataModel ||
+        rawPayload.dataModelChange ||
+        rawPayload.error ||
+        (rawPayload.version === '1.0' && rawPayload.action === undefined))
+    ) {
       return;
+    }
+
+    if (
+      rawPayload &&
+      typeof rawPayload === 'object' &&
+      (rawPayload.version === '1.0' || rawPayload.version === 'v1.0')
+    ) {
+      if (!CrossFrameValidator.validateSendToServerPayload(rawPayload, undefined, this.logger)) {
+        return;
+      }
     }
 
     let action = rawPayload?.action !== undefined ? rawPayload.action : payload;
@@ -477,6 +512,10 @@ export class A2aChatView implements OnInit {
       } catch {
         // Keep string if not JSON
       }
+    }
+
+    if (action && typeof action === 'object' && hasPrototypePollution(action)) {
+      return;
     }
 
     if (action === null || action === undefined) return;

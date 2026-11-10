@@ -1967,4 +1967,94 @@ describe('A2aChatView', () => {
 
     iframe.remove();
   });
+
+  it('ignores valid v1.0 updateDataModel and error SEND_TO_SERVER envelopes from an owned iframe', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockClear();
+
+    const initialMessagesCount = fixture.componentInstance['messages']().length;
+
+    // 1. updateDataModel with path
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: '1.0',
+        updateDataModel: {surfaceId: 'surf-1', path: '/name', value: 'Ada'},
+      },
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    // 2. updateDataModel without path (root replacement)
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: '1.0',
+        updateDataModel: {surfaceId: 'surf-1', value: {user: {name: 'Ada'}}},
+      },
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    // 3. error payload
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: '1.0',
+        error: {message: 'Render failed'},
+      },
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    await fixture.whenStable();
+
+    const messages = fixture.componentInstance['messages']();
+    expect(messages.length).toBe(initialMessagesCount);
+    expect(mockA2aTransport.sendMessageStream).not.toHaveBeenCalled();
+
+    iframe.remove();
+  });
+
+  it('rejects malformed and prototype-polluted v1.0 SEND_TO_SERVER payloads from an owned iframe', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockClear();
+
+    const initialMessagesCount = fixture.componentInstance['messages']().length;
+
+    // 1. Empty action name
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: '1.0',
+        action: {name: '   '},
+      },
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    // 2. Prototype-polluted payload
+    const pollutedPayload = JSON.parse(
+      '{"version":"1.0","action":{"name":"submit","__proto__":{"polluted":true}}}',
+    );
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: pollutedPayload,
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    await fixture.whenStable();
+
+    const messages = fixture.componentInstance['messages']();
+    expect(messages.length).toBe(initialMessagesCount);
+    expect(mockA2aTransport.sendMessageStream).not.toHaveBeenCalled();
+
+    iframe.remove();
+  });
 });
