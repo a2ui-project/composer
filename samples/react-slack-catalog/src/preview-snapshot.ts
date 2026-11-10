@@ -51,11 +51,14 @@ export enum DiagnosticLevel {
  */
 export enum DiagnosticCode {
   A2UI_COMPONENT_CYCLE = 'A2UI_COMPONENT_CYCLE',
-  /** A Chart was left out because all of its values are zero. */
+  /** A pie or donut Chart was left out because all of its values are zero. */
   A2UI_EMPTY_CHART = 'A2UI_EMPTY_CHART',
   A2UI_INPUT_ERROR = 'A2UI_INPUT_ERROR',
   A2UI_INVALID_ACTION = 'A2UI_INVALID_ACTION',
-  /** A Chart was left out because a value isn't a number, or a pie or donut value is negative. */
+  /**
+   * A Chart was left out because a value isn't a number, or a pie or donut has a negative
+   * value or more slices than it has colors.
+   */
   A2UI_INVALID_CHART_DATA = 'A2UI_INVALID_CHART_DATA',
   A2UI_INVALID_IMAGE_ALT_TEXT = 'A2UI_INVALID_IMAGE_ALT_TEXT',
   A2UI_INVALID_IMAGE_URL = 'A2UI_INVALID_IMAGE_URL',

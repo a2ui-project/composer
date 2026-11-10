@@ -15,11 +15,17 @@
  */
 
 import {type ChartDataPoint, type Renderable} from '@copilotkit/channels-ui';
-import {ChartType, describeChart, renderChartSvg, type ChartImageProps} from './chart-image';
+import {
+  ChartType,
+  PIE_CHART_MAX_SLICES,
+  describeChart,
+  renderChartSvg,
+  type ChartImageProps,
+} from './chart-image';
 import {drawnImageAltText, optionalText, skipWithWarning} from './drawn-component-props';
 import {type LowerComponentContext} from './lowering-context';
 import {DiagnosticCode} from './preview-snapshot';
-import {recordField} from './record-fields';
+import {arrayField, recordField} from './record-fields';
 
 /**
  * Draws the sample's `Chart` component as an image while lowering. Slack's native chart
@@ -36,7 +42,7 @@ export function lowerChart(
   // `lowerComponent` validated these props against the Chart schema, whose `type` is an
   // optional `ChartType`. It accepts no binding, so the bound value is the validated one.
   const type = (props.type as ChartType | undefined) ?? ChartType.VERTICAL_BAR;
-  const data = chartData(props.data, type, context);
+  const data = chartData(props, type, context);
   if (!data) {
     return [];
   }
@@ -63,12 +69,21 @@ export function lowerChart(
  * why the two differ.
  */
 function chartData(
-  value: unknown,
+  props: Readonly<Record<string, unknown>>,
   type: ChartType,
   context: LowerComponentContext,
 ): ChartDataPoint[] | undefined {
+  const values = arrayField(props, 'data');
+  const isPie = type === ChartType.PIE || type === ChartType.DONUT;
+  if (isPie && values.length > PIE_CHART_MAX_SLICES) {
+    return skipWithWarning(
+      context,
+      DiagnosticCode.A2UI_INVALID_CHART_DATA,
+      `Chart "${context.componentId}" has ${values.length} slices, but a pie or donut chart has colors for at most ${PIE_CHART_MAX_SLICES}. Combine the smallest slices, or use a bar chart.`,
+    );
+  }
   const points: ChartDataPoint[] = [];
-  for (const [index, point] of (Array.isArray(value) ? value : []).entries()) {
+  for (const [index, point] of values.entries()) {
     const label = optionalText(recordField(point, 'label')) ?? `Point ${index + 1}`;
     const raw = recordField(point, 'value');
     const number =
@@ -84,7 +99,7 @@ function chartData(
         `Chart "${context.componentId}" has a value for "${label}" that isn't a number. Use a number such as 70.`,
       );
     }
-    if ((type === ChartType.PIE || type === ChartType.DONUT) && number < 0) {
+    if (isPie && number < 0) {
       return skipWithWarning(
         context,
         DiagnosticCode.A2UI_INVALID_CHART_DATA,
@@ -93,11 +108,12 @@ function chartData(
     }
     points.push({label, value: number});
   }
-  if (points.every(point => point.value === 0)) {
+  // A bar or line chart of zeros still has axes and labels to draw; a pie has no slices.
+  if (isPie && points.every(point => point.value === 0)) {
     return skipWithWarning(
       context,
       DiagnosticCode.A2UI_EMPTY_CHART,
-      `Chart "${context.componentId}" has only zero values, so there is nothing to draw. Give at least one value that isn't zero.`,
+      `Chart "${context.componentId}" has only zero values, so it has no slices to draw. Give at least one value above zero.`,
     );
   }
   return points;

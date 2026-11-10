@@ -16,6 +16,8 @@
 
 import {type A2uiMessage} from '@a2ui/web_core/v0_9';
 import {describe, expect, it} from 'vitest';
+import {CHART_MAX_POINTS} from './catalog';
+import {ChartType, PIE_CHART_MAX_SLICES} from './chart-image';
 import {stubBlobUrls, surfaceMessages} from './drawn-images.helpers';
 import {createSlackPreviewSession} from './preview-session';
 import {DiagnosticCode, DiagnosticLevel, PreviewStatus} from './preview-snapshot';
@@ -186,29 +188,89 @@ describe('Slack charts', () => {
     });
   });
 
-  it('skips a chart that has only zero values', () => {
-    const session = createSlackPreviewSession();
-
-    session.processMessages([
-      createSurface,
-      chartMessage({type: 'verticalBar', data: [{label: 'Q1', value: 0}]}),
-    ]);
-
-    expect(session.getSnapshot().diagnostics).toContainEqual({
-      level: DiagnosticLevel.WARNING,
-      code: DiagnosticCode.A2UI_EMPTY_CHART,
-      componentId: 'possession',
-      message: `Chart "possession" has only zero values, so there is nothing to draw. Give at least one value that isn't zero.`,
-    });
-  });
-
-  it('rejects more than 20 points through the catalog schema', () => {
+  it('skips a pie chart that has only zero values', () => {
     const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
       chartMessage({
-        data: Array.from({length: 21}, (_, index) => ({label: `P${index}`, value: index})),
+        type: 'pie',
+        data: [
+          {label: 'Argentina', value: 0},
+          {label: 'Mexico', value: 0},
+        ],
+      }),
+    ]);
+    const snapshot = session.getSnapshot();
+
+    expect(snapshot.diagnostics).toContainEqual({
+      level: DiagnosticLevel.WARNING,
+      code: DiagnosticCode.A2UI_EMPTY_CHART,
+      componentId: 'possession',
+      message: `Chart "possession" has only zero values, so it has no slices to draw. Give at least one value above zero.`,
+    });
+    expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
+    expect(blobUrls.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('draws a bar chart that has only zero values', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      chartMessage({
+        type: 'verticalBar',
+        data: [
+          {label: 'Q1', value: 0},
+          {label: 'Q2', value: 0},
+        ],
+      }),
+    ]);
+
+    expect(session.getSnapshot().blocks).toEqual([
+      expect.objectContaining({type: 'header'}),
+      {type: 'image', image_url: 'blob:image-1', alt_text: 'Bar chart: Q1 0, Q2 0'},
+    ]);
+  });
+
+  it.each([ChartType.PIE, ChartType.DONUT])(
+    'skips a %s chart with more slices than it has colors',
+    type => {
+      const session = createSlackPreviewSession();
+
+      session.processMessages([
+        createSurface,
+        chartMessage({
+          type,
+          data: Array.from({length: PIE_CHART_MAX_SLICES + 1}, (_, index) => ({
+            label: `Slice ${index + 1}`,
+            value: 1,
+          })),
+        }),
+      ]);
+      const snapshot = session.getSnapshot();
+
+      expect(snapshot.diagnostics).toContainEqual({
+        level: DiagnosticLevel.WARNING,
+        code: DiagnosticCode.A2UI_INVALID_CHART_DATA,
+        componentId: 'possession',
+        message: `Chart "possession" has ${PIE_CHART_MAX_SLICES + 1} slices, but a pie or donut chart has colors for at most ${PIE_CHART_MAX_SLICES}. Combine the smallest slices, or use a bar chart.`,
+      });
+      expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
+      expect(blobUrls.createObjectURL).not.toHaveBeenCalled();
+    },
+  );
+
+  it(`rejects more than ${CHART_MAX_POINTS} points through the catalog schema`, () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      chartMessage({
+        data: Array.from({length: CHART_MAX_POINTS + 1}, (_, index) => ({
+          label: `P${index}`,
+          value: index,
+        })),
       }),
     ]);
 

@@ -51,7 +51,8 @@ type _ChannelsUiChartTypesInEnum = AssignableTo<ChannelChartType, `${ChartType}`
 
 /**
  * Everything needed to draw one chart: Channels UI's `ChartProps`, with the chart type
- * required. `data` holds the values in the order they are drawn.
+ * required. `data` holds the values in the order they are drawn. A pie or donut chart
+ * has at most `PIE_CHART_MAX_SLICES` values, none below zero and at least one above.
  */
 export interface ChartImageProps extends Readonly<ChartProps> {
   readonly type: ChartType;
@@ -80,7 +81,10 @@ interface ChartAreaProps {
 /** The size of the drawing, in SVG units. Slack scales the image to fit the message. */
 const WIDTH = 600;
 const HEIGHT = 360;
-/** Every color has at least 3:1 contrast against the white background. */
+/**
+ * The colors of a pie or donut chart's slices, in order; bars and lines are drawn in the
+ * first. Every color has at least 3:1 contrast against the white background.
+ */
 const PALETTE = [
   '#2563eb',
   '#d97706',
@@ -91,6 +95,12 @@ const PALETTE = [
   '#db2777',
   '#65a30d',
 ];
+
+/**
+ * The most values a pie or donut chart can have: one per color of the palette, so that no
+ * two slices share a color.
+ */
+export const PIE_CHART_MAX_SLICES = PALETTE.length;
 
 /** The chart title's font size. */
 const TITLE_FONT_SIZE = 18;
@@ -288,7 +298,7 @@ function PieChart({chart, top}: ChartAreaProps) {
               cx={round(cx)}
               cy={round(cy)}
               r={round(radius)}
-              fill={paletteColor(index)}
+              fill={PALETTE[index]}
             />
           );
         }
@@ -296,7 +306,7 @@ function PieChart({chart, top}: ChartAreaProps) {
           <path
             key={index}
             d={slicePath(cx, cy, radius, start, end)}
-            fill={paletteColor(index)}
+            fill={PALETTE[index]}
             stroke={DrawnImageColor.BACKGROUND}
             strokeWidth={SLICE_SEPARATOR_WIDTH}
           />
@@ -312,7 +322,7 @@ function PieChart({chart, top}: ChartAreaProps) {
       ) : null}
       {chart.data.map((point, index) => {
         const y = top + LEGEND_TOP_PADDING + rowHeight * index;
-        const share = total > 0 ? Math.round((point.value / total) * 100) : 0;
+        const share = Math.round((point.value / total) * 100);
         // The label is cut to the room its value and share leave on the line.
         const valueText = ` · ${formatChartValue(point.value)} (${share}%)`;
         const labelLength = Math.max(
@@ -330,7 +340,7 @@ function PieChart({chart, top}: ChartAreaProps) {
               width={SWATCH_SIZE}
               height={SWATCH_SIZE}
               rx={CORNER_RADIUS}
-              fill={paletteColor(index)}
+              fill={PALETTE[index]}
             />
             <text
               x={round(legendTextX)}
@@ -591,7 +601,7 @@ function sliceAngles(values: readonly number[]): Array<{start: number; end: numb
   const total = values.reduce((sum, value) => sum + value, 0);
   let start = -Math.PI / 2;
   return values.map(value => {
-    const end = start + (total > 0 ? (value / total) * 2 * Math.PI : 0);
+    const end = start + (value / total) * 2 * Math.PI;
     const slice = {start, end};
     start = end;
     return slice;
@@ -623,6 +633,8 @@ function niceDomain(values: readonly number[]): Domain {
   const lowest = Math.min(0, ...values);
   let min = lowest;
   let max = Math.max(0, ...values);
+  // The range includes zero, so it is empty only when every value is zero. Give the axis
+  // one unit to span, so the bars or line lie along its bottom.
   if (min === max) {
     max = min + 1;
   }
@@ -652,8 +664,4 @@ function niceStep(rough: number): number {
   const residual = rough / magnitude;
   const nice = residual <= 1 ? 1 : residual <= 2 ? 2 : residual <= 5 ? 5 : 10;
   return nice * magnitude;
-}
-
-function paletteColor(index: number): string {
-  return PALETTE[index % PALETTE.length];
 }
