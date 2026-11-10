@@ -62,6 +62,14 @@ export declare interface SendToServerEnvelope<T = SendToServerPayload> {
 }
 
 /**
+ * Error payload substituted when an incoming A2UI_CATALOG fails validation or
+ * bridge resolution.
+ */
+export interface CatalogHandshakeErrorPayload {
+  readonly error: {readonly message: string};
+}
+
+/**
  * What registering a frame does to the default target: the frame that
  * `sendMessage` posts to when it is called without a target.
  */
@@ -472,7 +480,17 @@ export class HostCommunication implements OnDestroy {
       }
 
       if (type === PreviewBridgeMessageType.A2UI_CATALOG) {
-        CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger);
+        const errors: string[] = [];
+        if (!CrossFrameValidator.validateIncomingMessage(envelope, errors, this.logger)) {
+          // Never hand a malformed (possibly prototype-polluted) catalog to
+          // downstream consumers. Substituting an error payload lets
+          // CatalogManagement fail the handshake immediately with the
+          // validator's reason instead of waiting for the catalog watchdog.
+          const errorPayload: CatalogHandshakeErrorPayload = {
+            error: {message: errors[0] ?? 'Malformed A2UI_CATALOG payload.'},
+          };
+          envelope.payload = errorPayload;
+        }
       }
 
       if (type === PreviewBridgeMessageType.SEND_TO_SERVER) {

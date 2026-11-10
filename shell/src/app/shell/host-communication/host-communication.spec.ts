@@ -784,6 +784,65 @@ describe('HostCommunication', () => {
     expect(history[0].type).toBe(PreviewBridgeMessageType.A2UI_CATALOG);
   });
 
+  describe('malformed A2UI_CATALOG payloads', () => {
+    let mockIframeWindow: Window;
+    let emitted: MessageEnvelope[];
+
+    beforeEach(() => {
+      mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      service.registerIframe(mockIframeWindow);
+      emitted = [];
+      service.messageStream$.subscribe(e => emitted.push(e));
+    });
+
+    function dispatchCatalog(payload: unknown): void {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.A2UI_CATALOG, payload},
+        }),
+      );
+    }
+
+    function forwardedCatalogEnvelopes(): MessageEnvelope[] {
+      return emitted.filter(e => e.type === PreviewBridgeMessageType.A2UI_CATALOG);
+    }
+
+    it('replaces a prototype-polluted payload with a synthesized error envelope', () => {
+      const polluted = JSON.parse('{"catalog": {"__proto__": {"polluted": true}}}') as unknown;
+      dispatchCatalog(polluted);
+
+      const forwarded = forwardedCatalogEnvelopes();
+      expect(forwarded.length).toBe(1);
+      expect(forwarded[0].payload).not.toBe(polluted);
+      expect(forwarded[0].payload).toEqual({
+        error: {message: expect.stringContaining('prototype pollution')},
+      });
+      expect(forwarded[0].sourceWindow).toBe(mockIframeWindow);
+      expect(service.getEnvelopeHistory()[0].payload).toEqual(forwarded[0].payload);
+    });
+
+    it('replaces a non-object payload with a synthesized error envelope', () => {
+      dispatchCatalog(['not', 'an', 'object']);
+
+      const forwarded = forwardedCatalogEnvelopes();
+      expect(forwarded.length).toBe(1);
+      expect(forwarded[0].payload).toEqual({
+        error: {message: expect.stringContaining('must be an object')},
+      });
+    });
+
+    it('forwards a well-formed payload unchanged', () => {
+      const catalogPayload = {catalog: {catalogId: 'cat-main', components: {}}};
+      dispatchCatalog(catalogPayload);
+
+      const forwarded = forwardedCatalogEnvelopes();
+      expect(forwarded.length).toBe(1);
+      expect(forwarded[0].payload).toBe(catalogPayload);
+    });
+  });
+
   it('caps the message history buffer at 100 entries strictly using FIFO eviction', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
