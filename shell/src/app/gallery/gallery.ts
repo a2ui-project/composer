@@ -24,21 +24,19 @@ import {
   inject,
   linkedSignal,
   signal,
+  viewChild,
   OnInit,
   OnDestroy,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Clipboard} from '@angular/cdk/clipboard';
 import {filter} from 'rxjs/operators';
-import {FormsModule} from '@angular/forms';
-import {MatInputModule} from '@angular/material/input';
 import {JsonPipe, NgTemplateOutlet} from '@angular/common';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatListModule} from '@angular/material/list';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableModule} from '@angular/material/table';
 import {MatButtonModule} from '@angular/material/button';
-import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {CategorizedComponents, GalleryCatalog} from './services/gallery-catalog';
@@ -50,55 +48,20 @@ import {PreviewBridgeMessageType, ComponentUsage, RenderA2uiItem} from 'a2ui-bri
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {stableStringify} from '../storage/stable-stringify/stable-stringify';
-import {
-  Catalog,
-  CatalogComponentSchema,
-  getCatalogId,
-} from '../storage/models/catalog-storage.model';
-import {CatalogSchemaResolver, ParsedProperty} from './schema/catalog-schema-resolver';
-import {
-  createDefaultGalleryValue,
-  describeUneditableValue,
-  galleryPropertyControl,
-  GalleryPropertyControl,
-  parseGalleryExample,
-} from './gallery-example';
+import {Catalog, getCatalogId} from '../storage/models/catalog-storage.model';
+import {ParsedProperty} from './schema/catalog-schema-resolver';
+import {parseGalleryExample} from './gallery-example';
 import {ErrorLogger, TaggedLogger} from '../debug/error-logger.service';
 import {GalleryLauncher} from './gallery-launcher';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
 import {MonacoEditor} from '../shared/monaco-editor/monaco-editor';
-
-type PropertyPath = ReadonlyArray<string | number>;
+import {PropertyEditor} from '../shared/property-editor/property-editor';
 
 interface ExampleDraft {
   text: string;
   preset: ComponentUsage | null;
   payload: RenderA2uiItem[] | null;
   error: string | null;
-}
-
-interface EditableProperty {
-  name: string;
-  required: boolean;
-  control: GalleryPropertyControl;
-  kind: GalleryPropertyControl['kind'];
-  options: GalleryPropertyControl['options'];
-  /** The current value, or undefined when the example omits the property. */
-  value: unknown;
-  /** Set when the value is a binding or call that only the JSON tab can edit. */
-  note: string | null;
-  /** True for properties every component in the catalog shares, such as accessibility. */
-  common: boolean;
-  /** True on the first common property, where the list starts its common section. */
-  firstCommon: boolean;
-}
-
-/**
- * An unparsed JSON property edit, kept so the field shows what was typed.
- */
-interface JsonFieldError {
-  text: string;
-  message: string;
 }
 
 /**
@@ -112,17 +75,15 @@ interface JsonFieldError {
     TrackEventDirective,
     JsonPipe,
     NgTemplateOutlet,
-    FormsModule,
-    MatInputModule,
     MatSidenavModule,
     MatListModule,
     MatCardModule,
     MatTableModule,
-    MatSlideToggleModule,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
     MonacoEditor,
+    PropertyEditor,
     RenderedFrame,
   ],
   templateUrl: './gallery.ng.html',
@@ -140,6 +101,7 @@ export class Gallery implements OnInit, OnDestroy {
   private readonly launcher = inject(GalleryLauncher);
   private readonly errorLogger = inject(ErrorLogger);
   private readonly logger: TaggedLogger = this.errorLogger.withTag('[Gallery]');
+  private readonly propertyEditor = viewChild(PropertyEditor);
   protected readonly opening = signal(false);
   protected readonly actionMessage = signal('');
   protected readonly activePlaygroundTab = signal<'preview' | 'json'>('preview');
@@ -158,38 +120,10 @@ export class Gallery implements OnInit, OnDestroy {
   });
 
   /**
-   * Memoized schema resolver and shared property names, computed once per active catalog.
-   */
-  private readonly activeCatalogResolver: Signal<{
-    resolver: CatalogSchemaResolver;
-    common: Set<string>;
-  } | null> = computed(() => {
-    const catalog = this.catalogManagement.activeCatalog();
-    if (!catalog) {
-      return null;
-    }
-    const resolver = new CatalogSchemaResolver(catalog, this.errorLogger);
-    return {
-      resolver,
-      common: this.commonPropertyNames(resolver, catalog),
-    };
-  });
-
-  /**
-   * Memoized property schemas for the active component so keystrokes don't re-resolve schemas.
-   */
-  private readonly selectedComponentSchemas: Signal<Record<string, CatalogComponentSchema>> =
-    computed(() => {
-      const key = this.catalogService.selectedComponentKey();
-      const resolved = this.activeCatalogResolver();
-      return key && resolved ? resolved.resolver.resolveComponentPropertiesSchema(key) : {};
-    });
-
-  /**
    * Identifies the current component context (rendererUrl, rendererId, catalog, componentKey)
    * and its initial preset/example JSON for `draft`.
    */
-  private readonly draftSource: Signal<{
+  protected readonly draftSource: Signal<{
     identity: string;
     catalog: Catalog | null;
     preset: ComponentUsage | null;
@@ -221,15 +155,6 @@ export class Gallery implements OnInit, OnDestroy {
     },
   });
 
-  /**
-   * `jsonFieldErrors` tracks invalid per-property JSON edits keyed by property path,
-   * automatically resetting to `{}` whenever the `draftSource` identity changes.
-   */
-  protected readonly jsonFieldErrors: WritableSignal<Partial<Record<string, JsonFieldError>>> =
-    linkedSignal({
-      source: computed(() => this.draftSource().identity),
-      computation: (): Partial<Record<string, JsonFieldError>> => ({}),
-    });
   private readonly validPayload: Signal<RenderA2uiItem[] | null> = computed(
     () => this.draft().payload,
   );
@@ -239,85 +164,28 @@ export class Gallery implements OnInit, OnDestroy {
   });
 
   /**
-   * Every catalog property of the selected component except its identity and constants.
-   */
-  protected readonly editableProperties: Signal<EditableProperty[]> = computed(() => {
-    const target = this.editableComponent();
-    const resolved = this.activeCatalogResolver();
-    if (!target || !resolved) {
-      return [];
-    }
-    const schemas = this.selectedComponentSchemas();
-    const {common} = resolved;
-    const properties = this.catalogService.selectedComponentProperties().flatMap(prop => {
-      const schema = schemas[prop.name];
-      if (prop.name === 'id' || prop.name === 'component' || schema?.['const'] !== undefined) {
-        return [];
-      }
-      const value = target[prop.name];
-      const control = galleryPropertyControl(schema, value);
-      return [
-        {
-          name: prop.name,
-          required: prop.required,
-          control,
-          kind: control.kind,
-          options: control.options,
-          value,
-          json: value === undefined ? '' : formatJson(value),
-          note: describeUneditableValue(value, control),
-          common: !prop.required && common.has(prop.name),
-          firstCommon: false,
-        },
-      ];
-    });
-    // Required properties first, then the component's own, then the shared ones.
-    const rank = (prop: EditableProperty) => (prop.required ? 0 : prop.common ? 2 : 1);
-    const sorted = properties
-      .map((prop, index) => ({prop, index}))
-      .sort((a, b) => rank(a.prop) - rank(b.prop) || a.index - b.index)
-      .map(({prop}) => prop);
-    const firstCommon = sorted.findIndex(prop => prop.common);
-    return sorted.map((prop, index) =>
-      index === firstCommon ? {...prop, firstCommon: true} : prop,
-    );
-  });
-
-  /**
-   * Property names every component in the catalog declares.
-   */
-  private commonPropertyNames(resolver: CatalogSchemaResolver, catalog: Catalog): Set<string> {
-    const names = Object.keys(catalog.components ?? {});
-    if (names.length < 2) {
-      return new Set();
-    }
-    const [first, ...rest] = names.map(
-      name => new Set(Object.keys(resolver.resolveComponentPropertiesSchema(name))),
-    );
-    return new Set([...first].filter(prop => rest.every(set => set.has(prop))));
-  }
-
-  /**
    * Property Editor form reads and writes to. Prioritize 'target'
    * or 'root' nodes when it matches the selected component type so
    * child nodes of the same type don't shadow it
    */
-  private editableComponent(): Record<string, unknown> | undefined {
-    const key = this.catalogService.selectedComponentKey();
-    const usage = this.draft().preset?.usage;
+  protected readonly editableComponent: Signal<Record<string, unknown> | undefined> = computed(
+    () => {
+      const key = this.catalogService.selectedComponentKey();
+      const usage = this.draft().preset?.usage;
 
-    if (!usage || !key) {
-      return undefined;
-    }
+      if (!usage || !key) {
+        return undefined;
+      }
 
-    return (
-      usage.find(
-        component =>
-          component['component'] === key &&
-          (component['id'] === 'target' || component['id'] === 'root'),
-      ) ?? usage.find(component => component['component'] === key)
-    );
-  }
+      return (
+        usage.find(
+          component =>
+            component['component'] === key &&
+            (component['id'] === 'target' || component['id'] === 'root'),
+        ) ?? usage.find(component => component['component'] === key)
+      );
+    },
+  );
 
   private createDraft(preset: ComponentUsage | null, catalog: Catalog | null): ExampleDraft {
     const id = catalog && getCatalogId(catalog);
@@ -360,7 +228,7 @@ export class Gallery implements OnInit, OnDestroy {
       const preset = parseGalleryExample(text, catalog, this.errorLogger);
 
       if (!propertyEdit) {
-        this.jsonFieldErrors.set({});
+        this.propertyEditor()?.clearErrors();
       }
 
       this.draft.set({
@@ -399,13 +267,6 @@ export class Gallery implements OnInit, OnDestroy {
     if (!preset || !target || this.draft().error) {
       return null;
     }
-    if (value === undefined) {
-      this.jsonFieldErrors.update(errors =>
-        Object.fromEntries(
-          Object.entries(errors).filter(([key]) => key !== name && !key.startsWith(`${name}.`)),
-        ),
-      );
-    }
     const components = preset.usage.map(component => {
       if (component !== target) {
         return component;
@@ -425,222 +286,9 @@ export class Gallery implements OnInit, OnDestroy {
     );
   }
 
-  protected readonly formatJson = formatJson;
-
-  /**
-   * Exposes `describeUneditableValue` to `gallery.ng.html` for checking whether
-   * nested property values in `#controlTemplate` are uneditable bindings or calls.
-   */
-  protected readonly describeUneditableValue = describeUneditableValue;
-
-  /**
-   * Returns the array's elements for `@for` if it is set in the sample, or an empty
-   * list when an optional array property is unset (`undefined`).
-   */
-  protected ensureArray(value: unknown): unknown[] {
-    return Array.isArray(value) ? value : [];
-  }
-
-  protected getObjectField(value: unknown, key: string): unknown {
-    return value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)[key]
-      : undefined;
-  }
-
-  protected appendPath(path: PropertyPath, segment: string | number): PropertyPath {
-    return [...path, segment];
-  }
-
-  /**
-   * Updates a top-level or nested property at `path`.
-   */
-  protected editAtPath(path: PropertyPath, value: unknown): string | null {
-    if (path.length === 0) {
-      return null;
-    }
-    const [rootName, ...rest] = path;
-    if (typeof rootName !== 'string') {
-      return null;
-    }
-    if (rest.length === 0) {
-      return this.editProperty(rootName, value);
-    }
-    const currentRoot = this.editableComponent()?.[rootName];
-    const topProp = this.editableProperties().find(prop => prop.name === rootName);
-    const updatedRoot = this.setDeepValue(
-      currentRoot,
-      rest,
-      value,
-      topProp?.control,
-      topProp?.required ?? false,
-    );
-    return this.editProperty(rootName, updatedRoot);
-  }
-
-  /**
-   * Empty optional text removes the property; required text may be empty.
-   */
-  protected editTextAtPath(path: PropertyPath, value: string, required: boolean): void {
-    this.editAtPath(path, value === '' && !required ? undefined : value);
-  }
-
-  /**
-   * Empty optional numbers remove the property; a required number keeps its value.
-   */
-  protected editNumberAtPath(
-    path: PropertyPath,
-    value: number | null,
-    required: boolean,
-    label: string,
-  ): void {
-    if (value !== null && Number.isFinite(value)) {
-      this.editAtPath(path, value);
-    } else if (!required) {
-      this.editAtPath(path, undefined);
-    } else {
-      this.actionMessage.set(`Enter a number for ${label}. Preview keeps its previous value.`);
-    }
-  }
-
-  /**
-   * Parses a structured JSON property; invalid JSON stays in its field and leaves the draft alone.
-   */
-  protected editJsonAtPath(
-    path: PropertyPath,
-    pathKey: string,
-    required: boolean,
-    label: string,
-    text: string,
-  ): void {
-    const setError = (message: string) => {
-      this.jsonFieldErrors.update(errors => ({...errors, [pathKey]: {text, message}}));
-    };
-    let value: unknown;
-    if (!text.trim()) {
-      if (required) {
-        setError(`${label} is required.`);
-        return;
-      }
-      value = undefined;
-    } else {
-      try {
-        value = JSON.parse(text);
-      } catch {
-        setError('Invalid JSON. The example keeps its previous value.');
-        return;
-      }
-    }
-    const error = this.editAtPath(path, value);
-    if (error) {
-      this.actionMessage.set('');
-      setError(`${error} The example keeps its previous value.`);
-      return;
-    }
-    this.jsonFieldErrors.update(({[pathKey]: _cleared, ...errors}) => errors);
-  }
-
-  /**
-   * Adds an entry to an array property: duplicates the latest entry if non-empty, or creates
-   * a brand-new item based on the array's item control type when empty.
-   */
-  protected addArrayItem(
-    path: PropertyPath,
-    itemControl: GalleryPropertyControl | undefined,
-  ): void {
-    const current = this.getValueAtPath(path);
-    const items = Array.isArray(current) ? current : [];
-    const nextItem =
-      items.length > 0
-        ? structuredClone(items[items.length - 1])
-        : createDefaultGalleryValue(itemControl);
-    this.editAtPath(path, [...items, nextItem]);
-  }
-
-  /**
-   * Deletes the item at `index` from the array at `path`.
-   */
-  protected removeArrayItem(path: PropertyPath, index: number): void {
-    const current = this.getValueAtPath(path);
-    if (!Array.isArray(current)) {
-      return;
-    }
-    const prefix = `${path.map(String).join('.')}.`;
-    this.jsonFieldErrors.update(errors =>
-      Object.fromEntries(Object.entries(errors).filter(([key]) => !key.startsWith(prefix))),
-    );
-    this.editAtPath(
-      path,
-      current.filter((_, idx) => idx !== index),
-    );
-  }
-
-  /**
-   * Deep-gets a value from the editable component by the property path.
-   */
-  private getValueAtPath(path: PropertyPath): unknown {
-    let current: unknown = this.editableComponent();
-    for (const segment of path) {
-      if (typeof segment === 'number') {
-        if (!Array.isArray(current)) {
-          return undefined;
-        }
-        current = current[segment];
-      } else {
-        if (current === null || typeof current !== 'object' || Array.isArray(current)) {
-          return undefined;
-        }
-        current = (current as Record<string, unknown>)[segment];
-      }
-    }
-    return current;
-  }
-
-  /**
-   * Deep-sets a value into the editable component at `path`,
-   * pruning optional branches that become empty.
-   */
-  private setDeepValue(
-    current: unknown,
-    path: PropertyPath,
-    value: unknown,
-    control?: GalleryPropertyControl,
-    required = false,
-  ): unknown {
-    if (path.length === 0) {
-      return value;
-    }
-    const [head, ...tail] = path;
-    if (typeof head === 'number') {
-      const nextArray = Array.isArray(current) ? [...current] : [];
-      nextArray[head] = this.setDeepValue(nextArray[head], tail, value, control?.itemControl, true);
-      return nextArray;
-    }
-    const nextObject: Record<string, unknown> =
-      current !== null && typeof current === 'object' && !Array.isArray(current)
-        ? {...(current as Record<string, unknown>)}
-        : {};
-    const subProp = control?.properties?.find(prop => prop.name === head);
-    const nextValue = this.setDeepValue(
-      nextObject[head],
-      tail,
-      value,
-      subProp?.control,
-      subProp?.required ?? false,
-    );
-    if (nextValue === undefined) {
-      delete nextObject[head];
-    } else {
-      nextObject[head] = nextValue;
-    }
-    if (!required && Object.keys(nextObject).length === 0) {
-      return undefined;
-    }
-    return nextObject;
-  }
-
   protected resetDraft(): void {
     this.actionMessage.set('');
-    this.jsonFieldErrors.set({});
+    this.propertyEditor()?.clearErrors();
     this.draft.set(
       this.createDraft(
         this.catalogService.selectedComponentPreset(),
