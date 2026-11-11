@@ -208,7 +208,8 @@ uses itself. Version 1.4.1, which the renderer's own version range resolves to,
 accepts only some URL schemes in an image's `src`, and not `blob:`, so the drawn
 images would show no picture. Its `<Message>` takes a `urlTransform` prop that
 can allow more schemes, but the Tightknit renderer's `Renderer` doesn't pass one
-through, so the pin can go once it does.
+through ([TightknitAI/storybook-addon-slack-block-kit#94](https://github.com/TightknitAI/storybook-addon-slack-block-kit/issues/94)),
+so the pin can go once it does.
 
 ### Chart
 
