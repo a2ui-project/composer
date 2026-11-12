@@ -118,4 +118,27 @@ describe('ModelSelectorComponent', () => {
     const loader = TestbedHarnessEnvironment.loader(fixture);
     expect((await loader.getAllHarnesses(MatSelectHarness)).length).toBe(1);
   });
+
+  it('falls back to the raw thinking level when no friendly label is defined', async () => {
+    const customLevel = 'ULTRA' as ThinkingLevel;
+    const modelWithCustom: LlmModelOption = {
+      id: 'custom',
+      name: 'Custom',
+      model: 'custom',
+      thinkingLevels: [customLevel],
+    };
+    models.set([modelWithCustom]);
+    selectedModel.set(modelWithCustom);
+    thinkingLevel.set(customLevel);
+    fixture.detectChanges();
+
+    const loader = TestbedHarnessEnvironment.loader(fixture);
+    const rootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
+    const [, levelSelect] = await loader.getAllHarnesses(MatSelectHarness);
+
+    await levelSelect.open();
+    const options = await rootLoader.getAllHarnesses(MatOptionHarness);
+    const levels = await Promise.all(options.map(o => o.getText()));
+    expect(levels).toEqual(['ULTRA']);
+  });
 });

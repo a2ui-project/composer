@@ -22,7 +22,11 @@ import {StartupConfigStateService} from '../../shell/startup-resolution/state/st
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
-import {ModelSelectionService, parseThinkingLevel} from './model-selection.service';
+import {
+  ModelSelectionService,
+  THINKING_LEVEL_LABELS,
+  parseThinkingLevel,
+} from './model-selection.service';
 
 class FakeLocalStorage {
   readonly items = new Map<string, string>();
@@ -171,5 +175,13 @@ describe('ModelSelectionService', () => {
     expect(parseThinkingLevel(ThinkingLevel.THINKING_LEVEL_UNSPECIFIED)).toBeUndefined();
     expect(parseThinkingLevel('ultra')).toBeUndefined();
     expect(parseThinkingLevel(42)).toBeUndefined();
+  });
+
+  it('provides human-friendly labels for standard thinking levels', () => {
+    expect(THINKING_LEVEL_LABELS[ThinkingLevel.THINKING_LEVEL_UNSPECIFIED]).toBe('Unspecified');
+    expect(THINKING_LEVEL_LABELS[ThinkingLevel.MINIMAL]).toBe('Minimal');
+    expect(THINKING_LEVEL_LABELS[ThinkingLevel.LOW]).toBe('Low');
+    expect(THINKING_LEVEL_LABELS[ThinkingLevel.MEDIUM]).toBe('Medium');
+    expect(THINKING_LEVEL_LABELS[ThinkingLevel.HIGH]).toBe('High');
   });
 });

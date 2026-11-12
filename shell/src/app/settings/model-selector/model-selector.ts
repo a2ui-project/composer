@@ -42,7 +42,7 @@ export class ModelSelectorComponent {
   protected readonly thinkingLevelOptions = computed(() =>
     (this.modelSelection.selectedModel()?.thinkingLevels ?? []).map(level => ({
       value: level,
-      label: THINKING_LEVEL_LABELS[level],
+      label: THINKING_LEVEL_LABELS[level] ?? level,
     })),
   );
 

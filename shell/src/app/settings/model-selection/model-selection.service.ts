@@ -29,7 +29,7 @@ const ALL_THINKING_LEVELS: readonly ThinkingLevel[] = [
 ];
 
 /** Human-friendly labels for the thinking level selector. */
-export const THINKING_LEVEL_LABELS: Readonly<Record<ThinkingLevel, string>> = {
+export const THINKING_LEVEL_LABELS: Readonly<Partial<Record<ThinkingLevel, string>>> = {
   [ThinkingLevel.THINKING_LEVEL_UNSPECIFIED]: 'Unspecified',
   [ThinkingLevel.MINIMAL]: 'Minimal',
   [ThinkingLevel.LOW]: 'Low',
