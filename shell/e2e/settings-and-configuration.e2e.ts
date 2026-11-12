@@ -44,6 +44,20 @@ test.describe('Settings and Client Configuration', () => {
                 rendererUrl: '/samples/ng-basic-catalog/',
               },
             },
+            models: [
+              {
+                model: 'gemini-flash-latest',
+                displayName: 'Gemini Flash',
+                thinkingLevels: ['low', 'medium', 'high'],
+                defaultThinkingLevel: 'medium',
+              },
+              {
+                model: 'gemini-pro-latest',
+                displayName: 'Gemini Pro',
+                thinkingLevels: ['low', 'medium', 'high'],
+                defaultThinkingLevel: 'high',
+              },
+            ],
           },
         });
       });

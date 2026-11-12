@@ -17,15 +17,14 @@
 import {signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {ThinkingLevel} from '@google/genai';
-import {beforeEach, describe, expect, it} from 'vitest';
+import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 import {
   ModelSelectionService,
-  THINKING_LEVEL_LABELS,
-  getThinkingLevelLabel,
+  isSupportedThinkingLevel,
   parseThinkingLevel,
 } from './model-selection.service';
 
@@ -166,11 +165,36 @@ describe('ModelSelectionService', () => {
     configState.setModels([
       {
         model: 'gemini-flash-latest',
-        thinkingLevels: ['low', 'high'],
-        defaultThinkingLevel: 'low',
+        thinkingLevels: ['ultra', 'low', 'high'],
+        defaultThinkingLevel: 'ultra',
       },
     ]);
+    expect(service.selectedModel()?.thinkingLevels).toEqual([
+      ThinkingLevel.LOW,
+      ThinkingLevel.HIGH,
+    ]);
+    expect(service.selectedModel()?.defaultThinkingLevel).toBeUndefined();
     expect(service.thinkingLevel()).toBe(ThinkingLevel.LOW);
+  });
+
+  it('logs a warning when unmapped thinking levels are configured in model options', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const service = setup();
+    configState.setModels([
+      {
+        model: 'gemini-test',
+        thinkingLevels: ['xhigh', 'low'],
+        defaultThinkingLevel: 'xhigh',
+      },
+    ]);
+    expect(service.models()[0].thinkingLevels).toEqual([ThinkingLevel.LOW]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Unrecognized thinking level "xhigh" for model "gemini-test"',
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Unrecognized default thinking level "xhigh" for model "gemini-test"',
+    );
+    warnSpy.mockRestore();
   });
 
   it('only offers models matching the active auth type', () => {
@@ -196,20 +220,16 @@ describe('ModelSelectionService', () => {
     expect(parseThinkingLevel(42)).toBeUndefined();
   });
 
-  it('provides human-friendly labels for standard thinking levels and leaves unmapped levels undefined', () => {
-    expect(THINKING_LEVEL_LABELS[ThinkingLevel.THINKING_LEVEL_UNSPECIFIED]).toBeUndefined();
-    expect(THINKING_LEVEL_LABELS[ThinkingLevel.MINIMAL]).toBe('Minimal');
-    expect(THINKING_LEVEL_LABELS[ThinkingLevel.LOW]).toBe('Low');
-    expect(THINKING_LEVEL_LABELS[ThinkingLevel.MEDIUM]).toBe('Medium');
-    expect(THINKING_LEVEL_LABELS[ThinkingLevel.HIGH]).toBe('High');
-  });
-
-  it('retrieves friendly labels safely using getThinkingLevelLabel', () => {
-    expect(getThinkingLevelLabel(ThinkingLevel.MINIMAL)).toBe('Minimal');
-    expect(getThinkingLevelLabel(ThinkingLevel.HIGH)).toBe('High');
-    expect(getThinkingLevelLabel(ThinkingLevel.THINKING_LEVEL_UNSPECIFIED)).toBeUndefined();
-    expect(getThinkingLevelLabel('ULTRA')).toBeUndefined();
-    expect(getThinkingLevelLabel('toString')).toBeUndefined();
-    expect(getThinkingLevelLabel(123)).toBeUndefined();
+  it('validates supported thinking levels using isSupportedThinkingLevel', () => {
+    expect(isSupportedThinkingLevel(ThinkingLevel.MINIMAL)).toBe(true);
+    expect(isSupportedThinkingLevel(ThinkingLevel.LOW)).toBe(true);
+    expect(isSupportedThinkingLevel(ThinkingLevel.MEDIUM)).toBe(true);
+    expect(isSupportedThinkingLevel(ThinkingLevel.HIGH)).toBe(true);
+    expect(isSupportedThinkingLevel(ThinkingLevel.THINKING_LEVEL_UNSPECIFIED)).toBe(false);
+    expect(isSupportedThinkingLevel('ULTRA')).toBe(false);
+    expect(isSupportedThinkingLevel('toString')).toBe(false);
+    expect(isSupportedThinkingLevel(123)).toBe(false);
+    expect(isSupportedThinkingLevel(null)).toBe(false);
+    expect(isSupportedThinkingLevel(undefined)).toBe(false);
   });
 });

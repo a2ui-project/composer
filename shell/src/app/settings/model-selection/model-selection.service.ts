@@ -22,22 +22,18 @@ import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 
 /** Human-friendly labels for the thinking level selector. */
-export const THINKING_LEVEL_LABELS: Readonly<Partial<Record<ThinkingLevel, string>>> = {
+export const THINKING_LEVEL_LABELS = {
   [ThinkingLevel.MINIMAL]: 'Minimal',
   [ThinkingLevel.LOW]: 'Low',
   [ThinkingLevel.MEDIUM]: 'Medium',
   [ThinkingLevel.HIGH]: 'High',
-};
+} as const satisfies Partial<Record<ThinkingLevel, string>>;
 
-/**
- * Returns the human-friendly label for a thinking level, or `undefined` if
- * the level is unsupported or unmapped.
- */
-export function getThinkingLevelLabel(level: unknown): string | undefined {
-  if (typeof level !== 'string' || !Object.hasOwn(THINKING_LEVEL_LABELS, level)) {
-    return undefined;
-  }
-  return THINKING_LEVEL_LABELS[level as ThinkingLevel];
+export type SupportedThinkingLevel = keyof typeof THINKING_LEVEL_LABELS;
+
+/** Type guard checking whether a value is a supported thinking level. */
+export function isSupportedThinkingLevel(level: unknown): level is SupportedThinkingLevel {
+  return typeof level === 'string' && Object.hasOwn(THINKING_LEVEL_LABELS, level);
 }
 
 /** A selectable LLM model, resolved from `config.json.models`. */
@@ -49,9 +45,9 @@ export declare interface LlmModelOption {
   /** Model identifier sent to the backend. */
   readonly model: string;
   /** Thinking levels the model accepts, in display order. Empty if unsupported. */
-  readonly thinkingLevels: readonly ThinkingLevel[];
+  readonly thinkingLevels: readonly SupportedThinkingLevel[];
   /** Level used when the user has not chosen one, if the model supports levels. */
-  readonly defaultThinkingLevel?: ThinkingLevel;
+  readonly defaultThinkingLevel?: SupportedThinkingLevel;
   /** Authentication mode the entry is restricted to, if any. */
   readonly authType?: AuthType;
 }
@@ -60,12 +56,12 @@ export declare interface LlmModelOption {
  * Parses a user- or config-supplied thinking level string, returning
  * `undefined` for unknown or unspecified values.
  */
-export function parseThinkingLevel(value: unknown): ThinkingLevel | undefined {
+export function parseThinkingLevel(value: unknown): SupportedThinkingLevel | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
-  const normalized = value.trim().toUpperCase() as ThinkingLevel;
-  return getThinkingLevelLabel(normalized) !== undefined ? normalized : undefined;
+  const normalized = value.trim().toUpperCase();
+  return isSupportedThinkingLevel(normalized) ? normalized : undefined;
 }
 
 /**
@@ -88,7 +84,7 @@ export class ModelSelectionService {
   private readonly storedModelId = signal<string | null>(
     this.storage.getItem(LocalStorageKey.SELECTED_MODEL),
   );
-  private readonly storedThinkingLevel = signal<ThinkingLevel | undefined>(
+  private readonly storedThinkingLevel = signal<SupportedThinkingLevel | undefined>(
     parseThinkingLevel(this.storage.getItem(LocalStorageKey.SELECTED_THINKING_LEVEL)),
   );
 
@@ -133,25 +129,19 @@ export class ModelSelectionService {
    * accepts it, otherwise the model's default, otherwise its first level.
    * `undefined` when the active model does not support thinking levels.
    */
-  readonly thinkingLevel: Signal<ThinkingLevel | undefined> = computed(() => {
+  readonly thinkingLevel: Signal<SupportedThinkingLevel | undefined> = computed(() => {
     const model = this.selectedModel();
-    if (!model) {
-      return undefined;
-    }
-    const validLevels = model.thinkingLevels.filter(
-      level => getThinkingLevelLabel(level) !== undefined,
-    );
-    if (validLevels.length === 0) {
+    if (!model || model.thinkingLevels.length === 0) {
       return undefined;
     }
     const stored = this.storedThinkingLevel();
-    if (stored && validLevels.includes(stored)) {
+    if (stored && model.thinkingLevels.includes(stored)) {
       return stored;
     }
-    if (model.defaultThinkingLevel && validLevels.includes(model.defaultThinkingLevel)) {
+    if (model.defaultThinkingLevel && model.thinkingLevels.includes(model.defaultThinkingLevel)) {
       return model.defaultThinkingLevel;
     }
-    return validLevels[0];
+    return model.thinkingLevels[0];
   });
 
   /**
@@ -168,11 +158,12 @@ export class ModelSelectionService {
 
   /** Persists the user's thinking level choice. */
   selectThinkingLevel(level: ThinkingLevel): void {
-    if (!parseThinkingLevel(level)) {
+    const parsed = parseThinkingLevel(level);
+    if (!parsed) {
       return;
     }
-    this.storedThinkingLevel.set(level);
-    this.storage.setItem(LocalStorageKey.SELECTED_THINKING_LEVEL, level);
+    this.storedThinkingLevel.set(parsed);
+    this.storage.setItem(LocalStorageKey.SELECTED_THINKING_LEVEL, parsed);
   }
 }
 
@@ -191,12 +182,28 @@ function toModelOption(config: unknown): LlmModelOption | null {
   if (!model) {
     return null;
   }
-  const thinkingLevels = Array.isArray(raw.thinkingLevels)
-    ? raw.thinkingLevels
-        .map(parseThinkingLevel)
-        .filter((level): level is ThinkingLevel => level !== undefined)
-    : [];
+  const thinkingLevels: SupportedThinkingLevel[] = [];
+  if (Array.isArray(raw.thinkingLevels)) {
+    for (const item of raw.thinkingLevels) {
+      const parsed = parseThinkingLevel(item);
+      if (parsed) {
+        thinkingLevels.push(parsed);
+      } else if (item !== undefined && item !== null && item !== '') {
+        console.warn(`Unrecognized thinking level "${item}" for model "${model}"`);
+      }
+    }
+  }
   const defaultLevel = parseThinkingLevel(raw.defaultThinkingLevel);
+  if (
+    raw.defaultThinkingLevel !== undefined &&
+    raw.defaultThinkingLevel !== null &&
+    raw.defaultThinkingLevel !== '' &&
+    !defaultLevel
+  ) {
+    console.warn(
+      `Unrecognized default thinking level "${raw.defaultThinkingLevel}" for model "${model}"`,
+    );
+  }
   return {
     id: model,
     name: typeof raw.displayName === 'string' && raw.displayName.trim() ? raw.displayName : model,
