@@ -71,7 +71,9 @@ describe('ModelSelectorComponent', () => {
   it('lists the configured models and the active thinking levels', async () => {
     const loader = TestbedHarnessEnvironment.loader(fixture);
     const rootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
-    const [modelSelect, levelSelect] = await loader.getAllHarnesses(MatSelectHarness);
+    const selectHarnesses = await loader.getAllHarnesses(MatSelectHarness);
+    expect(selectHarnesses.length).toBe(2);
+    const [modelSelect, levelSelect] = selectHarnesses;
 
     await modelSelect.open();
     const modelOptions = await rootLoader.getAllHarnesses(MatOptionHarness);
@@ -88,7 +90,9 @@ describe('ModelSelectorComponent', () => {
   it('forwards selections to the service', async () => {
     const loader = TestbedHarnessEnvironment.loader(fixture);
     const rootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
-    const [modelSelect, levelSelect] = await loader.getAllHarnesses(MatSelectHarness);
+    const selectHarnesses = await loader.getAllHarnesses(MatSelectHarness);
+    expect(selectHarnesses.length).toBe(2);
+    const [modelSelect, levelSelect] = selectHarnesses;
 
     await levelSelect.open();
     for (const option of await rootLoader.getAllHarnesses(MatOptionHarness)) {
@@ -119,26 +123,51 @@ describe('ModelSelectorComponent', () => {
     expect((await loader.getAllHarnesses(MatSelectHarness)).length).toBe(1);
   });
 
-  it('falls back to the raw thinking level when no friendly label is defined', async () => {
+  it('only displays options for thinking levels present in THINKING_LEVEL_LABELS and filters out unmapped levels', async () => {
     const customLevel = 'ULTRA' as ThinkingLevel;
     const modelWithCustom: LlmModelOption = {
       id: 'custom',
       name: 'Custom',
       model: 'custom',
-      thinkingLevels: [customLevel],
+      thinkingLevels: [
+        ThinkingLevel.LOW,
+        customLevel,
+        ThinkingLevel.THINKING_LEVEL_UNSPECIFIED,
+        ThinkingLevel.HIGH,
+      ],
     };
     models.set([modelWithCustom]);
     selectedModel.set(modelWithCustom);
-    thinkingLevel.set(customLevel);
+    thinkingLevel.set(ThinkingLevel.LOW);
     fixture.detectChanges();
 
     const loader = TestbedHarnessEnvironment.loader(fixture);
     const rootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
-    const [, levelSelect] = await loader.getAllHarnesses(MatSelectHarness);
+    const selectHarnesses = await loader.getAllHarnesses(MatSelectHarness);
+    expect(selectHarnesses.length).toBe(2);
+    const [, levelSelect] = selectHarnesses;
 
     await levelSelect.open();
     const options = await rootLoader.getAllHarnesses(MatOptionHarness);
     const levels = await Promise.all(options.map(o => o.getText()));
-    expect(levels).toEqual(['ULTRA']);
+    expect(levels).toEqual(['Low', 'High']);
+  });
+
+  it('hides the thinking level selector when a model only has unmapped thinking levels', async () => {
+    const customLevel = 'ULTRA' as ThinkingLevel;
+    const modelWithOnlyUnmapped: LlmModelOption = {
+      id: 'custom-only',
+      name: 'Custom Only',
+      model: 'custom-only',
+      thinkingLevels: [customLevel, ThinkingLevel.THINKING_LEVEL_UNSPECIFIED],
+    };
+    models.set([modelWithOnlyUnmapped]);
+    selectedModel.set(modelWithOnlyUnmapped);
+    thinkingLevel.set(undefined);
+    fixture.detectChanges();
+
+    const loader = TestbedHarnessEnvironment.loader(fixture);
+    const selectHarnesses = await loader.getAllHarnesses(MatSelectHarness);
+    expect(selectHarnesses.length).toBe(1);
   });
 });

@@ -21,21 +21,24 @@ import {LocalStorageInteractions} from '../../storage/local-storage-interactions
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 
-const ALL_THINKING_LEVELS: readonly ThinkingLevel[] = [
-  ThinkingLevel.MINIMAL,
-  ThinkingLevel.LOW,
-  ThinkingLevel.MEDIUM,
-  ThinkingLevel.HIGH,
-];
-
 /** Human-friendly labels for the thinking level selector. */
 export const THINKING_LEVEL_LABELS: Readonly<Partial<Record<ThinkingLevel, string>>> = {
-  [ThinkingLevel.THINKING_LEVEL_UNSPECIFIED]: 'Unspecified',
   [ThinkingLevel.MINIMAL]: 'Minimal',
   [ThinkingLevel.LOW]: 'Low',
   [ThinkingLevel.MEDIUM]: 'Medium',
   [ThinkingLevel.HIGH]: 'High',
 };
+
+/**
+ * Returns the human-friendly label for a thinking level, or `undefined` if
+ * the level is unsupported or unmapped.
+ */
+export function getThinkingLevelLabel(level: unknown): string | undefined {
+  if (typeof level !== 'string' || !Object.hasOwn(THINKING_LEVEL_LABELS, level)) {
+    return undefined;
+  }
+  return THINKING_LEVEL_LABELS[level as ThinkingLevel];
+}
 
 /** A selectable LLM model, resolved from `config.json.models`. */
 export declare interface LlmModelOption {
@@ -61,8 +64,8 @@ export function parseThinkingLevel(value: unknown): ThinkingLevel | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
-  const normalized = value.trim().toUpperCase();
-  return ALL_THINKING_LEVELS.find(level => level === normalized);
+  const normalized = value.trim().toUpperCase() as ThinkingLevel;
+  return getThinkingLevelLabel(normalized) !== undefined ? normalized : undefined;
 }
 
 /**
@@ -132,14 +135,23 @@ export class ModelSelectionService {
    */
   readonly thinkingLevel: Signal<ThinkingLevel | undefined> = computed(() => {
     const model = this.selectedModel();
-    if (!model || model.thinkingLevels.length === 0) {
+    if (!model) {
+      return undefined;
+    }
+    const validLevels = model.thinkingLevels.filter(
+      level => getThinkingLevelLabel(level) !== undefined,
+    );
+    if (validLevels.length === 0) {
       return undefined;
     }
     const stored = this.storedThinkingLevel();
-    if (stored && model.thinkingLevels.includes(stored)) {
+    if (stored && validLevels.includes(stored)) {
       return stored;
     }
-    return model.defaultThinkingLevel ?? model.thinkingLevels[0];
+    if (model.defaultThinkingLevel && validLevels.includes(model.defaultThinkingLevel)) {
+      return model.defaultThinkingLevel;
+    }
+    return validLevels[0];
   });
 
   /**

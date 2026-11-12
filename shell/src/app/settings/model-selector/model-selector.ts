@@ -20,7 +20,7 @@ import {MatSelectModule} from '@angular/material/select';
 import {ThinkingLevel} from '@google/genai';
 import {
   ModelSelectionService,
-  THINKING_LEVEL_LABELS,
+  getThinkingLevelLabel,
 } from '../model-selection/model-selection.service';
 
 /**
@@ -40,10 +40,10 @@ export class ModelSelectorComponent {
   protected readonly modelSelection = inject(ModelSelectionService);
 
   protected readonly thinkingLevelOptions = computed(() =>
-    (this.modelSelection.selectedModel()?.thinkingLevels ?? []).map(level => ({
-      value: level,
-      label: THINKING_LEVEL_LABELS[level] ?? level,
-    })),
+    (this.modelSelection.selectedModel()?.thinkingLevels ?? []).flatMap(level => {
+      const label = getThinkingLevelLabel(level);
+      return label !== undefined ? [{value: level, label}] : [];
+    }),
   );
 
   protected onModelChange(id: string | null): void {
@@ -53,7 +53,7 @@ export class ModelSelectorComponent {
   }
 
   protected onThinkingLevelChange(level: ThinkingLevel | null): void {
-    if (level) {
+    if (level && getThinkingLevelLabel(level) !== undefined) {
       this.modelSelection.selectThinkingLevel(level);
     }
   }
