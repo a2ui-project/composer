@@ -169,7 +169,7 @@ export class ModelSelectionService {
   }
 }
 
-function toModelOption(config: unknown, errorLogger?: ErrorLogger): LlmModelOption | null {
+function toModelOption(config: unknown, errorLogger: ErrorLogger): LlmModelOption | null {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     return null;
   }
@@ -191,7 +191,7 @@ function toModelOption(config: unknown, errorLogger?: ErrorLogger): LlmModelOpti
       if (parsed) {
         thinkingLevels.push(parsed);
       } else if (item !== undefined && item !== null && item !== '') {
-        errorLogger?.warn(`Unrecognized thinking level "${item}" for model "${model}"`);
+        errorLogger.warn(`Unrecognized thinking level "${item}" for model "${model}"`);
       }
     }
   }
@@ -202,7 +202,7 @@ function toModelOption(config: unknown, errorLogger?: ErrorLogger): LlmModelOpti
     raw.defaultThinkingLevel !== '' &&
     !defaultLevel
   ) {
-    errorLogger?.warn(
+    errorLogger.warn(
       `Unrecognized default thinking level "${raw.defaultThinkingLevel}" for model "${model}"`,
     );
   }
