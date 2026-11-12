@@ -19,6 +19,7 @@ import {ThinkingLevel} from '@google/genai';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 
 /** Human-friendly labels for the thinking level selector. */
@@ -80,6 +81,7 @@ export class ModelSelectionService {
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly storage = inject(LocalStorageInteractions);
   private readonly configProvider = inject(AppConfigProvider);
+  private readonly errorLogger = inject(ErrorLogger);
 
   private readonly storedModelId = signal<string | null>(
     this.storage.getItem(LocalStorageKey.SELECTED_MODEL),
@@ -96,7 +98,7 @@ export class ModelSelectionService {
     const authType = this.configProvider.authType();
     return this.startupConfigState
       .models()
-      .map(config => toModelOption(config))
+      .map(config => toModelOption(config, this.errorLogger))
       .filter(
         (option): option is LlmModelOption =>
           option !== null && (option.authType === undefined || option.authType === authType),
@@ -167,7 +169,7 @@ export class ModelSelectionService {
   }
 }
 
-function toModelOption(config: unknown): LlmModelOption | null {
+function toModelOption(config: unknown, errorLogger?: ErrorLogger): LlmModelOption | null {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     return null;
   }
@@ -189,7 +191,7 @@ function toModelOption(config: unknown): LlmModelOption | null {
       if (parsed) {
         thinkingLevels.push(parsed);
       } else if (item !== undefined && item !== null && item !== '') {
-        console.warn(`Unrecognized thinking level "${item}" for model "${model}"`);
+        errorLogger?.warn(`Unrecognized thinking level "${item}" for model "${model}"`);
       }
     }
   }
@@ -200,7 +202,7 @@ function toModelOption(config: unknown): LlmModelOption | null {
     raw.defaultThinkingLevel !== '' &&
     !defaultLevel
   ) {
-    console.warn(
+    errorLogger?.warn(
       `Unrecognized default thinking level "${raw.defaultThinkingLevel}" for model "${model}"`,
     );
   }

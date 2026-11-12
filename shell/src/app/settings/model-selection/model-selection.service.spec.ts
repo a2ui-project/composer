@@ -21,6 +21,7 @@ import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 import {
   ModelSelectionService,
@@ -177,9 +178,9 @@ describe('ModelSelectionService', () => {
     expect(service.thinkingLevel()).toBe(ThinkingLevel.LOW);
   });
 
-  it('logs a warning when unmapped thinking levels are configured in model options', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('logs a warning via ErrorLogger when unmapped thinking levels are configured in model options', () => {
     const service = setup();
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
     configState.setModels([
       {
         model: 'gemini-test',
