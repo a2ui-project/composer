@@ -461,7 +461,10 @@ describe('PreviewBridge Core API Runtime', () => {
         ),
       ).toEqual([
         [
-          {type: PreviewBridgeMessageType.A2UI_CATALOG, payload: {catalogId: 'inline-catalog'}},
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload: expect.objectContaining({catalogId: 'inline-catalog'}),
+          },
           window.location.origin,
         ],
       ]);
@@ -524,7 +527,13 @@ describe('PreviewBridge Core API Runtime', () => {
           ([message]) => message.type === PreviewBridgeMessageType.A2UI_CATALOG,
         );
         expect(catalogMessages).toEqual([
-          [{type: PreviewBridgeMessageType.A2UI_CATALOG, payload: catalog}, window.location.origin],
+          [
+            {
+              type: PreviewBridgeMessageType.A2UI_CATALOG,
+              payload: expect.objectContaining({catalogId: 'current-catalog'}),
+            },
+            window.location.origin,
+          ],
         ]);
         expect(onCatalogResolved).toHaveBeenCalledExactlyOnceWith('current-catalog');
       },
@@ -569,7 +578,13 @@ describe('PreviewBridge Core API Runtime', () => {
           ([message]) => message.type === PreviewBridgeMessageType.A2UI_CATALOG,
         ),
       ).toEqual([
-        [{type: PreviewBridgeMessageType.A2UI_CATALOG, payload: catalog}, window.location.origin],
+        [
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload: expect.objectContaining({catalogId: 'current-catalog'}),
+          },
+          window.location.origin,
+        ],
       ]);
       expect(warn).toHaveBeenCalledWith(
         "PreviewBridge: The renderer changed while its catalog was loading. Requesting the new renderer's catalog.",
@@ -659,7 +674,13 @@ describe('PreviewBridge Core API Runtime', () => {
       );
       await vi.runAllTimersAsync();
       expect(catalogMessages()).toEqual([
-        [{type: PreviewBridgeMessageType.A2UI_CATALOG, payload: catalog}, window.location.origin],
+        [
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload: expect.objectContaining({catalogId: 'second-catalog'}),
+          },
+          window.location.origin,
+        ],
       ]);
 
       // Once answered, the request is not answered again.
@@ -2964,6 +2985,600 @@ describe('PreviewBridge Core API Runtime', () => {
         expect.objectContaining({type: PreviewBridgeMessageType.RENDER_SUCCESS}),
         expect.anything(),
       );
+    });
+  });
+
+  describe('Outbound RPC Channel and Processor Management', () => {
+    it('sendOutboundMessage stamps canonical version 1.0 by default and dispatches SEND_TO_SERVER', () => {
+      bridge.sendOutboundMessage({
+        callAgentFunction: {
+          surfaceId: 'surf-1',
+          functionCallId: 'call-1',
+          callFunction: {'@call': 'fetchData'},
+        },
+      });
+
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            version: '1.0',
+            callAgentFunction: {
+              surfaceId: 'surf-1',
+              functionCallId: 'call-1',
+              callFunction: {'@call': 'fetchData'},
+            },
+          },
+        },
+        window.location.origin,
+      );
+    });
+
+    it('sendOutboundMessage preserves explicit version if already present', () => {
+      bridge.sendOutboundMessage({
+        version: 'v1.0',
+        rendererFunctionResponse: {
+          functionCallId: 'call-2',
+          result: {status: 'ok'},
+        },
+      });
+
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            version: 'v1.0',
+            rendererFunctionResponse: {
+              functionCallId: 'call-2',
+              result: {status: 'ok'},
+            },
+          },
+        },
+        window.location.origin,
+      );
+    });
+
+    it('manages manual and active processor via setActiveProcessor and getActiveProcessor', () => {
+      const mockProcessor = {processMessages: vi.fn()};
+      expect(bridge.getActiveProcessor()).toBeUndefined();
+
+      bridge.setActiveProcessor(mockProcessor);
+      expect(bridge.getActiveProcessor()).toBe(mockProcessor);
+
+      bridge.destroy();
+      expect(bridge.getActiveProcessor()).toBeUndefined();
+    });
+  });
+
+  describe('Multi-Catalog Handshake Resolution', () => {
+    it('resolves multiple catalogs, stamps protocolVersion and $id without mutating original objects, and dispatches {catalog, catalogs}', async () => {
+      const cat1Schema = Object.freeze({
+        catalogId: 'basic-cat',
+        title: 'Basic Catalog',
+        protocolVersion: '0.9',
+        components: {Text: {}},
+      });
+      const cat2 = {
+        id: 'mcp-cat',
+        protocolVersion: '1.0',
+        catalogSchema: Object.freeze({
+          $id: 'mcp-cat',
+          title: 'MCP Catalog',
+          functions: {callTool: {}},
+        }),
+      };
+
+      bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {
+          surfaceGroup: {
+            onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+          } as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+          catalogs: [cat1Schema, cat2],
+        },
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {type: PreviewBridgeMessageType.GET_CATALOG},
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          payload: expect.objectContaining({
+            catalogId: 'basic-cat',
+            $id: 'basic-cat',
+            title: 'Basic Catalog',
+            catalog: expect.objectContaining({
+              catalogId: 'basic-cat',
+              $id: 'basic-cat',
+              protocolVersion: '0.9',
+            }),
+            catalogs: expect.arrayContaining([
+              expect.objectContaining({
+                catalogId: 'basic-cat',
+                $id: 'basic-cat',
+                protocolVersion: '0.9',
+              }),
+              expect.objectContaining({
+                catalogId: 'mcp-cat',
+                $id: 'mcp-cat',
+                protocolVersion: '1.0',
+              }),
+            ]),
+          }),
+        }),
+        window.location.origin,
+      );
+    });
+
+    it('supports async factory function in catalogs configuration', async () => {
+      const asyncCatalogFactory = async () => ({
+        catalogId: 'async-cat',
+        components: {CustomComp: {}},
+      });
+
+      bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {
+          surfaceGroup: {
+            onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+          } as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+          catalogs: [asyncCatalogFactory],
+        },
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {type: PreviewBridgeMessageType.GET_CATALOG},
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          payload: expect.objectContaining({
+            catalogId: 'async-cat',
+            $id: 'async-cat',
+          }),
+        }),
+        window.location.origin,
+      );
+    });
+  });
+
+  describe('aliasSingleCatalogId', () => {
+    it('stamps the resolved catalogId onto a single mutable catalog', () => {
+      const catalog: {id?: string} = {};
+      bridge.aliasSingleCatalogId('resolved-cat', [catalog]);
+      expect(catalog.id).toBe('resolved-cat');
+    });
+
+    it('tolerates a frozen catalog object without throwing', () => {
+      const frozenCatalog = Object.freeze({id: 'original-cat', components: {}});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        expect(() => bridge.aliasSingleCatalogId('resolved-cat', frozenCatalog)).not.toThrow();
+        expect(frozenCatalog.id).toBe('original-cat');
+        expect(warnSpy).toHaveBeenCalledOnce();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('Multi-Surface Reset and v1.0 Initial Content', () => {
+    it('resets all surface IDs in a multi-surface batch and notifies onSurfaceReady with firstSurfaceId', () => {
+      vi.useFakeTimers();
+      const processSpy = vi.fn();
+      const readySpy = vi.fn();
+      bridge.attachRenderer(
+        {processMessages: processSpy},
+        {
+          surfaceGroup: {
+            onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+          } as unknown as SurfaceGroupLike,
+          onSurfaceReady: readySpy,
+        },
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [
+              {version: 'v1.0', createSurface: {surfaceId: 'surf-x', catalogId: 'c1'}},
+              {version: 'v1.0', createSurface: {surfaceId: 'surf-y', catalogId: 'c2'}},
+            ],
+          },
+        }),
+      );
+
+      // Fast-forward step 2
+      vi.runAllTimers();
+
+      // Ensure pre-delete was called for both surfaces with strategy version 1.0
+      expect(processSpy).toHaveBeenCalledWith([
+        {version: '1.0', deleteSurface: {surfaceId: 'surf-x'}},
+      ]);
+      expect(processSpy).toHaveBeenCalledWith([
+        {version: '1.0', deleteSurface: {surfaceId: 'surf-y'}},
+      ]);
+      expect(readySpy).toHaveBeenCalledWith('surf-x');
+      vi.useRealTimers();
+    });
+
+    it('preserves active 1.0 protocol version across DATA_MODEL_CHANGE, null reset deleteSurface, and sendAction', () => {
+      vi.useFakeTimers();
+      const processSpy = vi.fn();
+      const postMessageSpy = vi.spyOn(window.parent, 'postMessage');
+      const conn = bridge.attachRenderer(
+        {processMessages: processSpy},
+        {
+          surfaceGroup: {
+            onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+          } as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      // Render a v1.0 surface
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [{version: '1.0', createSurface: {surfaceId: 'surf-v10', catalogId: 'c1'}}],
+          },
+        }),
+      );
+      vi.runAllTimers();
+      processSpy.mockClear();
+      postMessageSpy.mockClear();
+
+      // 1. DATA_MODEL_CHANGE must emit canonical version: '1.0'
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+            payload: {updateDataModel: {surfaceId: 'surf-v10', path: '/count', value: 5}},
+          },
+        }),
+      );
+      expect(processSpy).toHaveBeenCalledWith([
+        {version: '1.0', updateDataModel: {surfaceId: 'surf-v10', path: '/count', value: 5}},
+      ]);
+
+      // 2. sendAction without explicit version uses negotiated/active '1.0'
+      bridge.sendAction({name: 'submit'});
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {version: '1.0', action: {name: 'submit'}},
+        },
+        window.location.origin,
+      );
+
+      // 3. Explicit null reset dispatches deleteSurface with version: '1.0'
+      processSpy.mockClear();
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: null,
+          },
+        }),
+      );
+      expect(processSpy).toHaveBeenCalledWith([
+        {version: '1.0', deleteSurface: {surfaceId: 'surf-v10'}},
+      ]);
+
+      // 4. Detaching resets default sendAction version back to 'v0.9'
+      conn.unsubscribe();
+      postMessageSpy.mockClear();
+      bridge.sendAction({name: 'legacyClick'});
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {version: 'v0.9', action: {name: 'legacyClick'}},
+        },
+        window.location.origin,
+      );
+      vi.useRealTimers();
+    });
+
+    it('does not corrupt activeProtocolVersion when RENDER_A2UI payload fails validation in processMessages', () => {
+      vi.useFakeTimers();
+      const processSpy = vi.fn();
+      const postMessageSpy = vi.spyOn(window.parent, 'postMessage');
+      const conn = bridge.attachRenderer(
+        {processMessages: processSpy},
+        {
+          surfaceGroup: {
+            onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+          } as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      // Initially activeProtocolVersion is 'v0.9'
+      bridge.sendAction({name: 'action0'});
+      expect(postMessageSpy).toHaveBeenLastCalledWith(
+        {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {version: 'v0.9', action: {name: 'action0'}},
+        },
+        window.location.origin,
+      );
+
+      // Make processor throw when receiving invalid v1.0 payload
+      processSpy.mockImplementation(() => {
+        throw new Error('A2uiValidationError: invalid component');
+      });
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [{version: '1.0', createSurface: {surfaceId: 'surf-fail', catalogId: 'c1'}}],
+          },
+        }),
+      );
+      vi.runAllTimers();
+
+      // RENDER_ERROR should have been sent
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: PreviewBridgeMessageType.RENDER_ERROR,
+        }),
+        window.location.origin,
+      );
+
+      // Crucially, activeProtocolVersion must NOT have flipped to '1.0'
+      bridge.sendAction({name: 'actionAfterFail'});
+      expect(postMessageSpy).toHaveBeenLastCalledWith(
+        {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {version: 'v0.9', action: {name: 'actionAfterFail'}},
+        },
+        window.location.origin,
+      );
+
+      conn.unsubscribe();
+      vi.useRealTimers();
+    });
+
+    it('honors explicit catalogJson override over single-catalog catalogs extraction (MOD-1)', async () => {
+      const overrideJson = {
+        catalogId: 'https://custom.example.com/override_catalog.json',
+        protocolVersion: '1.0',
+        components: {CustomCard: {}},
+      };
+      const runtimeCatalog = {
+        id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        protocolVersion: '1.0',
+        catalogSchema: {
+          $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+          components: {Text: {}},
+        },
+      };
+
+      bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {
+          surfaceGroup: {
+            onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+          } as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+          catalogs: [runtimeCatalog],
+          catalogJson: overrideJson,
+        },
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {type: PreviewBridgeMessageType.GET_CATALOG},
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          payload: expect.objectContaining({
+            catalogId: 'https://custom.example.com/override_catalog.json',
+          }),
+        }),
+        window.location.origin,
+      );
+    });
+
+    describe('normalizeCatalogEntry title, description, and fallback metadata', () => {
+      it('preserves explicit title and description from catalog object', async () => {
+        const catalog = {
+          $id: 'https://example.com/titled-catalog.json',
+          catalogId: 'https://example.com/titled-catalog.json',
+          title: 'Custom Title',
+          description: 'Custom Description',
+        };
+
+        bridge.attachRenderer(
+          {processMessages: vi.fn()},
+          {
+            surfaceGroup: {onSurfaceCreated: {subscribe: vi.fn()}} as unknown as SurfaceGroupLike,
+            onSurfaceReady: vi.fn(),
+            catalogs: [catalog],
+          },
+        );
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: window.parent,
+            origin: window.location.origin,
+            data: {type: PreviewBridgeMessageType.GET_CATALOG},
+          }),
+        );
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(window.parent.postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload: expect.objectContaining({
+              title: 'Custom Title',
+              description: 'Custom Description',
+            }),
+          }),
+          window.location.origin,
+        );
+      });
+
+      it('extracts title and description from toJson() when catalogSchema is not present', async () => {
+        const catalog = {
+          $id: 'https://example.com/tojson-catalog.json',
+          catalogId: 'https://example.com/tojson-catalog.json',
+          toJson: () => ({
+            title: 'Title From ToJson',
+            description: 'Description From ToJson',
+          }),
+        };
+
+        bridge.attachRenderer(
+          {processMessages: vi.fn()},
+          {
+            surfaceGroup: {onSurfaceCreated: {subscribe: vi.fn()}} as unknown as SurfaceGroupLike,
+            onSurfaceReady: vi.fn(),
+            catalogs: [catalog],
+          },
+        );
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: window.parent,
+            origin: window.location.origin,
+            data: {type: PreviewBridgeMessageType.GET_CATALOG},
+          }),
+        );
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(window.parent.postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload: expect.objectContaining({
+              title: 'Title From ToJson',
+              description: 'Description From ToJson',
+            }),
+          }),
+          window.location.origin,
+        );
+      });
+
+      it('extracts title from catalogSchema when title is omitted on root object', async () => {
+        const catalog = {
+          $id: 'https://example.com/schema-titled-catalog.json',
+          catalogId: 'https://example.com/schema-titled-catalog.json',
+          catalogSchema: {
+            title: 'Schema Title',
+          },
+        };
+
+        bridge.attachRenderer(
+          {processMessages: vi.fn()},
+          {
+            surfaceGroup: {onSurfaceCreated: {subscribe: vi.fn()}} as unknown as SurfaceGroupLike,
+            onSurfaceReady: vi.fn(),
+            catalogs: [catalog],
+          },
+        );
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: window.parent,
+            origin: window.location.origin,
+            data: {type: PreviewBridgeMessageType.GET_CATALOG},
+          }),
+        );
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(window.parent.postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload: expect.objectContaining({
+              title: 'Schema Title',
+            }),
+          }),
+          window.location.origin,
+        );
+      });
+    });
+
+    describe('callAgentFunction', () => {
+      it('delegates to active processor callAgentFunction when available', async () => {
+        const mockCall = vi.fn().mockResolvedValue({orderId: '123'});
+        bridge.attachRenderer(
+          {
+            processMessages: vi.fn(),
+            callAgentFunction: mockCall,
+          },
+          {
+            surfaceGroup: {onSurfaceCreated: {subscribe: vi.fn()}} as unknown as SurfaceGroupLike,
+            onSurfaceReady: vi.fn(),
+          },
+        );
+
+        const result = await bridge.callAgentFunction(
+          'surface-1',
+          {'@call': 'orderCoffee', args: {size: 'medium'}},
+          {functionCallId: 'fn-1'},
+        );
+
+        expect(mockCall).toHaveBeenCalledWith(
+          'surface-1',
+          {'@call': 'orderCoffee', args: {size: 'medium'}},
+          {functionCallId: 'fn-1'},
+        );
+        expect(result).toEqual({orderId: '123'});
+      });
+
+      it('rejects when active processor does not support callAgentFunction', async () => {
+        bridge.attachRenderer(
+          {processMessages: vi.fn()},
+          {
+            surfaceGroup: {onSurfaceCreated: {subscribe: vi.fn()}} as unknown as SurfaceGroupLike,
+            onSurfaceReady: vi.fn(),
+          },
+        );
+
+        await expect(
+          bridge.callAgentFunction('surface-1', {'@call': 'orderCoffee'}),
+        ).rejects.toThrow(/No active renderer processor with callAgentFunction/);
+      });
     });
   });
 });

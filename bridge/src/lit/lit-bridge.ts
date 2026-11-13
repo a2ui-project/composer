@@ -30,7 +30,6 @@ import {
   a2uiBridge,
   ThemePreference,
   SurfaceStateSubscription,
-  CatalogDetails,
   ERROR_OVERLAY_DEBOUNCE_MS,
   type ComponentUsages,
   type Demo,
@@ -124,6 +123,11 @@ export class A2uiSandboxRoot extends LitElement {
     (action: A2uiClientAction) => {
       a2uiBridge.sendAction(action);
     },
+    {
+      outboundListener: (msg: unknown) => {
+        a2uiBridge.sendOutboundMessage(msg);
+      },
+    },
   );
 
   private markdownProvider = new ContextProvider(this, {
@@ -172,16 +176,16 @@ export class A2uiSandboxRoot extends LitElement {
     this.rendererConnection?.unsubscribe();
     this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
       surfaceGroup: this.processor.model,
+      catalogs: (this.constructor as typeof A2uiSandboxRoot).catalogs,
       catalogJson: (this.constructor as typeof A2uiSandboxRoot).catalogJson,
       getComponentUsages: (this.constructor as typeof A2uiSandboxRoot).getComponentUsages,
       getDemos: (this.constructor as typeof A2uiSandboxRoot).getDemos,
       onThemeChange: (this.constructor as typeof A2uiSandboxRoot).onThemeChange,
       onCatalogResolved: catalogId => {
-        for (const catalog of (this.constructor as typeof A2uiSandboxRoot).catalogs) {
-          if (catalog) {
-            (catalog as unknown as CatalogDetails).id = catalogId;
-          }
-        }
+        a2uiBridge.aliasSingleCatalogId(
+          catalogId,
+          (this.constructor as typeof A2uiSandboxRoot).catalogs,
+        );
       },
       onSurfaceReady: surfaceId => {
         this.surface = this.processor.model.getSurface(surfaceId);
@@ -265,8 +269,8 @@ export class A2uiSandboxRoot extends LitElement {
  *   callback).
  * @return The A2uiSandboxRoot custom element constructor value ready for nominal references.
  */
-export function bootstrapLitSandbox<T extends ComponentApi>(
-  catalogs: Catalog<T>[],
+export function bootstrapLitSandbox<T extends ComponentApi = ComponentApi>(
+  catalogs: Catalog<T>[] | unknown[],
   options?: LitSandboxOptions,
 ): typeof A2uiSandboxRoot {
   const elementTagName = options?.elementTagName || 'app-root';

@@ -32,14 +32,13 @@ import {
   A2UI_RENDERER_CONFIG,
   MarkdownRenderer,
   provideMarkdownRenderer,
+  UniversalOnlyComponent,
 } from '@a2ui/angular/v0_9';
-import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import {
   a2uiBridge,
   ThemePreference,
   RendererProcessor,
   SurfaceStateSubscription,
-  CatalogDetails,
   type ComponentUsages,
   type Demo,
 } from '../index.js';
@@ -55,6 +54,38 @@ export interface AngularSandboxOptions {
   onThemeChange?: (theme: ThemePreference) => void;
   /** Optional callback to retrieve the renderer's demos. */
   getDemos?: () => Promise<Demo[]>;
+  /**
+   * Optional flag to mount Web Component / Custom Element implementations when available.
+   * Defaults to `true` when any registered catalog uses protocolVersion 1.0 or registers
+   * Web-Component-only implementations (`UniversalOnlyComponent`), and `false` otherwise.
+   */
+  useUniversalComponents?: boolean;
+}
+
+/**
+ * Detects whether a resolved catalog requires `useUniversalComponents: true` in `@a2ui/angular`
+ * (e.g., v1.0 `BasicCatalog` whose entries mount Custom Elements with `UniversalOnlyComponent` placeholders).
+ */
+function catalogRequiresUniversalComponents(catalog: unknown): boolean {
+  if (!catalog || typeof catalog !== 'object') return false;
+  const record = catalog as {
+    protocolVersion?: unknown;
+    components?: unknown;
+  };
+  if (record.protocolVersion === '1.0' || record.protocolVersion === 'v1.0') {
+    return true;
+  }
+  if (record.components instanceof Map) {
+    for (const entry of record.components.values()) {
+      if (entry && typeof entry === 'object' && 'tagName' in entry) {
+        const comp = (entry as {component?: {name?: string}}).component;
+        if (!comp || comp === UniversalOnlyComponent || comp.name === 'UniversalOnlyComponent') {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 /**
@@ -143,21 +174,34 @@ export class A2uiSandboxConnection implements OnDestroy {
    *     and the callbacks for component usages, theme changes, and demos.
    */
   constructor(options: AngularSandboxOptions = {}) {
+    const rendererService = this.rendererService;
     const processor: RendererProcessor = {
+      get model() {
+        return rendererService.surfaceGroup;
+      },
       processMessages: payload =>
         (this.rendererService as unknown as RendererProcessor).processMessages(payload),
+      callAgentFunction: (surfaceId, call, opts) => {
+        const service = this.rendererService as unknown as {
+          callAgentFunction?: (
+            surfaceId: string,
+            call: Record<string, unknown>,
+            opts?: {functionCallId?: string},
+          ) => Promise<unknown>;
+        };
+        if (typeof service.callAgentFunction === 'function') {
+          return service.callAgentFunction(surfaceId, call, opts);
+        }
+        return Promise.reject(
+          new Error('callAgentFunction is not supported by this rendererService'),
+        );
+      },
     };
     this.rendererConnection = a2uiBridge.attachRenderer(processor, {
       surfaceGroup: this.rendererService.surfaceGroup,
+      catalogs: this.rendererConfig?.catalogs,
       onCatalogResolved: (catalogId: string) => {
-        const catalogs = this.rendererConfig.catalogs;
-        if (catalogs) {
-          for (const catalog of catalogs) {
-            if (catalog) {
-              (catalog as unknown as CatalogDetails).id = catalogId;
-            }
-          }
-        }
+        a2uiBridge.aliasSingleCatalogId(catalogId, this.rendererConfig?.catalogs);
       },
       onSurfaceReady: (surfaceId: string) => {
         this.surfaceId.set(surfaceId);
@@ -202,10 +246,10 @@ export class A2uiSandboxConnection implements OnDestroy {
 /**
  * Provides a unified array of Angular dependency injection providers configured for the A2UI sandbox.
  *
- * Exposes a standardized registration block that includes catalog component classes, the central
- * rendering service, and the sandbox connection state to keep catalog bootstrap clean and modular.
+ * Exposes a standardized registration block that includes catalog component classes or instances,
+ * the central rendering service, and the sandbox connection state to keep catalog bootstrap clean and modular.
  *
- * @param catalogsClasses The array of catalog component provider classes (e.g. BasicCatalog) to register and manage.
+ * @param catalogs The array of catalog component provider classes (e.g. BasicCatalog) or instances to register and manage.
  * @param options Optional configuration adapter block holding `catalogJson` (preloaded catalog JSON),
  *   `markdownRendererFn` (custom markdown rendering delegate), `getComponentUsages` (component usage
  *   sample retrieval callback), `onThemeChange` (theme preference change callback), and `getDemos`
@@ -213,25 +257,40 @@ export class A2uiSandboxConnection implements OnDestroy {
  * @return Angular EnvironmentProviders ready for modern standalone bootstrapping application scopes.
  */
 export function provideA2uiSandbox(
-  catalogsClasses: Array<Type<Catalog<ComponentApi>>>,
+  catalogs: Array<Type<unknown> | unknown>,
   options?: AngularSandboxOptions,
 ): EnvironmentProviders {
+  const classProviders = catalogs.filter(
+    (c): c is Type<unknown> => typeof c === 'function',
+  ) as Provider[];
+
   const providers: Provider[] = [
     A2uiRendererService,
     {
       provide: A2uiSandboxConnection,
       useFactory: () => new A2uiSandboxConnection(options),
     },
-    ...catalogsClasses,
+    ...classProviders,
     provideMarkdownRenderer(options?.markdownRendererFn),
     {
       provide: A2UI_RENDERER_CONFIG,
       useFactory: () => {
-        const resolvedCatalogs = catalogsClasses.map(cls => inject(cls));
+        const resolvedCatalogs = catalogs.map(entry =>
+          typeof entry === 'function' ? inject(entry as Type<unknown>) : entry,
+        );
+        const useUniversalComponents =
+          options?.useUniversalComponents ??
+          resolvedCatalogs.some(catalogRequiresUniversalComponents);
         return {
           catalogs: resolvedCatalogs,
+          ...(useUniversalComponents ? {useUniversalComponents: true} : {}),
           actionHandler: (action: unknown) => {
             a2uiBridge.sendAction(action);
+          },
+          processorOptions: {
+            outboundListener: (msg: unknown) => {
+              a2uiBridge.sendOutboundMessage(msg);
+            },
           },
         };
       },

@@ -26,7 +26,7 @@ import {
 import {search as searchJmespath} from 'jmespath';
 import {z} from 'zod/v3';
 
-import {resolveDynamicValueDeep} from '../dynamic-values.js';
+import {type DynamicValueStrategy, resolveDynamicValueDeep} from '../dynamic-value-strategy.js';
 import {asyncable, type FunctionApiDefinition, withSettledArgs} from './common.js';
 
 /**
@@ -55,34 +55,44 @@ export const JmespathApi: FunctionApiDefinition = {
  *
  * @throws A2uiExpressionError if `expression` is not a valid JMESPath string.
  */
-export const JmespathImplementation: FunctionImplementation = createFunctionImplementation(
-  JmespathApi as Parameters<typeof createFunctionImplementation>[0],
-  (args, context) => {
-    const document = resolveDynamicValueDeep<unknown>(args['data'], context);
-    const expression = resolveDynamicValueDeep<unknown>(args['expression'], context);
-    // Computed keys keep these argument names stable under Closure Compiler property renaming.
-    const unsettled = {['expression']: expression, ['data']: document};
-    return withSettledArgs(unsettled, settled => {
-      const expr = settled['expression'];
-      if (typeof expr !== 'string') {
-        const kind = expr === null ? 'null' : Array.isArray(expr) ? 'an array' : `a ${typeof expr}`;
-        throw new A2uiExpressionError(
-          `jmespath expects a string expression, got ${kind}.`,
-          'jmespath',
-        );
-      }
-      try {
-        return searchJmespath(
-          (settled['data'] ?? null) as Parameters<typeof searchJmespath>[0],
-          expr,
-        );
-      } catch (error) {
-        throw new A2uiExpressionError(
-          `${error instanceof Error ? error.message : String(error)} in JMESPath expression: ${expr}`,
-          'jmespath',
-          error,
-        );
-      }
-    });
-  },
-);
+/**
+ * Creates a JMESPath function implementation optionally bound to a specific DynamicValueStrategy.
+ */
+export function createJmespathImplementation(
+  strategy?: DynamicValueStrategy,
+): FunctionImplementation {
+  return createFunctionImplementation(
+    JmespathApi as Parameters<typeof createFunctionImplementation>[0],
+    (args, context) => {
+      const document = resolveDynamicValueDeep<unknown>(args['data'], context, 0, strategy);
+      const expression = resolveDynamicValueDeep<unknown>(args['expression'], context, 0, strategy);
+      // Computed keys keep these argument names stable under Closure Compiler property renaming.
+      const unsettled = {['expression']: expression, ['data']: document};
+      return withSettledArgs(unsettled, settled => {
+        const expr = settled['expression'];
+        if (typeof expr !== 'string') {
+          const kind =
+            expr === null ? 'null' : Array.isArray(expr) ? 'an array' : `a ${typeof expr}`;
+          throw new A2uiExpressionError(
+            `jmespath expects a string expression, got ${kind}.`,
+            'jmespath',
+          );
+        }
+        try {
+          return searchJmespath(
+            (settled['data'] ?? null) as Parameters<typeof searchJmespath>[0],
+            expr,
+          );
+        } catch (error) {
+          throw new A2uiExpressionError(
+            `${error instanceof Error ? error.message : String(error)} in JMESPath expression: ${expr}`,
+            'jmespath',
+            error,
+          );
+        }
+      });
+    },
+  );
+}
+
+export const JmespathImplementation: FunctionImplementation = createJmespathImplementation();

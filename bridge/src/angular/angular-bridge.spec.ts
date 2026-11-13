@@ -443,4 +443,216 @@ describe('Angular Sandbox Connection Spec', () => {
 
     connInstance.ngOnDestroy();
   });
+
+  it('supports mixed [Class, instance] array and registers class providers while preserving instances', () => {
+    class MockCatalogClass {}
+    const mockClassInstance = new MockCatalogClass();
+    const directInstance = {id: 'instance-cat'};
+
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideA2uiSandbox([MockCatalogClass, directInstance]),
+        {provide: MockCatalogClass, useValue: mockClassInstance},
+        {provide: A2uiRendererService, useValue: mockRendererService},
+      ],
+    });
+
+    const config = TestBed.inject(A2UI_RENDERER_CONFIG);
+    expect(config.catalogs).toEqual([mockClassInstance, directInstance]);
+
+    const sendOutboundSpy = vi.spyOn(a2uiBridge, 'sendOutboundMessage');
+    const dummyMsg = {version: 'v1.0', callAgentFunction: {functionCallId: '1'}};
+    config.processorOptions?.outboundListener?.(dummyMsg);
+    expect(sendOutboundSpy).toHaveBeenCalledWith(dummyMsg);
+
+    const connInstance = TestBed.inject(A2uiSandboxConnection);
+    connInstance.ngOnDestroy();
+  });
+
+  it('does not clobber catalog ids when multiple catalogs are configured in onCatalogResolved', () => {
+    const cat1 = {id: 'cat-1'};
+    const cat2 = {id: 'cat-2'};
+
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    const mockRendererConfig = {
+      catalogs: [cat1, cat2],
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        {provide: A2uiRendererService, useValue: mockRendererService},
+        {provide: A2UI_RENDERER_CONFIG, useValue: mockRendererConfig},
+      ],
+    });
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    const connection = TestBed.runInInjectionContext(() => new A2uiSandboxConnection());
+
+    const configPassed = attachSpy.mock.lastCall![1];
+    configPassed.onCatalogResolved!('urn:a2ui:catalog:new_id');
+
+    // Both IDs should remain unchanged because catalogs.length > 1
+    expect(cat1.id).toBe('cat-1');
+    expect(cat2.id).toBe('cat-2');
+
+    connection.ngOnDestroy();
+  });
+
+  it('passes resolved catalogs to attachRenderer and enables useUniversalComponents automatically for v1.0 BasicCatalog + McpFunctionsCatalog', async () => {
+    const {BasicCatalog} = await import('@a2ui/angular');
+    const {createMcpFunctionsCatalog, MCP_FUNCTIONS_CATALOG_ID} =
+      await import('../mcp/v1-0-mcp-catalog');
+    const mcpCatalog = createMcpFunctionsCatalog();
+
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideA2uiSandbox([BasicCatalog, mcpCatalog]),
+        {provide: A2uiRendererService, useValue: mockRendererService},
+      ],
+    });
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    const config = TestBed.inject(A2UI_RENDERER_CONFIG) as {
+      catalogs: unknown[];
+      useUniversalComponents?: boolean;
+    };
+    const connInstance = TestBed.inject(A2uiSandboxConnection);
+
+    expect(config.useUniversalComponents).toBe(true);
+    expect(attachSpy).toHaveBeenCalled();
+    const attachConfig = attachSpy.mock.lastCall![1];
+    expect(attachConfig.catalogs).toHaveLength(2);
+
+    const sendSpy = vi.spyOn(a2uiBridge, 'sendMessage');
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window.parent,
+        origin: window.location.origin,
+        data: {type: 'GET_CATALOG'},
+      }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 25));
+
+    const catalogMsg = sendSpy.mock.calls
+      .map(c => c[0] as {type?: string; payload?: Record<string, unknown>})
+      .find(m => m.type === 'A2UI_CATALOG');
+    expect(catalogMsg).toBeDefined();
+    expect(catalogMsg?.payload?.['protocolVersion']).toBe('1.0');
+    const catalogsPayload = catalogMsg?.payload?.['catalogs'] as Array<Record<string, unknown>>;
+    expect(catalogsPayload).toHaveLength(2);
+    expect(catalogsPayload[1]?.['catalogId']).toBe(MCP_FUNCTIONS_CATALOG_ID);
+
+    connInstance.ngOnDestroy();
+  });
+
+  it('leaves useUniversalComponents false by default for v0.9 Angular catalogs unless explicitly overridden', () => {
+    const v09Catalog = {
+      id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      protocolVersion: '0.9',
+      components: new Map(),
+    };
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideA2uiSandbox([v09Catalog]),
+        {provide: A2uiRendererService, useValue: mockRendererService},
+      ],
+    });
+
+    const config = TestBed.inject(A2UI_RENDERER_CONFIG) as {
+      useUniversalComponents?: boolean;
+    };
+    expect(Boolean(config.useUniversalComponents)).toBe(false);
+  });
+
+  it('detects UniversalOnlyComponent by identity even if component name is minified', async () => {
+    const {UniversalOnlyComponent} = await import('@a2ui/angular/v0_9');
+    const minifiedCatalog = {
+      id: 'minified-cat',
+      components: new Map([['text', {tagName: 'a2ui-text', component: UniversalOnlyComponent}]]),
+    };
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideA2uiSandbox([minifiedCatalog]),
+        {provide: A2uiRendererService, useValue: mockRendererService},
+      ],
+    });
+
+    const config = TestBed.inject(A2UI_RENDERER_CONFIG) as {
+      catalogs: unknown[];
+      useUniversalComponents?: boolean;
+    };
+    expect(config.useUniversalComponents).toBe(true);
+  });
+
+  it('forwards callAgentFunction on the attached processor to rendererService.callAgentFunction', async () => {
+    const mockCallAgentFunction = vi.fn().mockResolvedValue({result: 'ok'});
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+      callAgentFunction: mockCallAgentFunction,
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideA2uiSandbox([]),
+        {provide: A2uiRendererService, useValue: mockRendererService},
+      ],
+    });
+
+    const connection = TestBed.inject(A2uiSandboxConnection);
+    expect(connection).toBeDefined();
+
+    const activeProcessor = a2uiBridge.getActiveProcessor();
+    expect(activeProcessor?.callAgentFunction).toBeDefined();
+    expect(activeProcessor?.model).toBe(TestBed.inject(A2uiRendererService).surfaceGroup);
+
+    const response = await activeProcessor!.callAgentFunction!(
+      'test-surface',
+      {'@call': 'orderCoffee', args: {size: 'large'}},
+      {functionCallId: 'rpc-1'},
+    );
+
+    expect(mockCallAgentFunction).toHaveBeenCalledWith(
+      'test-surface',
+      {'@call': 'orderCoffee', args: {size: 'large'}},
+      {functionCallId: 'rpc-1'},
+    );
+    expect(response).toEqual({result: 'ok'});
+  });
 });

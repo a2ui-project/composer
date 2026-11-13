@@ -105,6 +105,8 @@ export declare interface RendererConfig {
   catalogJson?: unknown;
   /** A preloaded in-memory component/layout catalog payload definition (legacy). */
   catalog?: unknown;
+  /** Preloaded catalog list, Catalog instance(s), or catalog factory (v1.0 / multi-catalog). */
+  catalogs?: unknown;
   /** Invoked when a dynamic catalog URN ID is resolved. */
   onCatalogResolved?: (catalogId: string) => void;
   /** Invoked when the theme preference changes. */

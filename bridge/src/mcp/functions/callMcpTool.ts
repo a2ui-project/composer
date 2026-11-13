@@ -33,7 +33,7 @@ import {CallToolResultSchema} from '@modelcontextprotocol/sdk/types.js';
 import type {CallToolResult, ReadResourceResult} from '@modelcontextprotocol/sdk/types.js';
 import {z} from 'zod/v3';
 
-import {resolveDynamicRecord} from '../dynamic-values.js';
+import {type DynamicValueStrategy, resolveDynamicRecord} from '../dynamic-value-strategy.js';
 import type {FunctionApiDefinition} from './common.js';
 
 /** MIME type identifying an A2UI payload in an MCP resource. */
@@ -104,6 +104,7 @@ export const CallMcpToolApi: FunctionApiDefinition = {
 export function createCallMcpToolImplementation(
   getMcpClientForTool: McpClientResolver,
   processor: McpMessageProcessor,
+  strategy?: DynamicValueStrategy,
 ): FunctionImplementation {
   const declaredUiResourceUris = new WeakMap<McpToolClient, Promise<Map<string, string[]>>>();
   const cachedA2uiResources = new Map<string, A2uiMessage[]>();
@@ -168,6 +169,8 @@ export function createCallMcpToolImplementation(
         const resolvedArguments = resolveDynamicRecord(
           (args['arguments'] as Record<string, unknown> | undefined) ?? {},
           context,
+          0,
+          strategy,
         );
 
         const client = await getMcpClientForTool(toolName);

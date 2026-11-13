@@ -21,6 +21,11 @@ import {
 
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
+import {
+  resolveProtocolStrategy,
+  detectProtocolVersion,
+} from './protocol/protocol-strategy-registry.js';
+
 import {DomainOriginVerificationService} from './domain-origin-verification';
 
 import {
@@ -30,7 +35,6 @@ import {
   SetThemePayload,
   DataModelChangePayload,
   CreateSurfaceCommand,
-  CatalogDetails,
   ThemePreference,
   McpResponsePayload,
 } from './bridge-message';
@@ -39,7 +43,6 @@ import {IframeMcpClient} from './iframe-mcp-client';
 
 import {SurfaceResizeObserver, type SurfaceDimensions} from './surface-resize-observer';
 import {waitForContentToSettle, withinSettleCap} from './content-settle';
-export * from './surface-resize-observer';
 
 import type {
   SurfaceInstance,
@@ -154,10 +157,27 @@ export function safeSerialize(val: unknown): string {
  */
 export declare interface RendererProcessor {
   /**
+   * Optional reference to the underlying surface group or drawing model.
+   */
+  model?: {
+    getSurface?(surfaceId: string): unknown;
+    dispose?(): void;
+  };
+
+  /**
    * Processes the incoming message payload array.
    * @param payload The array of A2UI protocol commands.
    */
   processMessages(payload: A2uiMessage[]): void;
+
+  /**
+   * Dispatches an outbound agent function call through the renderer's RPC handler.
+   */
+  callAgentFunction?(
+    surfaceId: string,
+    call: Record<string, unknown>,
+    options?: {functionCallId?: string},
+  ): Promise<unknown>;
 }
 
 /**
@@ -236,6 +256,9 @@ interface ActiveRenderer {
 export class PreviewBridge {
   /** The single active framework rendering stack connection hook. */
   private activeRenderer: ActiveRenderer | null = null;
+
+  /** Active negotiated wire protocol version ('1.0' or 'v0.9') for the attached renderer. */
+  private activeProtocolVersion: '1.0' | 'v0.9' = 'v0.9';
 
   /** Indicates whether the bridge is actively listening for incoming messages. */
   private isListening = false;
@@ -360,11 +383,43 @@ export class PreviewBridge {
     return this.mcpClient;
   }
 
+  /** Standalone or manually registered processor reference. */
+  private manualProcessor: RendererProcessor | null = null;
+
+  /**
+   * Sets or updates the active renderer processor reference.
+   *
+   * @param processor The framework-specific message processor.
+   */
+  setActiveProcessor(processor: RendererProcessor): void {
+    if (this.activeRenderer) {
+      this.activeRenderer.processor = processor;
+    }
+    this.manualProcessor = processor;
+  }
+
   /**
    * Returns the currently attached renderer processor, if any.
    */
   getActiveProcessor(): RendererProcessor | undefined {
-    return this.activeRenderer?.processor;
+    return this.activeRenderer?.processor ?? this.manualProcessor ?? undefined;
+  }
+
+  /**
+   * Dispatches an outbound callAgentFunction request via the active renderer processor.
+   */
+  callAgentFunction(
+    surfaceId: string,
+    call: Record<string, unknown>,
+    options?: {functionCallId?: string},
+  ): Promise<unknown> {
+    const processor = this.getActiveProcessor();
+    if (processor && typeof processor.callAgentFunction === 'function') {
+      return processor.callAgentFunction(surfaceId, call, options);
+    }
+    return Promise.reject(
+      new Error('PreviewBridge: No active renderer processor with callAgentFunction attached'),
+    );
   }
 
   /**
@@ -461,12 +516,41 @@ export class PreviewBridge {
   private waitForInitialContent(messages: A2uiMessage[]): void {
     const renderer = this.activeRenderer;
     if (this.contentReady !== false || this.awaitingContentRender || !renderer) return;
-    const hasRoot = messages.some(
-      message =>
-        'updateComponents' in message &&
-        renderer.activeSurfaceIds.has(message.updateComponents.surfaceId) &&
-        message.updateComponents.components.some(component => component.id === 'root'),
-    );
+    const hasRoot = messages.some(message => {
+      if (!message || typeof message !== 'object') return false;
+      const record = message as Record<string, unknown>;
+      const updateComponents = record['updateComponents'] as
+        {surfaceId: string; components?: unknown[]} | undefined;
+      if (
+        updateComponents &&
+        renderer.activeSurfaceIds.has(updateComponents.surfaceId) &&
+        Array.isArray(updateComponents.components) &&
+        updateComponents.components.some(
+          component =>
+            component &&
+            typeof component === 'object' &&
+            (component as Record<string, unknown>)['id'] === 'root',
+        )
+      ) {
+        return true;
+      }
+      const createSurface = record['createSurface'] as
+        {surfaceId: string; components?: unknown[]} | undefined;
+      if (
+        createSurface &&
+        renderer.activeSurfaceIds.has(createSurface.surfaceId) &&
+        Array.isArray(createSurface.components) &&
+        createSurface.components.some(
+          component =>
+            component &&
+            typeof component === 'object' &&
+            (component as Record<string, unknown>)['id'] === 'root',
+        )
+      ) {
+        return true;
+      }
+      return false;
+    });
     const onInitialRender = renderer.config.onInitialRender;
     // Only renderers with the hook report readiness. Every RENDER_A2UI is still measured
     // by the caller's regular scheduleSurfaceResize, so skipping here doesn't skip that.
@@ -556,11 +640,13 @@ export class PreviewBridge {
     const surfaceConnection = this.connectSurfaceGroup(config.surfaceGroup);
     const activeSurfaceIds = new Set<string>();
 
+    this.initMessageListener();
     this.activeRenderer = {
       processor,
       config,
       activeSurfaceIds,
     };
+    this.activeProtocolVersion = this.inferProtocolVersionFromConfig(config);
     this.resetContentReadiness();
 
     if (this.currentAppliedTheme) {
@@ -602,6 +688,7 @@ export class PreviewBridge {
             this.renderTimeoutId = undefined;
           }
           this.activeRenderer = null;
+          this.activeProtocolVersion = 'v0.9';
         }
         surfaceConnection.unsubscribe();
         this.activeConnections.delete(attachConnection);
@@ -610,6 +697,33 @@ export class PreviewBridge {
 
     this.activeConnections.add(attachConnection);
     return attachConnection;
+  }
+
+  private inferProtocolVersionFromConfig(config: RendererConfig): '1.0' | 'v0.9' {
+    const candidates: unknown[] = [];
+    if (config.catalogJson !== undefined) {
+      candidates.push(
+        ...(Array.isArray(config.catalogJson) ? config.catalogJson : [config.catalogJson]),
+      );
+    }
+    if (config.catalog !== undefined) {
+      candidates.push(...(Array.isArray(config.catalog) ? config.catalog : [config.catalog]));
+    }
+    if (config.catalogs !== undefined) {
+      candidates.push(...(Array.isArray(config.catalogs) ? config.catalogs : [config.catalogs]));
+    }
+    for (const entry of candidates) {
+      if (entry && typeof entry === 'object') {
+        const ver = (entry as {protocolVersion?: unknown}).protocolVersion;
+        if (typeof ver === 'string') {
+          const v = ver.trim();
+          if (v === '1.0' || v === 'v1.0' || v.startsWith('1.') || v.startsWith('v1.')) {
+            return '1.0';
+          }
+        }
+      }
+    }
+    return 'v0.9';
   }
 
   /**
@@ -638,6 +752,7 @@ export class PreviewBridge {
     this.isListening = false;
     this.activeRenderer = null;
     this.isCatalogReplyOwed = false;
+    this.activeProtocolVersion = 'v0.9';
     this.currentAppliedTheme = undefined;
 
     // Clean up active connections
@@ -651,6 +766,7 @@ export class PreviewBridge {
     }
     this.activeConnections.clear();
     this.mcpClient = null;
+    this.manualProcessor = null;
   }
 
   private resolveExpectedParentOrigin(): string {
@@ -690,15 +806,29 @@ export class PreviewBridge {
    * Wraps the event payload into a standard `SEND_TO_SERVER` message.
    *
    * @param action The declarative action payload containing click, input, or navigation events.
-   * @param [version='v0.9'] The A2UI protocol specification version.
+   * @param [version=this.activeProtocolVersion] The A2UI protocol specification version.
    */
-  sendAction(action: unknown, version = 'v0.9'): void {
+  sendAction(action: unknown, version: string = this.activeProtocolVersion): void {
+    const strategy = resolveProtocolStrategy(version);
     this.sendMessage({
       type: PreviewBridgeMessageType.SEND_TO_SERVER,
-      payload: {
-        version: version,
-        action: action,
-      },
+      payload: strategy.buildActionEnvelope(action),
+    });
+  }
+
+  /**
+   * Forwards a v1.0 outbound listener message (action, callAgentFunction, rendererFunctionResponse, error)
+   * over SEND_TO_SERVER to the parent host window, stamping canonical version '1.0' if omitted.
+   *
+   * @param msg Outbound message payload.
+   */
+  sendOutboundMessage(msg: unknown): void {
+    if (!msg || typeof msg !== 'object') return;
+    const strategy = resolveProtocolStrategy('1.0');
+    const stamped = strategy.stampOutboundMessage(msg as Record<string, unknown>);
+    this.sendMessage({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: stamped,
     });
   }
 
@@ -805,11 +935,9 @@ export class PreviewBridge {
   private handleIncomingDataModelChange(payload: unknown): void {
     const payloadObj = payload as DataModelChangePayload | undefined;
     if (payloadObj && payloadObj.updateDataModel) {
+      const strategy = resolveProtocolStrategy(this.activeProtocolVersion);
       const renderPayload = [
-        {
-          version: 'v0.9',
-          updateDataModel: payloadObj.updateDataModel,
-        },
+        strategy.buildSyntheticEnvelope('dataModelChange', payloadObj.updateDataModel),
       ];
       this.dispatchRenderA2ui(renderPayload);
     }
@@ -832,9 +960,12 @@ export class PreviewBridge {
       return;
     }
 
-    const hasCreateSurface =
-      Array.isArray(payload) &&
-      payload.some(item => item && typeof item === 'object' && 'createSurface' in item);
+    const version = detectProtocolVersion(Array.isArray(payload) ? payload : []);
+    const strategy = resolveProtocolStrategy(version);
+    const surfaceIdsToReset = strategy.extractSurfaceIdsToReset(
+      Array.isArray(payload) ? payload : [],
+    );
+    const hasCreateSurface = surfaceIdsToReset.length > 0;
 
     if (hasCreateSurface) {
       // Step 1: Synchronously dispatch null to trigger unmounting/reset.
@@ -885,43 +1016,58 @@ export class PreviewBridge {
     }
 
     if (Array.isArray(payload)) {
-      const createSurfaceCommand = payload.find(
+      const version = detectProtocolVersion(payload);
+      let nextProtocolVersion = this.activeProtocolVersion;
+      if (version === 'v1.0') {
+        nextProtocolVersion = '1.0';
+      } else if (
+        payload.some(
+          item =>
+            item &&
+            typeof item === 'object' &&
+            typeof (item as {version?: unknown}).version === 'string',
+        )
+      ) {
+        nextProtocolVersion = 'v0.9';
+      }
+      const strategy = resolveProtocolStrategy(version === 'v1.0' ? '1.0' : nextProtocolVersion);
+
+      const createSurfaceCommands = payload.filter(
         (item: unknown) => item && typeof item === 'object' && 'createSurface' in item,
-      ) as CreateSurfaceCommand | undefined;
+      ) as CreateSurfaceCommand[];
 
       let hasCreateSurface = false;
-      let surfaceId: string | undefined;
-      const createSurface = createSurfaceCommand && createSurfaceCommand.createSurface;
-      if (createSurface) {
-        hasCreateSurface = true;
-        const catalogId = createSurface.catalogId;
-        if (catalogId) {
-          this.notifyCatalogResolved(catalogId);
-        }
-        surfaceId = createSurface.surfaceId;
-        if (surfaceId) {
-          // Proactively clear any pre-existing instance of this surface in the
-          // renderer processor to prevent "Surface <surfaceId> already exists"
-          // collisions upon recreate.
-          const deleteMessage: A2uiMessage = {
-            version: 'v0.9',
-            deleteSurface: {
-              surfaceId,
-            },
-          };
-          try {
-            this.activeRenderer.processor.processMessages([deleteMessage]);
-          } catch (err) {
-            // Surface might not exist yet; safe to proceed. Logged so genuine
-            // processor failures remain diagnosable.
-            console.debug('PreviewBridge: pre-delete of surface failed', surfaceId, err);
+      let firstSurfaceId: string | undefined;
+
+      for (const cmd of createSurfaceCommands) {
+        const createSurface = cmd.createSurface;
+        if (createSurface) {
+          hasCreateSurface = true;
+          const catalogId = createSurface.catalogId;
+          if (catalogId) {
+            this.notifyCatalogResolved(catalogId);
           }
-          // Track the surface BEFORE processing. If a subsequent command in
-          // the payload has a typo and throws an error, we still want to
-          // clean this surface up next time.
-          this.activeRenderer.activeSurfaceIds.add(surfaceId);
-        } else {
-          console.warn('PreviewBridge: createSurface command found, but no surfaceId present.');
+          const surfaceId = createSurface.surfaceId;
+          if (surfaceId) {
+            firstSurfaceId ??= surfaceId;
+            // Proactively clear any pre-existing instance of this surface in the
+            // renderer processor to prevent "Surface <surfaceId> already exists"
+            // collisions upon recreate.
+            const deleteMessage = strategy.buildDeleteSurfaceItem(surfaceId) as A2uiMessage;
+            try {
+              this.activeRenderer.processor.processMessages([deleteMessage]);
+            } catch (err) {
+              // Surface might not exist yet; safe to proceed. Logged so genuine
+              // processor failures remain diagnosable.
+              console.debug('PreviewBridge: pre-delete of surface failed', surfaceId, err);
+            }
+            // Track the surface BEFORE processing. If a subsequent command in
+            // the payload has a typo and throws an error, we still want to
+            // clean this surface up next time.
+            this.activeRenderer.activeSurfaceIds.add(surfaceId);
+          } else {
+            console.warn('PreviewBridge: createSurface command found, but no surfaceId present.');
+          }
         }
       }
 
@@ -934,10 +1080,14 @@ export class PreviewBridge {
         }
       }
 
+      clonedPayload = strategy.normalizeIncomingMessages(clonedPayload) as A2uiMessage[];
+
       let rendered = false;
+
       try {
         this.activeRenderer.processor.processMessages(clonedPayload);
         rendered = true;
+        this.activeProtocolVersion = nextProtocolVersion;
 
         // Clears any stale error overlay as soon as a frame renders successfully,
         // even during active streaming.
@@ -956,8 +1106,8 @@ export class PreviewBridge {
         });
       }
 
-      if (rendered && hasCreateSurface && surfaceId) {
-        this.activeRenderer.config.onSurfaceReady(surfaceId);
+      if (rendered && hasCreateSurface && firstSurfaceId) {
+        this.activeRenderer.config.onSurfaceReady(firstSurfaceId);
       }
 
       if (rendered) {
@@ -986,16 +1136,10 @@ export class PreviewBridge {
     if (!this.activeRenderer) return;
 
     const {processor, config, activeSurfaceIds} = this.activeRenderer;
+    const strategy = resolveProtocolStrategy(this.activeProtocolVersion);
     for (const surfaceId of activeSurfaceIds) {
       try {
-        processor.processMessages([
-          {
-            version: 'v0.9',
-            deleteSurface: {
-              surfaceId: surfaceId,
-            },
-          } as A2uiMessage,
-        ]);
+        processor.processMessages([strategy.buildDeleteSurfaceItem(surfaceId) as A2uiMessage]);
       } catch (e: unknown) {
         console.warn(`PreviewBridge: Error clearing surface ${surfaceId} during reset:`, e);
       }
@@ -1188,19 +1332,150 @@ export class PreviewBridge {
   }
 
   /**
-   * Coordinates in-memory retrieval (`catalogJson`) vs. HTTP network fetching
-   * (including SPA HTML fallback to `/catalog.json`).
+   * Normalizes a catalog definition (Catalog instance, raw schema, URL string, or factory)
+   * into a standardized schema object, stamping protocolVersion and $id without mutating original objects.
    */
-  private async resolveCatalog(renderer: ActiveRenderer | null): Promise<{
-    rawData: unknown;
-    isInMemory: boolean;
-  } | null> {
-    const config = renderer?.config;
-    const inMemoryCatalog = config?.catalogJson ?? config?.catalog;
-    if (inMemoryCatalog !== undefined) {
-      return {rawData: inMemoryCatalog, isInMemory: true};
+  private async normalizeCatalogEntry(entry: unknown): Promise<Record<string, unknown> | null> {
+    let resolved = entry;
+    if (typeof resolved === 'function') {
+      resolved = await (resolved as () => unknown)();
+    }
+    if (typeof resolved === 'string') {
+      const text = resolved.trim();
+      const safetyPrefix = ")]}'\n";
+      const withoutPrefix = text.startsWith(safetyPrefix)
+        ? text.substring(safetyPrefix.length).trim()
+        : text;
+      if (withoutPrefix.startsWith('{') || withoutPrefix.startsWith('[')) {
+        resolved = this.parseCatalogData(resolved);
+      } else {
+        const fetchRes = await this.fetchWithTimeout(text);
+        if (!fetchRes.ok) {
+          throw new Error(`Catalog fetch failed with status: ${fetchRes.status}`);
+        }
+        resolved = this.parseCatalogData(await fetchRes.text());
+      }
+    }
+    if (!resolved || typeof resolved !== 'object') {
+      return null;
     }
 
+    const catObj = resolved as {
+      id?: string;
+      catalogId?: string;
+      protocolVersion?: string;
+      catalogSchema?: unknown;
+      toJson?: () => unknown;
+      title?: string;
+      description?: string;
+      name?: string;
+      [key: string]: unknown;
+    };
+
+    let jsonMeta: Record<string, unknown> | null | undefined;
+    const getJsonMeta = (): Record<string, unknown> | null | undefined => {
+      if (jsonMeta === undefined && typeof catObj['toJson'] === 'function') {
+        jsonMeta = (catObj['toJson'] as () => Record<string, unknown> | null | undefined)();
+      }
+      return jsonMeta;
+    };
+
+    let schema: Record<string, unknown>;
+    if (catObj.catalogSchema && typeof catObj.catalogSchema === 'object') {
+      schema = {...(catObj.catalogSchema as Record<string, unknown>)};
+    } else {
+      const meta = getJsonMeta();
+      if (meta && typeof meta === 'object') {
+        schema = {...meta};
+      } else {
+        schema = {...catObj};
+      }
+    }
+
+    const id =
+      (schema['catalogId'] as string | undefined) ??
+      (schema['$id'] as string | undefined) ??
+      catObj.id ??
+      catObj.catalogId;
+    if (id && typeof id === 'string') {
+      if (!schema['catalogId']) schema['catalogId'] = id;
+      if (!schema['$id']) schema['$id'] = id;
+    }
+
+    const version = (schema['protocolVersion'] as string | undefined) ?? catObj.protocolVersion;
+    if (version) {
+      schema['protocolVersion'] = version;
+    }
+
+    const title =
+      (schema['title'] as string | undefined) ??
+      (catObj['title'] as string | undefined) ??
+      (schema['title'] === undefined && catObj['title'] === undefined
+        ? (getJsonMeta()?.['title'] as string | undefined)
+        : undefined);
+    if (title) {
+      schema['title'] = title;
+    }
+
+    const description =
+      (schema['description'] as string | undefined) ??
+      (catObj['description'] as string | undefined) ??
+      (schema['description'] === undefined && catObj['description'] === undefined
+        ? (getJsonMeta()?.['description'] as string | undefined)
+        : undefined);
+    if (description) {
+      schema['description'] = description;
+    }
+
+    return schema;
+  }
+
+  /**
+   * Normalizes a list of catalog sources into primary and composite schemas.
+   */
+  private async normalizeCatalogList(
+    rawList: unknown[],
+    isMultiCatalog: boolean,
+  ): Promise<{
+    primarySchema: Record<string, unknown>;
+    allSchemas: Array<Record<string, unknown>>;
+    isMultiCatalog: boolean;
+    isInMemory: boolean;
+  }> {
+    const allSchemas: Array<Record<string, unknown>> = [];
+    try {
+      for (const item of rawList) {
+        const normalized = await this.normalizeCatalogEntry(item);
+        if (normalized) {
+          allSchemas.push(normalized);
+        }
+      }
+
+      if (allSchemas.length > 0) {
+        return {
+          primarySchema: allSchemas[0],
+          allSchemas,
+          isMultiCatalog,
+          isInMemory: true,
+        };
+      }
+      const err = new Error('Failed to resolve valid catalog from configuration.');
+      (err as {isInMemory?: boolean}).isInMemory = true;
+      throw err;
+    } catch (err) {
+      if (err && typeof err === 'object') {
+        (err as {isInMemory?: boolean}).isInMemory = true;
+      }
+      throw err;
+    }
+  }
+
+  private async fetchCatalogFromNetwork(renderer: ActiveRenderer | null): Promise<{
+    primarySchema: Record<string, unknown>;
+    allSchemas: Array<Record<string, unknown>>;
+    isMultiCatalog: boolean;
+    isInMemory: boolean;
+  } | null> {
     if (typeof window === 'undefined' || !window.fetch) return null;
 
     let res = await this.fetchWithTimeout('catalog');
@@ -1236,7 +1511,15 @@ export class PreviewBridge {
       rawText = fallbackText;
     }
 
-    return {rawData: rawText, isInMemory: false};
+    const parsed = this.parseCatalogData(rawText);
+    const normalized = await this.normalizeCatalogEntry(parsed);
+    const allSchemas = normalized ? [normalized] : [];
+    return {
+      primarySchema: allSchemas[0] ?? (parsed as Record<string, unknown>),
+      allSchemas,
+      isMultiCatalog: false,
+      isInMemory: false,
+    };
   }
 
   /**
@@ -1269,6 +1552,68 @@ export class PreviewBridge {
   }
 
   /**
+   * Coordinates in-memory retrieval (`catalogJson`, `catalog`, `catalogs`) vs. HTTP network fetching
+   * (including SPA HTML fallback to `/catalog.json`).
+   */
+  private async resolveCatalog(renderer: ActiveRenderer | null): Promise<{
+    primarySchema: Record<string, unknown>;
+    allSchemas: Array<Record<string, unknown>>;
+    isMultiCatalog: boolean;
+    isInMemory: boolean;
+  } | null> {
+    const config = renderer?.config;
+    const explicitOverride = config?.catalogJson ?? config?.catalog;
+
+    if (explicitOverride !== undefined) {
+      const rawList = Array.isArray(explicitOverride) ? explicitOverride : [explicitOverride];
+      return this.normalizeCatalogList(rawList, rawList.length > 1);
+    }
+
+    if (config?.catalogs !== undefined) {
+      const rawList = Array.isArray(config.catalogs) ? config.catalogs : [config.catalogs];
+      if (rawList.length > 0) {
+        const firstItem = rawList[0] as {
+          protocolVersion?: unknown;
+          components?: unknown;
+          catalogSchema?: unknown;
+          toJson?: unknown;
+        } | null;
+        const isSingleNonV10RuntimeCatalog =
+          rawList.length === 1 &&
+          Boolean(firstItem && typeof firstItem === 'object') &&
+          firstItem?.components instanceof Map &&
+          firstItem?.protocolVersion !== '1.0' &&
+          firstItem?.protocolVersion !== 'v1.0';
+
+        if (!isSingleNonV10RuntimeCatalog) {
+          return this.normalizeCatalogList(rawList, rawList.length > 1);
+        }
+
+        const canExtractSchema =
+          Boolean(firstItem?.catalogSchema && typeof firstItem.catalogSchema === 'object') ||
+          typeof firstItem?.toJson === 'function';
+        try {
+          const networkResolved = await this.fetchCatalogFromNetwork(renderer);
+          if (networkResolved) {
+            return networkResolved;
+          }
+          if (canExtractSchema) {
+            return this.normalizeCatalogList(rawList, false);
+          }
+          return null;
+        } catch (err) {
+          if (canExtractSchema) {
+            return this.normalizeCatalogList(rawList, false);
+          }
+          throw err;
+        }
+      }
+    }
+
+    return this.fetchCatalogFromNetwork(renderer);
+  }
+
+  /**
    * Strips potential XSSI vulnerability prefixes (`)]}'\n`) and executes `JSON.parse()`.
    */
   private parseCatalogData(data: unknown): unknown {
@@ -1291,7 +1636,12 @@ export class PreviewBridge {
     const request = ++this.catalogRequestCount;
     // This request answers the host, whichever renderer it was owed to.
     this.isCatalogReplyOwed = false;
-    let resolved: {rawData: unknown; isInMemory: boolean} | null = null;
+    let resolved: {
+      primarySchema: Record<string, unknown>;
+      allSchemas: Array<Record<string, unknown>>;
+      isMultiCatalog: boolean;
+      isInMemory: boolean;
+    } | null = null;
     try {
       resolved = await this.resolveCatalog(renderer);
       if (!this.isListening) {
@@ -1307,16 +1657,38 @@ export class PreviewBridge {
         return;
       }
 
-      const catalog = this.parseCatalogData(resolved.rawData);
+      const {primarySchema, allSchemas, isMultiCatalog} = resolved;
+      const isV1 = allSchemas.some(schema => {
+        const ver = schema['protocolVersion'];
+        if (typeof ver === 'string') {
+          const v = ver.trim();
+          return v === '1.0' || v === 'v1.0' || v.startsWith('1.') || v.startsWith('v1.');
+        }
+        return false;
+      });
+      this.activeProtocolVersion = isV1 ? '1.0' : 'v0.9';
 
-      const catalogId = (catalog as CatalogDetails | undefined)?.catalogId;
+      const catalogId =
+        (primarySchema['catalogId'] as string | undefined) ??
+        (primarySchema['$id'] as string | undefined);
       if (catalogId) {
         this.notifyCatalogResolved(catalogId);
       }
 
+      let payload: unknown;
+      if (isMultiCatalog) {
+        payload = {
+          ...primarySchema,
+          catalog: primarySchema,
+          catalogs: allSchemas,
+        };
+      } else {
+        payload = primarySchema;
+      }
+
       this.sendMessage({
         type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: catalog,
+        payload,
       });
     } catch (error: unknown) {
       if (!this.isListening) {
@@ -1327,7 +1699,8 @@ export class PreviewBridge {
         return;
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (resolved?.isInMemory) {
+      const isInMemory = Boolean((error as {isInMemory?: boolean})?.isInMemory);
+      if (isInMemory) {
         console.error('PreviewBridge: Error processing/parsing in-memory catalog:', error);
       }
       this.sendMessage({
@@ -1382,11 +1755,54 @@ export class PreviewBridge {
     });
   }
 
+  private lastResolvedCatalogId?: string;
+
+  /**
+   * Aligns a single catalog's ID with the resolved catalogId when exactly one catalog is configured.
+   *
+   * @param catalogId The resolved catalog ID.
+   * @param rawCatalog The catalog or array of catalogs to alias.
+   */
+  aliasSingleCatalogId(catalogId: string | undefined, rawCatalog: unknown): void {
+    const targetCatalogId = catalogId || this.lastResolvedCatalogId;
+    if (!targetCatalogId) {
+      return;
+    }
+    const catalogs = Array.isArray(rawCatalog)
+      ? rawCatalog
+      : rawCatalog !== null && typeof rawCatalog === 'object'
+        ? [rawCatalog]
+        : undefined;
+    if (
+      catalogs &&
+      catalogs.length === 1 &&
+      !catalogs.some(c => (c as {id?: string})?.id === targetCatalogId)
+    ) {
+      const firstCatalog = catalogs[0];
+      if (firstCatalog && typeof firstCatalog === 'object') {
+        // Catalogs come from user-supplied renderer config and may be frozen;
+        // aliasing is a convenience, so a read-only object must not break
+        // catalog resolution.
+        try {
+          (firstCatalog as unknown as {id?: string}).id = targetCatalogId;
+        } catch (error: unknown) {
+          console.warn(
+            `PreviewBridge: Unable to alias catalog id to "${targetCatalogId}" (catalog is read-only):`,
+            error,
+          );
+        }
+      }
+    }
+  }
+
   /**
    * Safely triggers the onCatalogResolved callback if registered in the active renderer config.
    */
-
   private notifyCatalogResolved(catalogId: string): void {
+    this.lastResolvedCatalogId = catalogId;
+    if (this.activeRenderer?.config.catalogs) {
+      this.aliasSingleCatalogId(catalogId, this.activeRenderer.config.catalogs);
+    }
     if (this.activeRenderer?.config.onCatalogResolved) {
       try {
         this.activeRenderer.config.onCatalogResolved(catalogId);
