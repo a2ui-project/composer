@@ -716,10 +716,10 @@ test.describe('A2UI v1.0 Function RPC Journeys Suite', () => {
     expect(demoErr['code']).toBe('NO_AGENT_CONNECTED');
   });
 
-  test('d. live v1.0 sample renderer surface RPCs: Button functionCall emits callAgentFunction to Debug Events for round-trip reply and auto-rejects on /gallery in < 1s', async ({
+  test('d. live v1.0 sample renderer: a2uiBridge.callAgentFunction round-trips via Debug Events reply form and auto-rejects on /gallery in < 1s', async ({
     page,
   }) => {
-    // 1. In /workspace with live sample renderer: load surface with Button calling non-catalog agent function
+    // 1. In /workspace with live sample renderer: load a simple surface
     await page.goto(`/?renderer=${encodeURIComponent(RENDERER_URLS.angular)}`);
     await waitForMonacoEditor(page);
     await waitForPreviewTab(page);
@@ -731,22 +731,10 @@ test.describe('A2UI v1.0 Function RPC Journeys Suite', () => {
           surfaceId: 'live-rpc-surface',
           catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
           components: [
-            {id: 'root', component: 'Column', children: ['trigger_btn']},
             {
-              id: 'trigger_btn',
-              component: 'Button',
-              child: 'trigger_btn_text',
-              action: {
-                functionCall: {
-                  '@call': 'orderCoffee',
-                  args: {size: 'large'},
-                },
-              },
-            },
-            {
-              id: 'trigger_btn_text',
+              id: 'root',
               component: 'Text',
-              text: 'Trigger Live Agent RPC',
+              text: 'Live RPC Surface',
             },
           ],
         },
@@ -756,8 +744,7 @@ test.describe('A2UI v1.0 Function RPC Journeys Suite', () => {
     await setMonacoContent(page, liveRpcPayload);
 
     const iframe = previewFrame(page);
-    const button = iframe.getByRole('button', {name: 'Trigger Live Agent RPC'});
-    await expect(button).toBeVisible({timeout: 15_000});
+    await expect(iframe.getByText('Live RPC Surface')).toBeVisible({timeout: 15_000});
 
     // 2. Trigger callAgentFunction via real RpcHandler / PreviewBridge in live sample renderer
     await iframe.locator('body').evaluate(() => {

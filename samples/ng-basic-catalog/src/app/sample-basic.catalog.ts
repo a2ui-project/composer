@@ -17,11 +17,14 @@
 import {Injectable} from '@angular/core';
 import {BasicCatalog} from '@a2ui/angular';
 import {attachCatalogSchema} from '../../../shared/attach-catalog-schema.js';
-import {COMPONENT_USAGES} from '../../../shared/usages.js';
 
 /**
  * Angular catalog providing canonical A2UI v1.0 BasicCatalog components
- * enriched with component usage examples from usages.ts for the Gallery.
+ * enriched with default catalogSchema metadata for Composer and Gallery inspection.
+ *
+ * Note: `@a2ui/angular`'s `BasicCatalog` does not yet forward `@a2ui/web_core`'s
+ * basic-catalog document options (`instructions`), so `catalogSchema.instructions`
+ * is tracked upstream in `@a2ui/angular`.
  */
 @Injectable({
   providedIn: 'root',
@@ -29,6 +32,6 @@ import {COMPONENT_USAGES} from '../../../shared/usages.js';
 export class SampleBasicCatalog extends BasicCatalog {
   constructor() {
     super();
-    attachCatalogSchema(this, COMPONENT_USAGES);
+    attachCatalogSchema(this);
   }
 }

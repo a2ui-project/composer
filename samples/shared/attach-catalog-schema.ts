@@ -14,40 +14,23 @@
  * limitations under the License.
  */
 
-import type {ComponentUsages} from 'a2ui-bridge';
-
 const baseSchemaResolvers = new WeakMap<object, (this: unknown) => unknown>();
 
 /**
- * Attaches component usage examples and enriched metadata to an A2UI catalog's
- * runtime components and `catalogSchema` for Composer and Gallery inspection.
+ * Attaches title and description defaults to an A2UI catalog's `catalogSchema`
+ * for Composer and Gallery inspection without serializing component usage examples.
  *
- * @param catalog The catalog instance whose components and schema will be enriched.
- * @param usages Component usage definitions keyed by component name.
+ * @param catalog The catalog instance whose schema will be enriched with title and description.
  * @returns The enriched catalog instance.
  */
 export function attachCatalogSchema<
   T extends {
-    components?: ReadonlyMap<string, unknown> | Map<string, unknown>;
     catalogSchema?: unknown;
   },
->(catalog: T, usages: ComponentUsages): T {
+>(catalog: T): T {
   const ownDesc = Object.getOwnPropertyDescriptor(catalog, 'catalogSchema');
   if ((ownDesc && !ownDesc.configurable) || !Object.isExtensible(catalog)) {
     return catalog;
-  }
-
-  if (catalog.components && typeof catalog.components.entries === 'function') {
-    for (const [name, comp] of catalog.components.entries()) {
-      if (usages[name] && comp && typeof comp === 'object' && Object.isExtensible(comp)) {
-        try {
-          (comp as Record<string, unknown>)['examples'] = [usages[name]];
-          (comp as Record<string, unknown>)['example'] = usages[name];
-        } catch {
-          // Degrade gracefully if component object cannot be mutated.
-        }
-      }
-    }
   }
 
   let resolveBaseSchema = baseSchemaResolvers.get(catalog);
@@ -63,28 +46,11 @@ export function attachCatalogSchema<
   Object.defineProperty(catalog, 'catalogSchema', {
     get() {
       const base = (resolveBaseSchema!.call(this) ?? {}) as Record<string, unknown>;
-      const schema: Record<string, unknown> = {
+      return {
         title: 'Basic Catalog',
         description: 'Unified catalog of basic A2UI components and functions.',
         ...base,
-        examples: usages,
       };
-      if (schema['components'] && typeof schema['components'] === 'object') {
-        const components = {
-          ...(schema['components'] as Record<string, Record<string, unknown>>),
-        };
-        for (const [key, compUsage] of Object.entries(usages)) {
-          if (components[key]) {
-            components[key] = {
-              ...components[key],
-              examples: [compUsage],
-              example: compUsage,
-            };
-          }
-        }
-        schema['components'] = components;
-      }
-      return schema;
     },
     configurable: true,
     enumerable: true,

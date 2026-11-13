@@ -16,7 +16,7 @@
 
 import {bootstrapApplication} from '@angular/platform-browser';
 import {provideZonelessChangeDetection} from '@angular/core';
-import {injectBasicCatalogStyles, setMarkdownRenderer} from '@a2ui/web_core/catalogs/basic/v1';
+import {injectBasicCatalogStyles} from '@a2ui/web_core/catalogs/basic/v1';
 import {renderMarkdown} from '@a2ui/markdown-it';
 import {createMcpFunctionsCatalog} from 'a2ui-bridge';
 import {provideA2uiSandbox} from 'a2ui-bridge/angular';
@@ -26,13 +26,12 @@ import {COMPONENT_USAGES} from '../../shared/usages.js';
 import {DEMOS} from '../../shared/demos';
 
 injectBasicCatalogStyles();
-setMarkdownRenderer((markdown, options) => renderMarkdown(markdown, options));
 
 bootstrapApplication(AppComponent, {
   providers: [
     provideZonelessChangeDetection(),
     provideA2uiSandbox([SampleBasicCatalog, createMcpFunctionsCatalog()], {
-      markdownRendererFn: (markdown: string) => renderMarkdown(markdown),
+      markdownRendererFn: renderMarkdown,
       getComponentUsages: async () => COMPONENT_USAGES,
       getDemos: async () => DEMOS,
     }),

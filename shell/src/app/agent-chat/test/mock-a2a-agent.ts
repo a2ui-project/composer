@@ -48,15 +48,12 @@ export const flightA2uiPayload = [
       components: [
         {
           id: 'root',
-          component: {
-            Canvas: {
-              cardTitle: 'Flight Options',
-              cardDescription: 'Review and select non-stop flights',
-              cardIcon: 'flight',
-              autoOpen: true,
-              children: ['header_text', 'flight_card_ana', 'flight_card_jal', 'confirm_btn'],
-            },
-          },
+          component: 'Canvas',
+          cardTitle: 'Flight Options',
+          cardDescription: 'Review and select non-stop flights',
+          cardIcon: 'flight',
+          autoOpen: true,
+          children: ['header_text', 'flight_card_ana', 'flight_card_jal', 'confirm_btn'],
         },
         {
           id: 'header_text',
@@ -134,129 +131,6 @@ export const flightA2uiPayload = [
         },
       ],
       dataModel: {
-        selectedFlight: 'NH007',
-        tripType: 'RoundTrip',
-      },
-    },
-  },
-];
-
-export const flightA2uiPayloadV09 = [
-  {
-    version: 'v0.9',
-    createSurface: {
-      surfaceId: 'flight-options',
-      catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-      sendDataModel: true,
-    },
-  },
-  {
-    version: 'v0.9',
-    updateComponents: {
-      surfaceId: 'flight-options',
-      components: [
-        {
-          id: 'root',
-          component: {
-            Canvas: {
-              cardTitle: 'Flight Options',
-              cardDescription: 'Review and select non-stop flights',
-              cardIcon: 'flight',
-              autoOpen: true,
-              children: ['header_text', 'flight_card_ana', 'flight_card_jal', 'confirm_btn'],
-            },
-          },
-        },
-        {
-          id: 'header_text',
-          component: 'Text',
-          text: 'Available Non-Stop Flights (SFO ➔ NRT)',
-          variant: 'h2',
-        },
-        {
-          id: 'flight_card_ana',
-          component: 'Card',
-          child: 'flight_col_ana',
-        },
-        {
-          id: 'flight_col_ana',
-          component: 'Column',
-          children: ['ana_title', 'ana_route', 'ana_meta'],
-        },
-        {
-          id: 'ana_title',
-          component: 'Text',
-          text: '✈️ All Nippon Airways (ANA NH007)',
-          variant: 'h3',
-        },
-        {
-          id: 'ana_route',
-          component: 'Text',
-          text: 'Depart 11:30 AM (SFO) ➔ Arrive 3:45 PM (+1 day, NRT)',
-          variant: 'body',
-        },
-        {
-          id: 'ana_meta',
-          component: 'Text',
-          text: 'Duration: 11h 15m (Non-stop) • Fare: $1,180 (Economy)',
-          variant: 'caption',
-        },
-        {
-          id: 'flight_card_jal',
-          component: 'Card',
-          child: 'flight_col_jal',
-        },
-        {
-          id: 'flight_col_jal',
-          component: 'Column',
-          children: ['jal_title', 'jal_route', 'jal_meta'],
-        },
-        {
-          id: 'jal_title',
-          component: 'Text',
-          text: '✈️ Japan Airlines (JAL JL001)',
-          variant: 'h3',
-        },
-        {
-          id: 'jal_route',
-          component: 'Text',
-          text: 'Depart 1:15 PM (SFO) ➔ Arrive 5:30 PM (+1 day, NRT)',
-          variant: 'body',
-        },
-        {
-          id: 'jal_meta',
-          component: 'Text',
-          text: 'Duration: 11h 15m (Non-stop) • Fare: $1,240 (Economy)',
-          variant: 'caption',
-        },
-        {
-          id: 'confirm_btn',
-          component: 'Button',
-          child: 'confirm_btn_text',
-          variant: 'primary',
-          action: {
-            event: {
-              name: 'selectFlight',
-              context: {
-                flightNumber: 'NH007',
-              },
-            },
-          },
-        },
-        {
-          id: 'confirm_btn_text',
-          component: 'Text',
-          text: 'Select ANA NH007 & Continue',
-          variant: 'body',
-        },
-      ],
-    },
-  },
-  {
-    version: 'v0.9',
-    updateDataModel: {
-      surfaceId: 'flight-options',
-      value: {
         selectedFlight: 'NH007',
         tripType: 'RoundTrip',
       },

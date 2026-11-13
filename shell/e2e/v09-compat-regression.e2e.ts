@@ -157,22 +157,20 @@ test.describe('v0.9 Compatibility Regression Suite', () => {
 
     await setupMockRenderers(context);
 
-    await page.addInitScript(() => {
+    const allowedOrigins = [
+      'http://mock-v09-renderer.local',
+      'http://mock-v10-renderer.local',
+      'http://mock-agent.local',
+      new URL(RENDERER_URLS.angular).origin,
+    ];
+    await page.addInitScript(origins => {
       if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
         sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
         localStorage.clear();
         localStorage.setItem('a2ui_composer_force_1p', 'true');
-        localStorage.setItem(
-          'a2ui_composer_allowed_origins',
-          JSON.stringify([
-            'http://mock-v09-renderer.local',
-            'http://mock-v10-renderer.local',
-            'http://mock-agent.local',
-            'http://localhost:3456',
-          ]),
-        );
+        localStorage.setItem('a2ui_composer_allowed_origins', JSON.stringify(origins));
       }
-    });
+    }, allowedOrigins);
   });
 
   test('loads CAR_BOOKING (v0.9) starter draft on /workspace and dispatches 3-message v0.9 RENDER_A2UI', async ({
@@ -551,8 +549,42 @@ test.describe('v0.9 Compatibility Regression Suite', () => {
     const recoveredDraft = await getMonacoContent(page);
     expect(recoveredDraft).toContain('User Customised Car Booking');
 
-    // Verify v0.9 renderer displays without PROTOCOL_VERSION_MISMATCH
+    // Verify v0.9 renderer receives the customised payload and no new PROTOCOL_VERSION_MISMATCH is logged
     const iframe = previewFrame(page);
     await expect(iframe.locator('body')).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        return iframe.locator('body').evaluate(() => {
+          const msgs =
+            (window as unknown as {__receivedRenderA2ui?: unknown[][]}).__receivedRenderA2ui || [];
+          return msgs.some(
+            batch =>
+              Array.isArray(batch) && JSON.stringify(batch).includes('User Customised Car Booking'),
+          );
+        });
+      })
+      .toBe(true);
+
+    const historyAfterRecovery = await page.evaluate(() => {
+      const ng = (window as unknown as {ng?: {getComponent(el: Element): unknown}}).ng;
+      const shell = document.querySelector('a2ui-composer-shell');
+      const comp =
+        ng && shell
+          ? (ng.getComponent(shell) as {
+              errorLogger?: {
+                getHistory(): Array<{code?: string; message?: string; level?: string}>;
+              };
+            })
+          : null;
+      return comp?.errorLogger?.getHistory() ?? [];
+    });
+    const mismatchCount = historyAfterRecovery.filter(
+      item =>
+        item.code === 'PROTOCOL_VERSION_MISMATCH' ||
+        item.message?.includes('PROTOCOL_VERSION_MISMATCH') ||
+        item.message?.includes('Protocol version mismatch'),
+    ).length;
+    expect(mismatchCount).toBe(1);
   });
 });

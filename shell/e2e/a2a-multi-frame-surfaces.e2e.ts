@@ -47,14 +47,11 @@ function turnPayload(turn: number) {
           {id: 'inline_text', component: 'Text', text: `### INLINE SURFACE #${turn}`},
           {
             id: 'canvas',
-            component: {
-              Canvas: {
-                cardTitle: `Turn ${turn} details`,
-                cardIcon: 'dashboard',
-                autoOpen: false,
-                children: ['canvas_text'],
-              },
-            },
+            component: 'Canvas',
+            cardTitle: `Turn ${turn} details`,
+            cardIcon: 'dashboard',
+            autoOpen: false,
+            children: ['canvas_text'],
           },
           {id: 'canvas_text', component: 'Text', text: `### CANVAS CONTENT #${turn}`},
         ],

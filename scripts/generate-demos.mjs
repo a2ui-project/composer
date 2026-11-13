@@ -30,7 +30,10 @@ import {existsSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {AgentToRendererMessageSchema as A2uiMessageSchema} from '@a2ui/web_core/v1_0';
-import {BASIC_COMPONENTS} from '@a2ui/web_core/catalogs/basic/v1';
+import {
+  extractSurfaceComponents,
+  validateV10Components,
+} from '../samples/shared/validate-components.ts';
 import {normalizeDemoHeadings} from './normalize-demo-headings.mjs';
 
 // `fileURLToPath` (rather than `new URL(...).pathname`) is required here:
@@ -155,7 +158,7 @@ function idFromFilename(filename) {
   return filename.replace(/^\d+_/, '').replace(/\.json$/, '');
 }
 
-function buildDemos(filenames) {
+function readExamples(filenames) {
   const demos = [];
   const seenIds = new Map();
 
@@ -183,6 +186,9 @@ function buildDemos(filenames) {
       A2uiMessageSchema.parse(message);
     }
 
+    const components = extractSurfaceComponents(example.messages, filename);
+    validateV10Components(components, filename);
+
     const id = idFromFilename(filename);
     if (!id) {
       throw new Error(
@@ -209,6 +215,8 @@ function buildDemos(filenames) {
   return demos;
 }
 
+const buildDemos = readExamples;
+
 /** Validates the hand-authored examples before they enter any renderer bundle. */
 function readShowcaseDemos() {
   return (
@@ -228,41 +236,9 @@ function readShowcaseDemos() {
         for (const message of example.messages) {
           A2uiMessageSchema.parse(message);
         }
-        const components = example.messages.flatMap(message => {
-          if (message.createSurface?.components) return message.createSurface.components;
-          if (message.updateComponents?.components) return message.updateComponents.components;
-          return [];
-        });
-        const ids = new Set(components.map(component => component.id));
-        if (!ids.has('root') || ids.size !== components.length) {
-          throw new Error(`${filename}: showcase needs a root and unique component ids.`);
-        }
-        for (const {id, component, ...props} of components) {
-          const api = BASIC_COMPONENTS.find(api => api.name === component);
-          if (!api) throw new Error(`${filename}: unknown basic component ${component}.`);
-          api.schema.strict().parse(props);
-          const childRefs = [];
-          if (props.child) childRefs.push(props.child);
-          if (Array.isArray(props.children)) childRefs.push(...props.children);
-          else if (
-            props.children &&
-            typeof props.children === 'object' &&
-            props.children.componentId
-          ) {
-            childRefs.push(props.children.componentId);
-          }
-          if (props.trigger) childRefs.push(props.trigger);
-          if (props.content) childRefs.push(props.content);
-          if (Array.isArray(props.tabs)) {
-            for (const tab of props.tabs) {
-              if (tab.child) childRefs.push(tab.child);
-            }
-          }
-          for (const child of childRefs) {
-            if (!ids.has(child))
-              throw new Error(`${filename}: ${id} references missing child ${child}.`);
-          }
-        }
+        const components = extractSurfaceComponents(example.messages, filename);
+        validateV10Components(components, filename);
+
         return {
           id: `showcase-${idFromFilename(filename)}`,
           name: example.name,
@@ -329,4 +305,17 @@ function main() {
   writeOutput(json, demos.length);
 }
 
-main();
+export {
+  readExamples,
+  buildDemos,
+  readShowcaseDemos,
+  idFromFilename,
+  compareFilenames,
+  withoutReplacedExamples,
+  renderJson,
+  main,
+};
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
+}

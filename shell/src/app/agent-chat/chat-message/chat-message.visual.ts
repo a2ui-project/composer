@@ -39,7 +39,7 @@ function inlineSurfacePart(surfaceId: string, title: string, caption: string) {
           {id: 'root', component: 'Card', child: 'body'},
           {id: 'body', component: 'Column', children: ['title', 'caption']},
           {id: 'title', component: 'Text', text: `### ${title}`},
-          {id: 'caption', component: 'Text', text: caption},
+          {id: 'caption', component: 'Text', text: caption, variant: 'caption'},
         ],
       },
     },
