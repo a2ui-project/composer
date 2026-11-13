@@ -159,6 +159,9 @@ export class RawFrame {
       if (catalog || hasCatalogResponse) {
         untracked(() => {
           const currentLayout = this.layoutJson();
+          if (currentLayout !== this.stateSync.activeDraft()) {
+            return;
+          }
           try {
             const payload = this.parseLayoutString(currentLayout);
             if (payload !== null) {

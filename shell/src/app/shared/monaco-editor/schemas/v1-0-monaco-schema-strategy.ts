@@ -386,39 +386,9 @@ export class V10MonacoSchemaStrategy implements MonacoSchemaStrategy {
     const primaryCatalog = basePrimaryCatalog
       ? {
           ...(basePrimaryCatalog as Record<string, unknown>),
-          ...(Object.keys(mergedDefs).length > 0
-            ? {
-                $defs: {
-                  ...mergedDefs,
-                  ...(((basePrimaryCatalog as Record<string, unknown>)['$defs'] as Record<
-                    string,
-                    unknown
-                  >) ?? {}),
-                },
-              }
-            : {}),
-          ...(Object.keys(mergedComponentMap).length > 0
-            ? {
-                components: {
-                  ...mergedComponentMap,
-                  ...(((basePrimaryCatalog as Record<string, unknown>)['components'] as Record<
-                    string,
-                    unknown
-                  >) ?? {}),
-                },
-              }
-            : {}),
-          ...(Object.keys(mergedFunctions).length > 0
-            ? {
-                functions: {
-                  ...mergedFunctions,
-                  ...(((basePrimaryCatalog as Record<string, unknown>)['functions'] as Record<
-                    string,
-                    unknown
-                  >) ?? {}),
-                },
-              }
-            : {}),
+          ...(Object.keys(mergedDefs).length > 0 ? {$defs: mergedDefs} : {}),
+          ...(Object.keys(mergedComponentMap).length > 0 ? {components: mergedComponentMap} : {}),
+          ...(Object.keys(mergedFunctions).length > 0 ? {functions: mergedFunctions} : {}),
         }
       : null;
 

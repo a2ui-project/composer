@@ -444,4 +444,74 @@ describe('V10MonacoSchemaStrategy', () => {
     expect(Object.prototype.hasOwnProperty.call(entry?.schema, 'prototype')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(entry?.schema, '__proto__')).toBe(false);
   });
+
+  it('preserves merged definitions including secondary-catalog functions in catalog.json alias schemas when primary catalog defines anyFunction and anyComponent', () => {
+    const primaryCatalogWithDefs: Catalog = {
+      $id: 'https://example.com/primary-catalog.json',
+      title: 'Primary Catalog',
+      protocolVersion: '1.0',
+      components: {
+        Button: {
+          type: 'object',
+          properties: {component: {const: 'Button'}},
+          required: ['component'],
+        },
+      },
+      functions: {
+        primaryFunc: {type: 'object', description: 'Primary function'},
+      },
+      $defs: {
+        anyFunction: {
+          oneOf: [{$ref: '#/functions/primaryFunc'}],
+        },
+        anyComponent: {
+          oneOf: [{$ref: '#/components/Button'}],
+        },
+      },
+    };
+
+    const secondaryCatalog: Catalog = {
+      $id: 'https://example.com/secondary-catalog.json',
+      title: 'Secondary Catalog',
+      protocolVersion: '1.0',
+      components: {
+        Card: {
+          type: 'object',
+          properties: {component: {const: 'Card'}},
+          required: ['component'],
+        },
+      },
+      functions: {
+        secondaryFunc: {type: 'object', description: 'Secondary function'},
+      },
+    };
+
+    const strategy = new V10MonacoSchemaStrategy();
+    const schemas = strategy.buildSchemas({
+      catalog: primaryCatalogWithDefs,
+      catalogs: [primaryCatalogWithDefs, secondaryCatalog],
+    });
+
+    const aliasUris = [
+      'file:///catalog.json',
+      'catalog.json',
+      'https://a2ui.org/specification/v1_0/catalog.json',
+    ];
+    for (const uri of aliasUris) {
+      const aliasEntry = schemas.find(s => s.uri === uri);
+      expect(aliasEntry, `Alias schema ${uri} should exist`).toBeDefined();
+      const schema = aliasEntry?.schema as Record<string, unknown>;
+      const defs = schema['$defs'] as Record<string, Record<string, unknown>>;
+      expect(defs).toBeDefined();
+      expect(defs['anyFunction']).toEqual({
+        oneOf: [{$ref: '#/functions/primaryFunc'}, {$ref: '#/functions/secondaryFunc'}],
+      });
+      expect(defs['anyComponent']).toEqual({
+        oneOf: [{$ref: '#/components/Button'}, {$ref: '#/components/Card'}],
+      });
+      const fns = schema['functions'] as Record<string, unknown>;
+      expect(fns['primaryFunc']).toBeDefined();
+      expect(fns['secondaryFunc']).toBeDefined();
+    }
+  });
 });

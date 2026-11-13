@@ -16,7 +16,7 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {computed, signal} from '@angular/core';
+import {computed, inject, signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ReplaySubject} from 'rxjs';
 import {Clipboard} from '@angular/cdk/clipboard';
@@ -25,7 +25,12 @@ import {GalleryLauncher} from './gallery-launcher';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {GalleryHarness} from './test/gallery.harness';
 import {GalleryCatalog, CategorizedComponents} from './services/gallery-catalog';
-import {type ComponentProvenance} from './protocol/gallery-protocol-strategy';
+import {
+  type ComponentProvenance,
+  type GalleryProtocolStrategy,
+} from './protocol/gallery-protocol-strategy';
+import {V09GalleryStrategy} from './protocol/v0-9-gallery-strategy';
+import {V10GalleryStrategy} from './protocol/v1-0-gallery-strategy';
 import {PreviewBridgeMessageType, type ComponentUsage, ThemePreference} from 'a2ui-bridge';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {CatalogSchemaResolver, ParsedProperty} from './schema/catalog-schema-resolver';
@@ -144,6 +149,7 @@ interface TestFriendlyGallery {
 }
 
 class MockGalleryCatalogService {
+  private readonly catalogManagement = inject(CatalogManagement);
   readonly componentsList = signal<CategorizedComponents[]>([]);
   readonly selectedComponentKey = signal<string | null>(null);
   readonly selectedComponentProperties = signal<ParsedProperty[]>([]);
@@ -153,6 +159,11 @@ class MockGalleryCatalogService {
   private readonly _galleryActive = signal<boolean>(false);
   readonly galleryActive = this._galleryActive.asReadonly();
   readonly loadingUsages = signal<boolean>(false);
+  readonly galleryStrategy = computed<GalleryProtocolStrategy>(() => {
+    return this.catalogManagement.activeProtocolVersion() === 'v1.0'
+      ? new V10GalleryStrategy()
+      : new V09GalleryStrategy();
+  });
 
   selectComponent = vi.fn((key: string | null) => {
     this.selectedComponentKey.set(key);
