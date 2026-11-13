@@ -29,7 +29,7 @@ import {
   TextApi,
 } from '@a2ui/web_core/v0_9/basic_catalog';
 import {z} from 'zod/v3';
-import {zodToJsonSchema} from 'zod-to-json-schema';
+import {ignoreOverride, zodToJsonSchema} from 'zod-to-json-schema';
 import {SLACK_LIMITS} from '@copilotkit/channels-slack/render';
 import {InputComponentType, InputKind} from './form-input';
 import {HTTP_URL_PATTERN} from './http-url';
@@ -349,6 +349,7 @@ type JsonSchemaConverter = (
     target: 'jsonSchema2019-09';
     $refStrategy: 'none';
     postProcess: (jsonSchema: unknown, def: unknown) => unknown;
+    override?: (def: unknown) => unknown;
   },
 ) => unknown;
 
@@ -416,11 +417,36 @@ function processRefs(node: unknown, localDefs?: Record<string, unknown>): void {
   }
 }
 
+/**
+ * Short-circuits zod-to-json-schema recursion for self-referential component and
+ * function schemas.
+ *
+ * In @a2ui/web_core 0.15.0, schemas such as AccessibilityAttributes reference
+ * DynamicString, which references FunctionCall, which references DynamicValue,
+ * which references FunctionCall again, forming a cyclic Zod definition graph.
+ * When zodToJsonSchema executes with `$refStrategy: 'none'`, it detects this
+ * recursion and logs 37 `Recursive reference detected at #/...! Defaulting to any`
+ * warnings in the console.
+ *
+ * By intercepting any schema definition whose description starts with 'REF:' and
+ * returning `{description}` immediately, we prevent zod-to-json-schema from
+ * recursing into cyclic child schemas. `processRefs()` then subsequently rewrites
+ * the node into a standard `$ref` pointer without triggering warning logs.
+ */
+function refSchemaOverride(def: unknown): unknown {
+  const description = (def as {description?: unknown})?.description;
+  if (typeof description === 'string' && description.startsWith('REF:')) {
+    return {description};
+  }
+  return ignoreOverride;
+}
+
 function schemaJsonFor(schema: unknown, localDefs?: Record<string, unknown>): JsonSchemaObject {
   const jsonSchema = toJsonSchema(schema, {
     target: 'jsonSchema2019-09',
     $refStrategy: 'none',
     postProcess: publishedSchemaFor,
+    override: refSchemaOverride,
   }) as JsonSchemaObject;
   processRefs(jsonSchema, localDefs);
   return jsonSchema;
@@ -512,7 +538,7 @@ function callArgsSchemaFor(parameters: JsonSchemaObject): JsonSchemaObject {
   };
 }
 
-function createSlackCatalogJson(catalog: typeof slackCatalog): SlackCatalogJson {
+export function createSlackCatalogJson(catalog: typeof slackCatalog): SlackCatalogJson {
   const components: Record<string, unknown> = {};
   for (const [name, api] of catalog.components.entries()) {
     components[name] = componentSchemaFor(name, api);

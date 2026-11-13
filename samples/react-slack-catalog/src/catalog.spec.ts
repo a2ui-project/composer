@@ -16,11 +16,11 @@
 
 import {MessageProcessor} from '@a2ui/web_core/v0_9';
 import Ajv2019, {type SchemaObject, type ValidateFunction} from 'ajv/dist/2019';
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 // web_core doesn't export its JSON schemas, so this reads the copy it ships from
 // the workspace's root node_modules, as vitest.config.ts does for React.
 import commonTypesJson from '../../../node_modules/@a2ui/web_core/src/v0_9/schemas/common_types.json';
-import {SLACK_CATALOG_ID, slackCatalog, slackCatalogJson} from './catalog';
+import {SLACK_CATALOG_ID, createSlackCatalogJson, slackCatalog, slackCatalogJson} from './catalog';
 import dataBoundActionJson from '../public/examples/data-bound-action.json';
 import marketSnapshotJson from '../public/examples/market-snapshot.json';
 import {SLACK_COMPONENT_USAGES} from './examples';
@@ -669,5 +669,16 @@ describe('Slack catalog schema payload', () => {
         },
       },
     ]);
+  });
+
+  it('emits zero warnings when generating the catalog schema', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const generated = createSlackCatalogJson(slackCatalog);
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(generated).toEqual(slackCatalogJson);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

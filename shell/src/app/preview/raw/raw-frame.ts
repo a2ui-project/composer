@@ -158,18 +158,7 @@ export class RawFrame {
       this.catalogManagement.activeProtocolVersion();
       if (catalog || hasCatalogResponse) {
         untracked(() => {
-          const currentLayout = this.layoutJson();
-          if (currentLayout !== this.stateSync.activeDraft()) {
-            return;
-          }
-          try {
-            const payload = this.parseLayoutString(currentLayout);
-            if (payload !== null) {
-              this.sendValidatedRenderA2UI(payload);
-            }
-          } catch (err) {
-            // Ignore initial parse errors
-          }
+          this.renderSynchronizedCurrentLayout(false);
         });
       }
     });
@@ -184,18 +173,7 @@ export class RawFrame {
         takeUntilDestroyed(),
       )
       .subscribe(() => {
-        try {
-          const payload = this.parseLayoutString(this.layoutJson());
-          if (payload !== null) {
-            this.sendValidatedRenderA2UI(payload);
-          }
-        } catch (err) {
-          if (err instanceof SyntaxError) {
-            this.logger.warn('Syntax error in JSON:', err);
-          } else {
-            this.logger.error('Unexpected error sending A2UI to renderer:', err);
-          }
-        }
+        this.renderSynchronizedCurrentLayout(true);
       });
 
     // Sync back changes in StateSync activeDraft or sessionResetNonce to editor layoutJson
@@ -431,6 +409,29 @@ export class RawFrame {
         window.dispatchEvent(new OpenPanelEvent(ComposerPanelId.Raw));
         this.monacoEditor()?.navigateToPosition(line, col ?? 1);
       });
+    }
+  }
+
+  private renderSynchronizedCurrentLayout(logErrors: boolean): void {
+    this.stateSync.syncCatalogDraft();
+    const currentLayout = this.layoutJson();
+    if (currentLayout !== this.stateSync.activeDraft()) {
+      return;
+    }
+    try {
+      const payload = this.parseLayoutString(currentLayout);
+      if (payload !== null) {
+        this.sendValidatedRenderA2UI(payload);
+      }
+    } catch (err) {
+      if (!logErrors) {
+        return;
+      }
+      if (err instanceof SyntaxError) {
+        this.logger.warn('Syntax error in JSON:', err);
+      } else {
+        this.logger.error('Unexpected error sending A2UI to renderer:', err);
+      }
     }
   }
 
