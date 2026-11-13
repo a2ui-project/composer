@@ -106,6 +106,7 @@ class MockStateSync {
     this.activeDraftSignal.set(val);
   });
   hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
+  syncCatalogDraft = vi.fn(() => this.activeDraftSignal());
 }
 
 class MockAppConfigProvider {

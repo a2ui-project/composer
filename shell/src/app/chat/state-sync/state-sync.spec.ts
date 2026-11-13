@@ -1273,5 +1273,47 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(lastMessage.content).toContain('Version 1.0 is officially released!');
       expect(lastMessage.content).toContain('"component":"Text"');
     });
+
+    it('syncCatalogDraft() swaps an untouched samplePayload to CAR_BOOKING_V1_0 when switching from a v0.9 renderer with samplePayload to a v1.0 renderer without samplePayload', () => {
+      const SLACK_SAMPLE = JSON.stringify([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'slack',
+            catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
+          },
+        },
+      ]);
+      startupConfigStateMock.activeRenderer.set({samplePayload: SLACK_SAMPLE});
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
+      });
+      catalogManagementMock.activeProtocolVersion.set('v0.9');
+      TestBed.tick();
+
+      expect(service.activeDraft()).toBe(SLACK_SAMPLE);
+      expect(service.hasEditedDraft()).toBe(false);
+
+      // Now switch to Angular Basic (no samplePayload, v1.0 protocol)
+      startupConfigStateMock.activeRenderer.set(null);
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set({catalogId: BASIC_CATALOG_ID_V1_0});
+
+      // Calling syncCatalogDraft() synchronously reconciles the draft before microtasks/subscriptions run
+      const result = service.syncCatalogDraft();
+      expect(result).toBe(CAR_BOOKING_V1_0);
+      expect(service.activeDraft()).toBe(CAR_BOOKING_V1_0);
+      expect(service.hasEditedDraft()).toBe(false);
+    });
+
+    it('syncCatalogDraft() reconciles protocol version even when activeCatalog is non-null and hasReceivedCatalogResponse is true', () => {
+      catalogManagementMock.hasReceivedCatalogResponse.set(true);
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set({catalogId: BASIC_CATALOG_ID_V1_0});
+
+      const result = service.syncCatalogDraft();
+      expect(result).toBe(CAR_BOOKING_V1_0);
+      expect(service.activeDraft()).toBe(CAR_BOOKING_V1_0);
+    });
   });
 });

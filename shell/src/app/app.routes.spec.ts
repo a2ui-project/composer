@@ -80,6 +80,7 @@ class MockStateSync {
   readonly sessionResetNonce = signal(0);
   updateDraft = vi.fn();
   hydrateActiveDraft = vi.fn(() => '{}');
+  syncCatalogDraft = vi.fn(() => '{}');
 }
 
 class MockAppConfigProvider {

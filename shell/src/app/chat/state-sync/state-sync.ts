@@ -71,6 +71,7 @@ export class StateSync {
   private previousCatalogId: string | null = null;
   private isDraftEdited = false;
   private lastSynchronizedLayout: string | null = null;
+  private lastSamplePayload: string | null = null;
   private readonly _activeDraft = signal<string>('');
   /**
    * Volatile, read-only reactive Signal exposing the currently buffered
@@ -92,19 +93,8 @@ export class StateSync {
         filter(catalog => !!catalog),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe(catalog => {
-        const catalogId = getCatalogId(catalog!) || '';
-        const isInitialHandshake = this.previousCatalogId === null;
-        const isCatalogChange =
-          this.previousCatalogId !== null && this.previousCatalogId !== catalogId;
-
-        if ((isInitialHandshake || isCatalogChange) && !this.isDraftEdited) {
-          const initial = this.getInitialDraft(catalogId);
-          this._activeDraft.set(initial);
-          this.userDraftInput$.next(initial);
-        }
-
-        this.previousCatalogId = catalogId;
+      .subscribe(() => {
+        this.syncCatalogDraft();
       });
 
     toObservable(this.catalogManagement.activeProtocolVersion)
@@ -223,6 +213,7 @@ export class StateSync {
     this.cancelPendingDraftSync$.next();
     this.isDraftEdited = false;
     this.lastSynchronizedLayout = null;
+    this.lastSamplePayload = null;
     this.previousCatalogId = null;
     const catalog = this.catalogManagement.activeCatalog();
     let catalogId = (catalog && getCatalogId(catalog)) || '';
@@ -252,12 +243,39 @@ export class StateSync {
     const effectiveCatalogId = (catalog && getCatalogId(catalog)) || defaultCatalogId;
     this.isDraftEdited = false;
     this.lastSynchronizedLayout = null;
+    this.lastSamplePayload = null;
     this.previousCatalogId = effectiveCatalogId;
     const strategy = this.getStrategy(version);
     const blank = strategy.getBlankDraft(effectiveCatalogId);
     this._activeDraft.set(blank);
     this.sessionResetNonce.update(n => n + 1);
     this.syncLayoutToHistory(blank);
+  }
+
+  /**
+   * Synchronously reconciles the active draft against activeCatalog and protocol
+   * version changes when the draft has not been edited by the user.
+   */
+  syncCatalogDraft(): string {
+    const catalog = this.catalogManagement.activeCatalog();
+    if (catalog) {
+      const catalogId = getCatalogId(catalog) || '';
+      const isInitialHandshake = this.previousCatalogId === null;
+      const isCatalogChange =
+        this.previousCatalogId !== null && this.previousCatalogId !== catalogId;
+
+      if ((isInitialHandshake || isCatalogChange) && !this.isDraftEdited) {
+        const initial = this.getInitialDraft(catalogId);
+        this._activeDraft.set(initial);
+        this.userDraftInput$.next(initial);
+      }
+
+      this.previousCatalogId = catalogId;
+    }
+    if (this.hasReceivedCatalogResponse()) {
+      this.handleProtocolVersionChange(this.getActiveProtocolVersion());
+    }
+    return this._activeDraft();
   }
 
   private handleProtocolVersionChange(version: A2uiProtocolVersion): void {
@@ -277,6 +295,15 @@ export class StateSync {
       targetCatalogId = BASIC_CATALOG_ID_V1_0;
     } else if (targetCatalogId === BASIC_CATALOG_ID_V1_0 && version === 'v0.9') {
       targetCatalogId = BASIC_CATALOG_ID_V0_9;
+    }
+
+    if (this.lastSamplePayload !== null && currentDraft === this.lastSamplePayload) {
+      if (this.startupConfigState.activeRenderer()?.samplePayload !== currentDraft) {
+        const initial = this.getInitialDraft(targetCatalogId);
+        this._activeDraft.set(initial);
+        this.userDraftInput$.next(initial);
+      }
+      return;
     }
 
     if (isUntouchedStarterDraft(currentDraft)) {
@@ -310,8 +337,10 @@ export class StateSync {
   private getInitialDraft(catalogId: string): string {
     const activeRenderer = this.startupConfigState.activeRenderer();
     if (activeRenderer?.samplePayload) {
+      this.lastSamplePayload = activeRenderer.samplePayload;
       return activeRenderer.samplePayload;
     }
+    this.lastSamplePayload = null;
     if (!catalogId) {
       return '';
     }
