@@ -814,6 +814,8 @@ export class ChatCoordinator {
       const wasHealed = strategy.runCatalogComponentSchemaCheck(
         parsedBlocks,
         this.mergedActiveCatalog() ?? undefined,
+        undefined,
+        this.catalogManagement.activeCatalogs(),
       );
       if (wasHealed) {
         this.chatState.setPipelineStatus(PipelineStatus.HEALING);

@@ -66,7 +66,7 @@ describe('V10PayloadStrategy', () => {
   });
 
   describe('normalizeBlocks', () => {
-    it('normalizes omitted version to canonical wire version "1.0" while preserving raw explicit "v1.0"', () => {
+    it('normalizes omitted version, explicit "1.0", and explicit "v1.0" to canonical wire version "1.0"', () => {
       const blocks = [
         {version: 'v1.0', createSurface: {surfaceId: 's1', catalogId: 'c1', components: []}},
         {createSurface: {surfaceId: 's2'}},
@@ -75,11 +75,33 @@ describe('V10PayloadStrategy', () => {
         {agentFunctionResponse: {callId: 'call-2', response: {ok: true}}},
       ];
       const normalized = strategy.normalizeBlocks(blocks) as Array<Record<string, unknown>>;
-      expect(normalized[0]['version']).toBe('v1.0');
+      expect(normalized[0]['version']).toBe('1.0');
       expect(normalized[1]['version']).toBe('1.0');
       expect(normalized[2]['version']).toBe('1.0');
       expect(normalized[3]['version']).toBe('1.0');
       expect(normalized[4]['version']).toBe('1.0');
+    });
+
+    it('always deletes crf.catalogId even when cf.catalogId is already present', () => {
+      const blocks = [
+        {
+          version: '1.0',
+          callRendererFunction: {
+            functionCallId: 'f1',
+            surfaceId: 's1',
+            catalogId: 'outer.catalog',
+            callFunction: {
+              ['@call']: 'myFunc',
+              catalogId: 'inner.catalog',
+            },
+          },
+        },
+      ];
+      const normalized = strategy.normalizeBlocks(blocks) as Array<Record<string, unknown>>;
+      const crf = normalized[0]['callRendererFunction'] as Record<string, unknown>;
+      const cf = crf['callFunction'] as Record<string, unknown>;
+      expect(crf['catalogId']).toBeUndefined();
+      expect(cf['catalogId']).toBe('inner.catalog');
     });
 
     it('normalizes shorthand callRendererFunction { call, args } into canonical callFunction { "@call", args }', () => {
@@ -246,6 +268,41 @@ describe('V10PayloadStrategy', () => {
       expect(crf.callFunction['catalogId']).toBe('corp.services');
     });
 
+    it('resolves callRendererFunction catalogId from activeCatalogs declaring the function', () => {
+      const blocks = [
+        {
+          callRendererFunction: {
+            functionCallId: 'f-declared',
+            callFunction: {
+              ['@call']: 'customMcpTool',
+            },
+          },
+        },
+      ];
+
+      const primaryCatalog = {
+        $id: 'corp.primary',
+        components: {Text: {}},
+      };
+
+      const mcpCatalog = {
+        $id: 'corp.mcp',
+        functions: {
+          customMcpTool: {type: 'object'},
+        },
+      };
+
+      const healed = strategy.runCatalogComponentSchemaCheck(blocks, primaryCatalog, undefined, [
+        primaryCatalog,
+        mcpCatalog,
+      ]);
+      expect(healed).toBe(true);
+
+      const crf = (blocks[0] as {callRendererFunction: {callFunction: Record<string, unknown>}})
+        .callRendererFunction;
+      expect(crf.callFunction['catalogId']).toBe('corp.mcp');
+    });
+
     it('heals component names and synonyms in createSurface.components', () => {
       const blocks = [
         {
@@ -331,12 +388,13 @@ describe('V10PayloadStrategy', () => {
       expect(errors).toHaveLength(0);
     });
 
-    it('rejects createSurface without catalogId in v1.0', () => {
+    it('rejects createSurface with invalid catalogId in v1.0', () => {
       const blocks = [
         {
           version: '1.0',
           createSurface: {
             surfaceId: 'main-surface',
+            catalogId: '',
           },
         },
       ];
@@ -381,19 +439,22 @@ describe('V10PayloadStrategy', () => {
       ).toBe(true);
     });
 
-    it('rejects callRendererFunction with missing surfaceId', () => {
+    it('rejects callRendererFunction with invalid surfaceId', () => {
       const blocks = [
         {
           version: '1.0',
           callRendererFunction: {
             functionCallId: 'call-100',
+            surfaceId: '',
             call: 'fetchData',
           },
         },
       ];
       const errors: string[] = [];
       expect(strategy.validateOutgoingBlocks(blocks, errors)).toBe(false);
-      expect(errors.some(e => e.includes('must contain a non-empty string surfaceId'))).toBe(true);
+      expect(
+        errors.some(e => e.includes('surfaceId must be a non-empty string when provided')),
+      ).toBe(true);
     });
 
     it('rejects blocks with invalid version not equal to "1.0"', () => {

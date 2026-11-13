@@ -1073,5 +1073,96 @@ describe('SurfacePartitioner', () => {
       expect(normalized[0].version).toBe('1.0');
       expect(normalized[1].version).toBe('1.0');
     });
+
+    it('handles dynamic ChildList template { componentId, path } in children', () => {
+      const raw = [
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'cat-1',
+            components: [
+              {
+                id: 'root',
+                component: 'Column',
+                children: {componentId: 'item_template', path: '/items'},
+              },
+              {
+                id: 'item_template',
+                component: 'Text',
+                text: {'@path': 'label'},
+              },
+            ],
+          },
+        },
+      ];
+      const normalized = normalizeA2uiItems(raw);
+      expect(normalized.length).toBe(1);
+      const partitioned = partitionA2uiSurfacePayload(normalized);
+      expect(partitioned.hasCanvas).toBe(false);
+      expect(partitioned.inlinePayload?.length).toBe(1);
+      const comps = partitioned.inlinePayload?.[0]?.createSurface?.components;
+      expect(comps?.length).toBe(2);
+    });
+
+    it('normalizes callAgentFunctionResponse alias to agentFunctionResponse on ingest', () => {
+      const raw = [
+        {
+          version: '1.0',
+          callAgentFunctionResponse: {
+            functionCallId: 'rpc-123',
+            response: {data: 'hello'},
+          },
+        },
+      ];
+      const normalized = normalizeA2uiItems(raw);
+      expect(normalized.length).toBe(1);
+      expect(normalized[0]['agentFunctionResponse']).toBeDefined();
+      expect(normalized[0]['callAgentFunctionResponse']).toBeUndefined();
+    });
+
+    it('does not leak RPC envelopes into otherItems or canvas card payloads', () => {
+      const raw = [
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 's1',
+            components: [
+              {id: 'root', component: 'Column', children: ['c1']},
+              {
+                id: 'c1',
+                component: 'Canvas',
+                title: 'Card 1',
+                children: ['t1'],
+              },
+              {id: 't1', component: 'Text', text: 'Card text'},
+            ],
+          },
+        },
+        {
+          version: '1.0',
+          callRendererFunction: {
+            surfaceId: 's1',
+            functionCallId: 'f1',
+            callFunction: {['@call']: 'myFunc'},
+          },
+        },
+        {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId: 'f2',
+            value: {ok: true},
+          },
+        },
+      ];
+
+      const normalized = normalizeA2uiItems(raw);
+      const partitioned = partitionA2uiSurfacePayload(normalized);
+      expect(partitioned.hasCanvas).toBe(true);
+
+      const canvasPayload = partitioned.canvasArtifacts[0].payload;
+      expect(canvasPayload.some(item => 'callRendererFunction' in item)).toBe(false);
+      expect(canvasPayload.some(item => 'agentFunctionResponse' in item)).toBe(false);
+    });
   });
 });

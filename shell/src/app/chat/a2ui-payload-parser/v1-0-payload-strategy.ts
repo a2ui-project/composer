@@ -22,7 +22,12 @@ import {
 import type {TaggedLogger} from '../../debug/error-logger.service';
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {stripPrototypePollutionKeys} from '../../shell/cross-frame-validator/wire-version-validator';
-import type {CatalogJson} from '../../storage/models/catalog-storage.model';
+import {
+  type Catalog,
+  type CatalogJson,
+  catalogDeclaresFunction,
+  getCatalogId,
+} from '../../storage/models/catalog-storage.model';
 import type {PayloadProtocolStrategy} from './payload-protocol-strategy';
 import {buildComponentHealMap, healComponentList} from './component-name-healer';
 
@@ -77,10 +82,8 @@ export class V10PayloadStrategy implements PayloadProtocolStrategy {
       const hasCommand = V10_COMMAND_KEYS.some(k => k in sanitized);
       if (hasCommand) {
         const ver = sanitized['version'];
-        if (ver === undefined) {
+        if (ver === undefined || ver === '1.0' || ver === 'v1.0') {
           sanitized['version'] = this.canonicalWireVersion;
-        } else if (ver === '1.0') {
-          sanitized['version'] = '1.0';
         }
       }
 
@@ -119,8 +122,10 @@ export class V10PayloadStrategy implements PayloadProtocolStrategy {
             cf['@call'] = String(cf['call']);
             delete cf['call'];
           }
-          if (crf['catalogId'] !== undefined && cf['catalogId'] === undefined) {
-            cf['catalogId'] = crf['catalogId'];
+          if (crf['catalogId'] !== undefined) {
+            if (cf['catalogId'] === undefined) {
+              cf['catalogId'] = crf['catalogId'];
+            }
             delete crf['catalogId'];
           }
         }
@@ -134,6 +139,7 @@ export class V10PayloadStrategy implements PayloadProtocolStrategy {
     parsedBlocks: unknown[],
     componentsOrCatalog?: Record<string, unknown> | CatalogJson,
     catalogObj?: Record<string, unknown> | CatalogJson,
+    activeCatalogs?: readonly (Catalog | CatalogJson)[],
   ): boolean {
     const catalog =
       catalogObj ??
@@ -151,6 +157,20 @@ export class V10PayloadStrategy implements PayloadProtocolStrategy {
 
     const defaultCatalogId =
       (catalog?.['$id'] as string | undefined) ?? (catalog?.['catalogId'] as string | undefined);
+
+    const candidateCatalogs: Catalog[] = [];
+    if (activeCatalogs && activeCatalogs.length > 0) {
+      candidateCatalogs.push(...(activeCatalogs as Catalog[]));
+    }
+    if (
+      catalogObj &&
+      ('functions' in catalogObj || '$id' in catalogObj || 'catalogId' in catalogObj)
+    ) {
+      candidateCatalogs.push(catalogObj as Catalog);
+    }
+    if (catalog && !candidateCatalogs.includes(catalog as Catalog)) {
+      candidateCatalogs.push(catalog as Catalog);
+    }
 
     let healed = false;
     const healMap = buildComponentHealMap(componentsObj);
@@ -205,12 +225,17 @@ export class V10PayloadStrategy implements PayloadProtocolStrategy {
           !Array.isArray(crf['callFunction'])
         ) {
           const cf = crf['callFunction'] as Record<string, unknown>;
-          if (
-            defaultCatalogId &&
-            (!cf['catalogId'] || typeof cf['catalogId'] !== 'string' || !cf['catalogId'].trim())
-          ) {
-            cf['catalogId'] = defaultCatalogId;
-            healed = true;
+          if (!cf['catalogId'] || typeof cf['catalogId'] !== 'string' || !cf['catalogId'].trim()) {
+            const fnName = typeof cf['@call'] === 'string' ? cf['@call'] : undefined;
+            const declaringCatalog = fnName
+              ? candidateCatalogs.find(c => catalogDeclaresFunction(c, fnName))
+              : undefined;
+            const targetCatalogId =
+              (declaringCatalog ? getCatalogId(declaringCatalog) : undefined) ?? defaultCatalogId;
+            if (targetCatalogId) {
+              cf['catalogId'] = targetCatalogId;
+              healed = true;
+            }
           }
         }
       }

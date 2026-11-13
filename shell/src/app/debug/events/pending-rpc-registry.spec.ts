@@ -56,12 +56,12 @@ describe('PendingRpcRegistry', () => {
       expect(service.isRegisteredFrame(dummyWindow)).toBe(false);
     });
 
-    it('registers and unregisters window instances correctly', () => {
+    it('registers and unregisters window instances correctly (including unregisterWindow alias)', () => {
       service.registerFrame(dummyWindow);
       expect(service.isRegisteredFrame(dummyWindow)).toBe(true);
       expect(service.isRegisteredFrame(anotherWindow)).toBe(false);
 
-      service.unregisterFrame(dummyWindow);
+      service.unregisterWindow(dummyWindow);
       expect(service.isRegisteredFrame(dummyWindow)).toBe(false);
     });
 
@@ -168,6 +168,41 @@ describe('PendingRpcRegistry', () => {
             version: '1.0',
             agentFunctionResponse: {
               functionCallId: 'call-timeout-2',
+              error: {
+                code: 'AGENT_FUNCTION_TIMEOUT',
+                message: 'Agent function call timed out after 30s in Composer workspace.',
+              },
+            },
+          },
+        ],
+        dummyWindow,
+      );
+    });
+
+    it('populates entry.error immediately when remaining timeout is 0', () => {
+      service.registerFrame(dummyWindow);
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const entry = service.registerRpc({
+        functionCallId: 'call-immediate-timeout',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'fetchData'},
+        sourceWindow: dummyWindow,
+        startedAtMs: now - 35000,
+      });
+
+      expect(entry.status).toBe('timed_out');
+      expect(entry.error).toEqual({
+        code: 'AGENT_FUNCTION_TIMEOUT',
+        message: 'Agent function call timed out after 30s in Composer workspace.',
+      });
+      expect(mockHostComm.sendRenderA2UI).toHaveBeenCalledWith(
+        [
+          {
+            version: '1.0',
+            agentFunctionResponse: {
+              functionCallId: 'call-immediate-timeout',
               error: {
                 code: 'AGENT_FUNCTION_TIMEOUT',
                 message: 'Agent function call timed out after 30s in Composer workspace.',

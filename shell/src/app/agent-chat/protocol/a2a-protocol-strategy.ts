@@ -24,6 +24,15 @@ import {stripPrototypePollutionKeys} from '../../shell/cross-frame-validator/wir
 import type {A2uiProtocolVersion} from 'a2ui-bridge';
 import type {CatalogJson} from '../../storage/models/catalog-storage.model';
 
+/** Canonical A2UI v1.0 RPC envelope keys. */
+export const A2UI_V10_RPC_KEYS = [
+  'callRendererFunction',
+  'callAgentFunction',
+  'callAgentFunctionResponse',
+  'agentFunctionResponse',
+  'rendererFunctionResponse',
+] as const;
+
 /**
  * Strategy interface abstracting protocol-specific A2A behaviors between
  * A2UI v0.9 and v1.0 specifications.

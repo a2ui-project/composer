@@ -15,7 +15,7 @@
  */
 
 import type {A2uiProtocolVersion} from 'a2ui-bridge';
-import type {CatalogJson} from '../../storage/models/catalog-storage.model';
+import type {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import type {TaggedLogger} from '../../debug/error-logger.service';
 
 /**
@@ -59,6 +59,7 @@ export declare interface PayloadProtocolStrategy {
     parsedBlocks: unknown[],
     componentsOrCatalog?: Record<string, unknown> | CatalogJson,
     catalogObj?: Record<string, unknown> | CatalogJson,
+    activeCatalogs?: readonly (Catalog | CatalogJson)[],
   ): boolean;
 
   /**

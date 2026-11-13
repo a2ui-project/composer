@@ -156,11 +156,22 @@ export class Standard3pA2aTransport implements A2aTransport {
     const taskId = options?.taskId || message.taskId;
     const contextId = options?.contextId || message.contextId;
 
+    const loadedCatalogs = this.catalogManagement?.activeCatalogs() ?? [];
     const activeCatalogs: CatalogJson[] =
-      this.catalogManagement?.activeCatalogs() ??
-      (options?.supportedCatalogIds
-        ? options.supportedCatalogIds.map(id => ({$id: id}) as unknown as CatalogJson)
-        : []);
+      loadedCatalogs.length > 0
+        ? [...loadedCatalogs]
+        : options?.supportedCatalogIds
+          ? options.supportedCatalogIds.map(id => ({$id: id}) as unknown as CatalogJson)
+          : [];
+
+    const supportedCatalogIds = (activeCatalogs ?? [])
+      .map(
+        c =>
+          (c as Record<string, unknown>)['$id'] ||
+          (c as Record<string, unknown>)['id'] ||
+          (c as Record<string, unknown>)['catalogId'],
+      )
+      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
 
     const isV10 = options?.protocolVersion === '1.0' || options?.protocolVersion === 'v1.0';
     const isV09 = options?.protocolVersion === 'v0.9' || options?.protocolVersion === '0.9';
@@ -181,17 +192,7 @@ export class Standard3pA2aTransport implements A2aTransport {
         ...((v10Config['extensions'] as string[]) || []),
         ...((v09Config['extensions'] as string[]) || []),
       ];
-      const supportedCatalogIds = (v10Config['supportedCatalogIds'] as string[]) || [];
       configuration = {
-        ['capabilities']: {
-          ['extensions']: supportedExtensions.map(uri => ({
-            ['uri']: uri,
-            ...(supportedCatalogIds.length > 0
-              ? {['supportedCatalogIds']: supportedCatalogIds}
-              : {}),
-          })),
-          ...(supportedCatalogIds.length > 0 ? {['supportedCatalogIds']: supportedCatalogIds} : {}),
-        },
         ['extensions']: supportedExtensions,
         ['acceptedOutputModes']: [
           'text/plain',
@@ -199,7 +200,6 @@ export class Standard3pA2aTransport implements A2aTransport {
           'application/a2ui+json',
           'application/json+a2ui',
         ],
-        ...(supportedCatalogIds.length > 0 ? {['supportedCatalogIds']: supportedCatalogIds} : {}),
       };
     }
 
@@ -255,7 +255,18 @@ export class Standard3pA2aTransport implements A2aTransport {
       ['extensions']: supportedExtensions,
       ...(contextId ? {['contextId']: contextId} : {}),
       ...(taskId ? {['taskId']: taskId} : {}),
+      ...(message.metadata ? {['metadata']: {...message.metadata}} : {}),
     };
+
+    if (supportedCatalogIds.length > 0 && !isV09) {
+      const metadata = (messageObj['metadata'] as Record<string, unknown>) || {};
+      metadata['a2uiRendererCapabilities'] = {
+        ['1.0']: {
+          ['supportedCatalogIds']: supportedCatalogIds,
+        },
+      };
+      messageObj['metadata'] = metadata;
+    }
 
     // 1. Standard A2A JSON-RPC 2.0 envelope (preferred specification format for `POST /` and `POST /jsonrpc`).
     const jsonRpcPayload = {

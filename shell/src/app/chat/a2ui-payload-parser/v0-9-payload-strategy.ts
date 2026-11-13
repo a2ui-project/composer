@@ -23,7 +23,7 @@ import {
 import type {TaggedLogger} from '../../debug/error-logger.service';
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {stripPrototypePollutionKeys} from '../../shell/cross-frame-validator/wire-version-validator';
-import type {CatalogJson} from '../../storage/models/catalog-storage.model';
+import type {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import type {PayloadProtocolStrategy} from './payload-protocol-strategy';
 import {buildComponentHealMap, healComponentList} from './component-name-healer';
 
@@ -69,6 +69,7 @@ export class V09PayloadStrategy implements PayloadProtocolStrategy {
     parsedBlocks: unknown[],
     componentsOrCatalog?: Record<string, unknown> | CatalogJson,
     catalogObj?: Record<string, unknown> | CatalogJson,
+    _activeCatalogs?: readonly (Catalog | CatalogJson)[],
   ): boolean {
     const catalog =
       catalogObj ??

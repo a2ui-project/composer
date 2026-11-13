@@ -188,6 +188,12 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
           this.usageTrackingService.trackDebugTabView({panelId: panelId as ComposerPanelId});
         }
       },
+      onPreviewPanelDisposed: () => {
+        if (this.activeRegisteredPreviewWindow) {
+          this.pendingRpcRegistry.unregisterFrame(this.activeRegisteredPreviewWindow);
+          this.activeRegisteredPreviewWindow = null;
+        }
+      },
     });
     this.syncRegisteredPreviewFrame();
   }

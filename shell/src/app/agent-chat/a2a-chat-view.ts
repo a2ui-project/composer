@@ -238,13 +238,14 @@ export class A2aChatView implements OnInit {
     string,
     {sourceWindow: Window; abortController: AbortController}
   >();
+  private readonly pendingRendererFunctionResponses = new Set<AbortController>();
   private readonly ownedWindows = new WeakSet<Window>();
   private activeAbortController?: AbortController;
   private configDialogRef?: MatDialogRef<void, void>;
 
   constructor() {
     this.hostCommunication.sendToServer$
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      ?.pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(envelope => {
         if (!envelope) return;
         if (envelope.timestamp && envelope.timestamp < this.initTimestamp) return;
@@ -300,7 +301,7 @@ export class A2aChatView implements OnInit {
 
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => {
-      this.cancelActiveGeneration();
+      this.cancelActiveGeneration(false);
       this.closeConfigDialog();
     });
 
@@ -520,7 +521,7 @@ export class A2aChatView implements OnInit {
 
     if (action === null || action === undefined) return;
 
-    if (this.isStreaming()) {
+    if (this._isStreaming()) {
       this.cancelActiveGeneration();
     }
 
@@ -555,12 +556,19 @@ export class A2aChatView implements OnInit {
       actionMetadata = rawRecord['metadata'] as Record<string, unknown>;
     }
 
+    const isExplicitV10 = rawPayload?.version === '1.0' || rawPayload?.version === 'v1.0';
+    const isExplicitV09 = rawPayload?.version === 'v0.9' || rawPayload?.version === '0.9';
+
+    const isV09 =
+      !isExplicitV10 &&
+      (isExplicitV09 || this.catalogManagement.activeProtocolVersion() === 'v0.9');
+
     const isV10 =
-      this.catalogManagement.activeProtocolVersion() === 'v1.0' ||
-      this.catalogManagement.activeCatalog()?.protocolVersion === '1.0' ||
-      rawPayload?.version === '1.0' ||
-      rawPayload?.version === 'v1.0' ||
-      Boolean(actionUserMessage);
+      isExplicitV10 ||
+      (!isV09 &&
+        (this.catalogManagement.activeProtocolVersion() === 'v1.0' ||
+          this.catalogManagement.activeCatalog()?.protocolVersion === '1.0' ||
+          Boolean(actionUserMessage)));
 
     const strategy = isV10 ? this.v10Strategy : this.v09Strategy;
     const actionPart = strategy.buildActionDataPart(action, actionUserMessage, actionMetadata);
@@ -666,10 +674,14 @@ export class A2aChatView implements OnInit {
     contextId?: string,
   ): Promise<void> {
     const tenantId = this.configProvider.a2aTenantId() || undefined;
+    const protocolVersion = this.catalogManagement.hasReceivedCatalogResponse()
+      ? this.catalogManagement.activeProtocolVersion()
+      : undefined;
     const stream = this.a2aTransport.sendMessageStream(url, a2aMsg, {
       tenantId,
       taskId,
       contextId,
+      protocolVersion,
       abortSignal: controller.signal,
     });
 
@@ -906,12 +918,16 @@ export class A2aChatView implements OnInit {
     return Boolean(activeSurfaceId && activeSurfaceId === artifactSurfaceId);
   }
 
-  protected cancelActiveGeneration(): void {
+  protected cancelActiveGeneration(notifyWindows = true): void {
     if (this.activeAbortController) {
       this.activeAbortController.abort();
       this.activeAbortController = undefined;
     }
-    this.abortAllPendingFunctionCalls();
+    for (const controller of this.pendingRendererFunctionResponses) {
+      controller.abort();
+    }
+    this.pendingRendererFunctionResponses.clear();
+    this.abortAllPendingFunctionCalls(notifyWindows);
     this._isStreaming.set(false);
     this.messages.update(msgs => msgs.map(m => (m.isStreaming ? {...m, isStreaming: false} : m)));
   }
@@ -1045,9 +1061,19 @@ export class A2aChatView implements OnInit {
     this.inspectorEvents.update(evts => [event, ...evts].slice(0, 500));
   }
 
-  private abortAllPendingFunctionCalls(): void {
-    for (const entry of this.pendingFunctionCalls.values()) {
+  private abortAllPendingFunctionCalls(notifyWindows = true): void {
+    for (const [functionCallId, entry] of this.pendingFunctionCalls.entries()) {
       entry.abortController.abort();
+      if (notifyWindows) {
+        const cancelMsg: RenderA2uiItem = {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId,
+            error: {code: 'CANCELLED', message: 'Agent function call cancelled'},
+          },
+        } as RenderA2uiItem;
+        this.hostCommunication.sendRenderA2UI([cancelMsg], entry.sourceWindow);
+      }
     }
     this.pendingFunctionCalls.clear();
     this._activeRpcCount.set(0);
@@ -1097,6 +1123,17 @@ export class A2aChatView implements OnInit {
     const existing = this.pendingFunctionCalls.get(functionCallId);
     if (existing) {
       existing.abortController.abort();
+      const cancelMsg: RenderA2uiItem = {
+        version: '1.0',
+        agentFunctionResponse: {
+          functionCallId,
+          error: {
+            code: 'CANCELLED',
+            message: 'Duplicate functionCallId replaced',
+          },
+        },
+      } as RenderA2uiItem;
+      this.hostCommunication.sendRenderA2UI([cancelMsg], existing.sourceWindow);
       this._activeRpcCount.update(c => Math.max(0, c - 1));
     }
 
@@ -1112,6 +1149,8 @@ export class A2aChatView implements OnInit {
       ...(this.activeTaskId() ? {taskId: this.activeTaskId()!} : {}),
     };
 
+    this.recordInspectorEvent(createSentMessageEvent(callMessage));
+
     let hasReceivedResponse = false;
 
     try {
@@ -1125,32 +1164,72 @@ export class A2aChatView implements OnInit {
 
       for await (const chunk of stream) {
         if (abortController.signal.aborted) break;
+        this.recordInspectorEvent(createReceivedEvent(chunk));
         const parsed = this.streamEventParser.parse(chunk);
+        if (parsed.contextId) {
+          this.activeContextId.set(parsed.contextId);
+        }
+        if (parsed.taskId) {
+          this.activeTaskId.set(parsed.taskId);
+        }
         if (parsed.a2uiItems && parsed.a2uiItems.length > 0) {
-          for (const item of parsed.a2uiItems) {
+          for (let item of parsed.a2uiItems) {
+            const itemRecord = item as Record<string, unknown>;
+            if (itemRecord['callAgentFunctionResponse'] && !itemRecord['agentFunctionResponse']) {
+              item = {
+                ...item,
+                agentFunctionResponse: itemRecord[
+                  'callAgentFunctionResponse'
+                ] as RenderA2uiItem['agentFunctionResponse'],
+              };
+            }
+            if (item.agentFunctionResponse) {
+              const respRec = item.agentFunctionResponse as unknown as Record<string, unknown>;
+              if (respRec['result'] !== undefined && respRec['value'] === undefined) {
+                const {result, ...rest} = respRec;
+                item = {
+                  ...item,
+                  agentFunctionResponse: {
+                    ...rest,
+                    value: result,
+                  } as RenderA2uiItem['agentFunctionResponse'],
+                };
+              }
+            }
+
             if (item.agentFunctionResponse?.functionCallId === functionCallId) {
               hasReceivedResponse = true;
               this.hostCommunication.sendRenderA2UI([item], sourceWindow);
-            } else if (item.callRendererFunction) {
+            } else if (
+              item.callRendererFunction ||
+              item.createSurface ||
+              item.updateComponents ||
+              item.updateDataModel ||
+              item.deleteSurface
+            ) {
               this.hostCommunication.sendRenderA2UI([item], sourceWindow);
             }
           }
         }
       }
     } catch (err: unknown) {
-      if (!abortController.signal.aborted && !hasReceivedResponse) {
-        const errorMsg: RenderA2uiItem = {
-          version: '1.0',
-          agentFunctionResponse: {
-            functionCallId,
-            error: {
-              code: 'AGENT_FUNCTION_ERROR',
-              message: err instanceof Error ? err.message : 'Agent function call failed',
+      if (!abortController.signal.aborted) {
+        const errMessage = err instanceof Error ? err.message : 'Agent function call failed';
+        this.recordInspectorEvent(createErrorEvent(err));
+        if (!hasReceivedResponse) {
+          const errorMsg: RenderA2uiItem = {
+            version: '1.0',
+            agentFunctionResponse: {
+              functionCallId,
+              error: {
+                code: 'AGENT_FUNCTION_ERROR',
+                message: errMessage,
+              },
             },
-          },
-        } as RenderA2uiItem;
-        this.hostCommunication.sendRenderA2UI([errorMsg], sourceWindow);
-        hasReceivedResponse = true;
+          } as RenderA2uiItem;
+          this.hostCommunication.sendRenderA2UI([errorMsg], sourceWindow);
+          hasReceivedResponse = true;
+        }
       }
     } finally {
       if (!hasReceivedResponse && !abortController.signal.aborted) {
@@ -1183,6 +1262,10 @@ export class A2aChatView implements OnInit {
     const url = this.configProvider.a2aAgentUrl();
     if (!url) return;
 
+    const abortController = new AbortController();
+    this.pendingRendererFunctionResponses.add(abortController);
+    this._activeRpcCount.update(c => c + 1);
+
     const responsePart = this.v10Strategy.buildRendererFunctionResponseDataPart(payload);
     const responseMessage: A2aMessage = {
       role: 'user',
@@ -1191,25 +1274,71 @@ export class A2aChatView implements OnInit {
       ...(this.activeTaskId() ? {taskId: this.activeTaskId()!} : {}),
     };
 
+    this.recordInspectorEvent(createSentMessageEvent(responseMessage));
+
     try {
       const stream = this.a2aTransport.sendMessageStream(url, responseMessage, {
         tenantId: this.configProvider.a2aTenantId() || undefined,
         contextId: this.activeContextId(),
         taskId: this.activeTaskId() || undefined,
+        abortSignal: abortController.signal,
         protocolVersion: '1.0',
       });
       for await (const chunk of stream) {
+        if (abortController.signal.aborted) break;
+        this.recordInspectorEvent(createReceivedEvent(chunk));
         const parsed = this.streamEventParser.parse(chunk);
+        if (parsed.contextId) {
+          this.activeContextId.set(parsed.contextId);
+        }
+        if (parsed.taskId) {
+          this.activeTaskId.set(parsed.taskId);
+        }
         if (parsed.a2uiItems && parsed.a2uiItems.length > 0 && env.sourceWindow) {
-          for (const item of parsed.a2uiItems) {
-            if (item.callRendererFunction) {
+          for (let item of parsed.a2uiItems) {
+            const itemRecord = item as Record<string, unknown>;
+            if (itemRecord['callAgentFunctionResponse'] && !itemRecord['agentFunctionResponse']) {
+              item = {
+                ...item,
+                agentFunctionResponse: itemRecord[
+                  'callAgentFunctionResponse'
+                ] as RenderA2uiItem['agentFunctionResponse'],
+              };
+            }
+            if (item.agentFunctionResponse) {
+              const respRec = item.agentFunctionResponse as unknown as Record<string, unknown>;
+              if (respRec['result'] !== undefined && respRec['value'] === undefined) {
+                const {result, ...rest} = respRec;
+                item = {
+                  ...item,
+                  agentFunctionResponse: {
+                    ...rest,
+                    value: result,
+                  } as RenderA2uiItem['agentFunctionResponse'],
+                };
+              }
+            }
+            if (
+              item.callRendererFunction ||
+              item.agentFunctionResponse ||
+              item.createSurface ||
+              item.updateComponents ||
+              item.updateDataModel ||
+              item.deleteSurface
+            ) {
               this.hostCommunication.sendRenderA2UI([item], env.sourceWindow);
             }
           }
         }
       }
-    } catch {
-      // Ignore or log error
+    } catch (err: unknown) {
+      if (!abortController.signal.aborted) {
+        this.logger.error('Renderer function response stream error', err);
+        this.recordInspectorEvent(createErrorEvent(err));
+      }
+    } finally {
+      this.pendingRendererFunctionResponses.delete(abortController);
+      this._activeRpcCount.update(c => Math.max(0, c - 1));
     }
   }
 }
