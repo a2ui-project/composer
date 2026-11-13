@@ -25,17 +25,14 @@ import {
   HostCommunication,
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {signal} from '@angular/core';
 import {RawMessages} from '../raw-messages/raw-messages';
 import {RawMessagesHarness} from '../raw-messages/test/raw-messages.harness';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {ErrorLogger} from '../error-logger.service';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {ChatState} from '../../chat/chat-state/chat-state';

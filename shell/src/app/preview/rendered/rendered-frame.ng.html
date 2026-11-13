@@ -24,6 +24,7 @@
     class="preview-frame"
     [payload]="payload()"
     [defaultTarget]="defaultTarget()"
+    [autoRejectAgentFunctions]="autoRejectAgentFunctions()"
     [frameTitle]="'Rendered Preview'"
     (documentReplaced)="onDocumentReplaced()"
     (payloadDispatched)="onPayloadDispatched($event)"

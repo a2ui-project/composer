@@ -14,21 +14,22 @@
  * limitations under the License.
  */
 
+import {ThemePreference} from 'a2ui-bridge';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal} from '@angular/core';
 import {describe, it, expect, afterEach, beforeEach, vi} from 'vitest';
 import {ReplaySubject} from 'rxjs';
 import {Demos, MAX_MOUNTED_CARDS} from './demos';
+import {DemoCardHarness} from './test/demo-card.harness';
 import {DemosHarness} from './test/demos.harness';
 import {DemosCatalog, type TrackedDemo} from './services/demos-catalog';
 import {HostCommunication} from '../shell/host-communication/host-communication';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
+import {IndexedDbStorage} from '../storage/indexed-db-storage/indexed-db-storage';
+import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 
 class MockDemosCatalog {
   readonly demos = signal<TrackedDemo[] | null>(null);
@@ -41,6 +42,8 @@ class MockDemosCatalog {
 
 class MockHostCommunication {
   sendRenderA2UI = vi.fn();
+  sendMessage = vi.fn();
+  getDefaultTargetWindow = vi.fn(() => null);
   registerIframe = vi.fn();
   unregisterIframe = vi.fn();
   sendTheme = vi.fn();
@@ -344,6 +347,13 @@ describe('Demos Component', () => {
         {provide: StartupResolution, useClass: MockStartupResolution},
         {provide: AppConfigProvider, useValue: {themePreference: signal(ThemePreference.LIGHT)}},
         {provide: ChatState, useClass: MockChatState},
+        {
+          provide: IndexedDbStorage,
+          useValue: {
+            getCatalogRecord: vi.fn().mockResolvedValue(null),
+            saveCatalogRecord: vi.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compileComponents();
 
@@ -385,6 +395,10 @@ describe('Demos Component', () => {
     const coordinator = await harness.getCoordinatorFrame();
 
     expect(await coordinator!.getSizing()).toBe('fill');
+  });
+
+  it('binds autoRejectAgentFunctions to true on the coordinator frame', () => {
+    expect(fixture.componentInstance.coordinatorFrame()?.autoRejectAgentFunctions()).toBe(true);
   });
 
   it('registers the coordinator frame iframe element with the demos service', async () => {
@@ -759,5 +773,92 @@ describe('Demos Component', () => {
     expect(await harness.isLoading()).toBe(true);
     expect(await harness.getCardCount()).toBe(0);
     expect(await harness.getEmptyStateSubtitleText()).toBeNull();
+  });
+
+  it('provides CatalogManagement to mounted DemoCards so v1.0 demos gate under v0.9 and dispatch when activeProtocolVersion settles to v1.0', async () => {
+    const hostComm = TestBed.inject(HostCommunication) as unknown as MockHostCommunication;
+    // First settle CatalogManagement to v0.9 via A2UI_CATALOG
+    hostComm.messageStream$.next({
+      type: 'A2UI_CATALOG',
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        catalog: {
+          $id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+          components: {Text: {type: 'object'}},
+        },
+      },
+    });
+    const catalogManagement = TestBed.inject(CatalogManagement);
+    await vi.waitFor(() => expect(catalogManagement.hasReceivedCatalogResponse()).toBe(true));
+    expect(catalogManagement.activeProtocolVersion()).toBe('v0.9');
+
+    const v1Demos: TrackedDemo[] = [
+      {
+        id: 'v1-demo-0',
+        trackKey: 'v1-demo-0',
+        name: 'V1 Demo',
+        description: 'V1 showcase demo',
+        a2ui: [
+          {
+            version: '1.0',
+            createSurface: {
+              surfaceId: 'surface-v1-0',
+              catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+              components: [{id: 'root', component: 'Text', text: 'Hello'}],
+            },
+          } as unknown as TrackedDemo['a2ui'][number],
+        ],
+      },
+    ];
+    demosCatalogMock.demos.set(v1Demos);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushIntersections();
+
+    const cards = placeCards(fixture, {'v1-demo-0': 0});
+    wallObserver().report([{target: cards.get('v1-demo-0')!, isIntersecting: true}]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const rootLoader = TestbedHarnessEnvironment.loader(fixture);
+    const cardHarnesses = await rootLoader.getAllHarnesses(DemoCardHarness);
+    expect(cardHarnesses.length).toBe(1);
+    const cardIframeEl = await cardHarnesses[0].getIframe();
+    expect(cardIframeEl).not.toBeNull();
+    const nativeIframe = TestbedHarnessEnvironment.getNativeElement(
+      cardIframeEl!,
+    ) as HTMLIFrameElement;
+
+    hostComm.sendRenderA2UI.mockClear();
+    hostComm.messageStream$.next({
+      type: 'RENDERER_READY',
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      sourceWindow: nativeIframe.contentWindow,
+      payload: {},
+    });
+    fixture.detectChanges();
+
+    // Under settled v0.9 catalog, v1.0 demo payload must be gated
+    expect(hostComm.sendRenderA2UI).not.toHaveBeenCalled();
+
+    // Now transition CatalogManagement to v1.0 and verify reactive re-evaluation dispatches
+    hostComm.messageStream$.next({
+      type: 'A2UI_CATALOG',
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        catalog: {
+          $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+          protocolVersion: '1.0',
+          components: {Text: {type: 'object'}},
+        },
+      },
+    });
+    await vi.waitFor(() => expect(catalogManagement.activeProtocolVersion()).toBe('v1.0'));
+    fixture.detectChanges();
+
+    expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(v1Demos[0].a2ui, nativeIframe);
   });
 });

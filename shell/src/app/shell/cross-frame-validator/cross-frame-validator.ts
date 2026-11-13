@@ -16,11 +16,6 @@
 
 import {
   PreviewBridgeMessageType,
-  RenderA2uiItem,
-  A2UI_UPDATE_KEYS,
-  BaseSurfaceDetails,
-  CreateSurfaceDetails,
-  UpdateComponentsDetails,
   UpdateDataModelDetails,
   SetBlockingStatePayload,
   SetThemePayload,
@@ -28,12 +23,18 @@ import {
   ThemePreference,
 } from 'a2ui-bridge';
 import type {TaggedLogger} from '../../debug/error-logger.service';
+import {hasPrototypePollution, recordError} from './wire-version-validator';
+import {V09WireValidator} from './v0-9-wire-validator';
+import {V10WireValidator} from './v1-0-wire-validator';
 
 /**
  * Hardens postMessage channels by validating outgoing layout schemas,
  * component hierarchies, and data binding payloads prior to transmission.
  */
 export class CrossFrameValidator {
+  private static readonly v09Validator = new V09WireValidator();
+  private static readonly v10Validator = new V10WireValidator();
+
   /**
    * Validates an outgoing message envelope and its payload structure.
    * Logs validation failures to logger.error and appends error messages to errors array if provided.
@@ -49,11 +50,7 @@ export class CrossFrameValidator {
     logger: Pick<TaggedLogger, 'error' | 'warn'>,
   ): boolean {
     if (!message || typeof message !== 'object' || Array.isArray(message)) {
-      CrossFrameValidator.recordError(
-        'Malformed message: message must be an object.',
-        errors,
-        logger,
-      );
+      recordError('Malformed message: message must be an object.', errors, logger);
       return false;
     }
 
@@ -62,11 +59,7 @@ export class CrossFrameValidator {
     const msgPayload = msgObj.payload;
 
     if (typeof msgType !== 'string' || !msgType.trim()) {
-      CrossFrameValidator.recordError(
-        'Malformed message: type must be a non-empty string.',
-        errors,
-        logger,
-      );
+      recordError('Malformed message: type must be a non-empty string.', errors, logger);
       return false;
     }
 
@@ -74,7 +67,7 @@ export class CrossFrameValidator {
       case PreviewBridgeMessageType.GET_CATALOG: {
         if (msgPayload !== undefined && msgPayload !== null) {
           if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-            CrossFrameValidator.recordError(
+            recordError(
               'Malformed payload for GET_CATALOG: must be an object, null, or undefined.',
               errors,
               logger,
@@ -88,7 +81,7 @@ export class CrossFrameValidator {
       case PreviewBridgeMessageType.GET_COMPONENT_USAGES: {
         if (msgPayload !== undefined && msgPayload !== null) {
           if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-            CrossFrameValidator.recordError(
+            recordError(
               'Malformed payload for GET_COMPONENT_USAGES: must be an object, null, or undefined.',
               errors,
               logger,
@@ -102,7 +95,7 @@ export class CrossFrameValidator {
       case PreviewBridgeMessageType.GET_DEMOS: {
         if (msgPayload !== undefined && msgPayload !== null) {
           if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-            CrossFrameValidator.recordError(
+            recordError(
               'Malformed payload for GET_DEMOS: must be an object, null, or undefined.',
               errors,
               logger,
@@ -115,11 +108,7 @@ export class CrossFrameValidator {
 
       case PreviewBridgeMessageType.RENDER_A2UI: {
         if (!msgPayload || !Array.isArray(msgPayload)) {
-          CrossFrameValidator.recordError(
-            'Malformed payload for RENDER_A2UI: must be an Array.',
-            errors,
-            logger,
-          );
+          recordError('Malformed payload for RENDER_A2UI: must be an Array.', errors, logger);
           return false;
         }
 
@@ -133,7 +122,7 @@ export class CrossFrameValidator {
 
       case PreviewBridgeMessageType.SET_BLOCKING_STATE: {
         if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for SET_BLOCKING_STATE: must be an object.',
             errors,
             logger,
@@ -143,7 +132,7 @@ export class CrossFrameValidator {
 
         const blockingState = msgPayload as SetBlockingStatePayload;
         if (typeof blockingState.blocked !== 'boolean') {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for SET_BLOCKING_STATE: must contain boolean property blocked.',
             errors,
             logger,
@@ -151,7 +140,7 @@ export class CrossFrameValidator {
           return false;
         }
         if (blockingState.message !== undefined && typeof blockingState.message !== 'string') {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for SET_BLOCKING_STATE: message property must be a string if present.',
             errors,
             logger,
@@ -163,17 +152,13 @@ export class CrossFrameValidator {
 
       case PreviewBridgeMessageType.SET_THEME: {
         if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-          CrossFrameValidator.recordError(
-            'Malformed payload for SET_THEME: must be an object.',
-            errors,
-            logger,
-          );
+          recordError('Malformed payload for SET_THEME: must be an object.', errors, logger);
           return false;
         }
 
         const themePayload = msgPayload as SetThemePayload;
         if (!Object.values(ThemePreference).includes(themePayload.theme)) {
-          CrossFrameValidator.recordError(
+          recordError(
             `Invalid theme preference mode: ${String(themePayload.theme)}`,
             errors,
             logger,
@@ -186,7 +171,7 @@ export class CrossFrameValidator {
 
       case PreviewBridgeMessageType.DATA_MODEL_CHANGE: {
         if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for DATA_MODEL_CHANGE: must be an object.',
             errors,
             logger,
@@ -197,7 +182,7 @@ export class CrossFrameValidator {
         const changePayload = msgPayload as DataModelChangePayload;
         const updateObj = changePayload.updateDataModel;
         if (!updateObj || typeof updateObj !== 'object' || Array.isArray(updateObj)) {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for DATA_MODEL_CHANGE: must contain an updateDataModel object.',
             errors,
             logger,
@@ -207,7 +192,7 @@ export class CrossFrameValidator {
 
         const updateData = updateObj as UpdateDataModelDetails;
         if (typeof updateData.surfaceId !== 'string') {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for DATA_MODEL_CHANGE: updateDataModel must contain a valid surfaceId string.',
             errors,
             logger,
@@ -215,7 +200,7 @@ export class CrossFrameValidator {
           return false;
         }
         if (updateData.path !== undefined && typeof updateData.path !== 'string') {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for DATA_MODEL_CHANGE: updateDataModel path must be a string if present.',
             errors,
             logger,
@@ -227,16 +212,12 @@ export class CrossFrameValidator {
 
       case PreviewBridgeMessageType.MCP_REQUEST: {
         if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-          CrossFrameValidator.recordError(
-            'Malformed payload for MCP_REQUEST: must be an object.',
-            errors,
-            logger,
-          );
+          recordError('Malformed payload for MCP_REQUEST: must be an object.', errors, logger);
           return false;
         }
         const mcpReq = msgPayload as {requestId?: unknown; toolName?: unknown};
         if (typeof mcpReq.requestId !== 'string' || !mcpReq.requestId.trim()) {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for MCP_REQUEST: must contain a non-empty requestId string.',
             errors,
             logger,
@@ -244,7 +225,7 @@ export class CrossFrameValidator {
           return false;
         }
         if (typeof mcpReq.toolName !== 'string' || !mcpReq.toolName.trim()) {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for MCP_REQUEST: must contain a non-empty toolName string.',
             errors,
             logger,
@@ -256,16 +237,12 @@ export class CrossFrameValidator {
 
       case PreviewBridgeMessageType.MCP_RESPONSE: {
         if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-          CrossFrameValidator.recordError(
-            'Malformed payload for MCP_RESPONSE: must be an object.',
-            errors,
-            logger,
-          );
+          recordError('Malformed payload for MCP_RESPONSE: must be an object.', errors, logger);
           return false;
         }
         const mcpRes = msgPayload as {requestId?: unknown};
         if (typeof mcpRes.requestId !== 'string' || !mcpRes.requestId.trim()) {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for MCP_RESPONSE: must contain a non-empty requestId string.',
             errors,
             logger,
@@ -273,6 +250,14 @@ export class CrossFrameValidator {
           return false;
         }
         return true;
+      }
+
+      case PreviewBridgeMessageType.A2UI_CATALOG: {
+        return CrossFrameValidator.validateCatalogPayload(msgPayload, errors, logger);
+      }
+
+      case PreviewBridgeMessageType.SEND_TO_SERVER: {
+        return CrossFrameValidator.validateSendToServerPayload(msgPayload, errors, logger);
       }
 
       default: {
@@ -297,11 +282,7 @@ export class CrossFrameValidator {
     logger: Pick<TaggedLogger, 'error' | 'warn'>,
   ): boolean {
     if (!message || typeof message !== 'object' || Array.isArray(message)) {
-      CrossFrameValidator.recordError(
-        'Malformed message: message must be an object.',
-        errors,
-        logger,
-      );
+      recordError('Malformed message: message must be an object.', errors, logger);
       return false;
     }
 
@@ -310,24 +291,24 @@ export class CrossFrameValidator {
     const msgPayload = msgObj.payload;
 
     if (typeof msgType !== 'string' || !msgType.trim()) {
-      CrossFrameValidator.recordError(
-        'Malformed message: type must be a non-empty string.',
-        errors,
-        logger,
-      );
+      recordError('Malformed message: type must be a non-empty string.', errors, logger);
       return false;
     }
 
     switch (msgType) {
+      case PreviewBridgeMessageType.A2UI_CATALOG: {
+        return CrossFrameValidator.validateCatalogPayload(msgPayload, errors, logger);
+      }
+
+      case PreviewBridgeMessageType.SEND_TO_SERVER: {
+        return CrossFrameValidator.validateSendToServerPayload(msgPayload, errors, logger);
+      }
+
       // Validates dimensional updates dispatched by the embedded preview iframe
       // to ensure height and optional width are safe numerical values before updating host layout.
       case PreviewBridgeMessageType.SURFACE_RESIZE: {
         if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-          CrossFrameValidator.recordError(
-            'Malformed payload for SURFACE_RESIZE: must be an object.',
-            errors,
-            logger,
-          );
+          recordError('Malformed payload for SURFACE_RESIZE: must be an object.', errors, logger);
           return false;
         }
 
@@ -342,7 +323,7 @@ export class CrossFrameValidator {
           contentReady?: unknown;
         };
         if (!isValidDimension(resizePayload.height)) {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for SURFACE_RESIZE: must contain number property height.',
             errors,
             logger,
@@ -350,7 +331,7 @@ export class CrossFrameValidator {
           return false;
         }
         if (resizePayload.width !== undefined && !isValidDimension(resizePayload.width)) {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for SURFACE_RESIZE: width property must be a number if present.',
             errors,
             logger,
@@ -361,7 +342,7 @@ export class CrossFrameValidator {
           resizePayload.viewportWidth !== undefined &&
           !isValidDimension(resizePayload.viewportWidth)
         ) {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for SURFACE_RESIZE: viewportWidth must be a number if present.',
             errors,
             logger,
@@ -372,7 +353,7 @@ export class CrossFrameValidator {
           resizePayload.contentReady !== undefined &&
           typeof resizePayload.contentReady !== 'boolean'
         ) {
-          CrossFrameValidator.recordError(
+          recordError(
             'Malformed payload for SURFACE_RESIZE: contentReady must be a boolean if present.',
             errors,
             logger,
@@ -389,121 +370,80 @@ export class CrossFrameValidator {
   }
 
   /**
-   * Validates a single render message item structure.
+   * Validates an A2UI_CATALOG payload supporting flat catalog definitions,
+   * multi-catalog `{ catalog, catalogs }` handshakes, and empty/null settled responses.
+   *
+   * @param payload The A2UI_CATALOG payload to validate.
+   * @param errors An optional array to collect validation error messages.
+   * @param logger A logger to record validation messages to.
+   * @returns `true` if the payload is valid, `false` otherwise.
    */
-  private static validateSingleRenderMessage(
-    item: unknown,
+  static validateCatalogPayload(
+    payload: unknown,
     errors: string[] | undefined,
     logger: Pick<TaggedLogger, 'error' | 'warn'>,
   ): boolean {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      CrossFrameValidator.recordError(
-        'Malformed payload for RENDER_A2UI: array items must be objects.',
-        errors,
-        logger,
-      );
-      return false;
-    }
-    const itemObj = item as RenderA2uiItem;
-    if (itemObj.version !== 'v0.9') {
-      CrossFrameValidator.recordError(
-        'Malformed payload for RENDER_A2UI: array items must specify version "v0.9".',
-        errors,
-        logger,
-      );
-      return false;
+    if (payload === null || payload === undefined) {
+      return true;
     }
 
-    const presentKeys = A2UI_UPDATE_KEYS.filter(
-      key => key in itemObj && (itemObj as Record<string, unknown>)[key] !== undefined,
-    );
-
-    if (presentKeys.length === 0) {
-      CrossFrameValidator.recordError(
-        'Malformed payload for RENDER_A2UI: item must contain an update property (createSurface, updateComponents, updateDataModel, or deleteSurface).',
+    if (typeof payload !== 'object' || Array.isArray(payload)) {
+      recordError(
+        'Malformed payload for A2UI_CATALOG: must be an object, null, or undefined.',
         errors,
         logger,
       );
       return false;
     }
 
-    if (presentKeys.length > 1) {
-      CrossFrameValidator.recordError(
-        `Malformed payload for RENDER_A2UI: item must contain exactly one update property, but found: ${presentKeys.join(', ')}.`,
+    if (hasPrototypePollution(payload)) {
+      recordError(
+        'Malformed payload for A2UI_CATALOG: prototype pollution key detected.',
         errors,
         logger,
       );
       return false;
     }
 
-    const updateType = presentKeys[0];
-    const updateObj = (itemObj as Record<string, unknown>)[updateType];
+    const payloadObj = payload as Record<string, unknown>;
 
-    if (!updateObj || typeof updateObj !== 'object' || Array.isArray(updateObj)) {
-      CrossFrameValidator.recordError(
-        `Malformed payload for RENDER_A2UI: ${updateType} property must be an object.`,
-        errors,
-        logger,
-      );
-      return false;
-    }
-
-    const updateData = updateObj as BaseSurfaceDetails;
-    if (typeof updateData.surfaceId !== 'string') {
-      CrossFrameValidator.recordError(
-        `Malformed payload for RENDER_A2UI: ${updateType} must contain a valid surfaceId string.`,
-        errors,
-        logger,
-      );
-      return false;
-    }
-
-    if (updateType === 'createSurface') {
-      const createDetails = updateObj as CreateSurfaceDetails;
-      if (typeof createDetails.catalogId !== 'string') {
-        CrossFrameValidator.recordError(
-          'Malformed payload for RENDER_A2UI: createSurface must contain a valid catalogId string.',
-          errors,
-          logger,
-        );
-        return false;
-      }
+    if (payloadObj['error'] !== undefined) {
       if (
-        createDetails.sendDataModel !== undefined &&
-        typeof createDetails.sendDataModel !== 'boolean'
+        !payloadObj['error'] ||
+        typeof payloadObj['error'] !== 'object' ||
+        Array.isArray(payloadObj['error'])
       ) {
-        CrossFrameValidator.recordError(
-          'Malformed payload for RENDER_A2UI: createSurface sendDataModel must be a boolean if present.',
+        recordError('Malformed error in A2UI_CATALOG: must be an object.', errors, logger);
+        return false;
+      }
+      return true;
+    }
+
+    if (payloadObj['catalogs'] !== undefined) {
+      if (!Array.isArray(payloadObj['catalogs'])) {
+        recordError(
+          'Malformed catalogs in A2UI_CATALOG: catalogs must be an Array.',
           errors,
           logger,
         );
         return false;
       }
-    } else if (updateType === 'updateComponents') {
-      const updateCompDetails = updateObj as UpdateComponentsDetails;
-      if (!Array.isArray(updateCompDetails.components)) {
-        CrossFrameValidator.recordError(
-          'Malformed payload for RENDER_A2UI: updateComponents must contain a components Array.',
-          errors,
-          logger,
-        );
-        return false;
-      }
-      for (const comp of updateCompDetails.components) {
-        if (!comp || typeof comp !== 'object' || Array.isArray(comp)) {
-          CrossFrameValidator.recordError(
-            'Malformed payload for RENDER_A2UI: updateComponents components array items must be objects.',
+      for (const entry of payloadObj['catalogs']) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          recordError(
+            'Malformed catalog entry in A2UI_CATALOG catalogs: entries must be objects.',
             errors,
             logger,
           );
           return false;
         }
       }
-    } else if (updateType === 'updateDataModel') {
-      const updateModelDetails = updateObj as UpdateDataModelDetails;
-      if (updateModelDetails.path !== undefined && typeof updateModelDetails.path !== 'string') {
-        CrossFrameValidator.recordError(
-          'Malformed payload for RENDER_A2UI: updateDataModel path must be a string if present.',
+    }
+
+    if (payloadObj['catalog'] !== undefined && payloadObj['catalog'] !== null) {
+      if (typeof payloadObj['catalog'] !== 'object' || Array.isArray(payloadObj['catalog'])) {
+        recordError(
+          'Malformed catalog in A2UI_CATALOG: catalog must be an object or null.',
           errors,
           logger,
         );
@@ -514,14 +454,108 @@ export class CrossFrameValidator {
     return true;
   }
 
-  private static recordError(
-    errorMsg: string,
+  /**
+   * Validates a SEND_TO_SERVER payload, delegating to versioned wire validators
+   * based on the payload `version` attribute ('v1.0' / '1.0' vs 'v0.9' / '0.9' / omitted).
+   *
+   * @param payload The SEND_TO_SERVER payload to validate.
+   * @param errors An optional array to collect validation error messages.
+   * @param logger A logger to record validation messages to.
+   * @returns `true` if the payload is valid, `false` otherwise.
+   */
+  static validateSendToServerPayload(
+    payload: unknown,
     errors: string[] | undefined,
     logger: Pick<TaggedLogger, 'error' | 'warn'>,
-  ): void {
-    logger.error(errorMsg);
-    if (errors) {
-      errors.push(errorMsg);
+  ): boolean {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      recordError('Malformed payload for SEND_TO_SERVER: must be an object.', errors, logger);
+      return false;
     }
+
+    if (hasPrototypePollution(payload)) {
+      recordError(
+        'Malformed payload for SEND_TO_SERVER: prototype pollution key detected.',
+        errors,
+        logger,
+      );
+      return false;
+    }
+
+    const payloadObj = payload as Record<string, unknown>;
+    const version = payloadObj['version'];
+
+    if (version === 'v1.0') {
+      recordError(
+        "Invalid wire message: A2UI v1.0 messages must specify version: '1.0' (got 'v1.0')",
+        errors,
+        logger,
+      );
+      return false;
+    }
+
+    if (version === '1.0') {
+      return CrossFrameValidator.v10Validator.validateSendToServer(payload, errors, logger);
+    }
+
+    if (version === 'v0.9' || version === '0.9' || version === undefined) {
+      return CrossFrameValidator.v09Validator.validateSendToServer(payload, errors, logger);
+    }
+
+    recordError(
+      `Unsupported protocol version for SEND_TO_SERVER: "${String(version)}".`,
+      errors,
+      logger,
+    );
+    return false;
+  }
+
+  /**
+   * Validates a single render message item structure.
+   *
+   * @param item The single RENDER_A2UI item to validate.
+   * @param errors An optional array to collect validation error messages.
+   * @param logger A logger to record validation messages to.
+   * @returns `true` if the item is valid, `false` otherwise.
+   */
+  private static validateSingleRenderMessage(
+    item: unknown,
+    errors: string[] | undefined,
+    logger: Pick<TaggedLogger, 'error' | 'warn'>,
+  ): boolean {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      recordError(
+        'Malformed payload for RENDER_A2UI: array items must be objects.',
+        errors,
+        logger,
+      );
+      return false;
+    }
+    const itemObj = item as Record<string, unknown>;
+    const version = itemObj['version'];
+
+    if (version === 'v1.0') {
+      recordError(
+        "Invalid wire message: A2UI v1.0 messages must specify version: '1.0' (got 'v1.0')",
+        errors,
+        logger,
+      );
+      return false;
+    }
+
+    if (version === '1.0') {
+      return CrossFrameValidator.v10Validator.validateRenderItem(item, errors, logger);
+    }
+
+    if (version === 'v0.9') {
+      return CrossFrameValidator.v09Validator.validateRenderItem(item, errors, logger);
+    }
+
+    recordError(
+      'Malformed payload for RENDER_A2UI: array items must specify version "v0.9" or "1.0".',
+      errors,
+      logger,
+    );
+    return false;
   }
 }

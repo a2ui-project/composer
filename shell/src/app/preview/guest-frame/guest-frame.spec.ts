@@ -17,7 +17,7 @@
 import {Component, signal, WritableSignal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {PreviewBridgeMessageType, type SurfaceResizePayload} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, type SurfaceResizePayload, ThemePreference} from 'a2ui-bridge';
 
 import {ReplaySubject} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
@@ -27,16 +27,15 @@ import {
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {bridgeEnvelope, surfaceResizeEnvelope} from '../testing/bridge-envelopes';
 import {showGuestDocument} from '../testing/guest-document';
 import {buildRendererUrl} from '../renderer-url';
 import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
-import {GuestFrame} from './guest-frame';
+import {GuestFrame, GUEST_FRAME_CATALOG_MANAGEMENT, GuestFrameCatalogState} from './guest-frame';
 import {GuestFrameHarness} from './test/guest-frame.harness';
+import {ErrorLogger} from '../../debug/error-logger.service';
+import type {A2uiProtocolVersion} from 'a2ui-bridge';
 
 const RENDERER_URL = 'http://localhost:3000/renderer';
 const RENDERER_ORIGIN = 'http://localhost:3000';
@@ -59,6 +58,7 @@ type FrameEvent =
     <a2ui-composer-guest-frame
       [payload]="payload()"
       [defaultTarget]="defaultTarget"
+      [autoRejectAgentFunctions]="autoRejectAgentFunctions()"
       [frameTitle]="'Test preview'"
       (surfaceResize)="record({output: 'surfaceResize', report: $event})"
       (rendererReady)="record({output: 'rendererReady'})"
@@ -72,8 +72,10 @@ type FrameEvent =
 })
 class TestHost {
   readonly payload = signal<unknown[] | null>(null);
+  readonly autoRejectAgentFunctions = signal<boolean>(false);
   defaultTarget = DefaultTarget.REPLACE;
   readonly events: FrameEvent[] = [];
+
   /** Called with each emission as it happens, for checks on ordering. */
   onEvent: (event: FrameEvent) => void = () => {};
 
@@ -97,7 +99,10 @@ describe('GuestFrame', () => {
     vi.restoreAllMocks();
   });
 
-  function configure(hostCommunication: Partial<HostCommunication> | null): void {
+  function configure(
+    hostCommunication: Partial<HostCommunication> | null,
+    catalogOverrides?: Partial<GuestFrameCatalogState> | null,
+  ): void {
     TestBed.configureTestingModule({
       imports: [TestHost],
       providers: [
@@ -107,6 +112,9 @@ describe('GuestFrame', () => {
         },
         {provide: AppConfigProvider, useValue: {themePreference}},
         ...(hostCommunication ? [{provide: HostCommunication, useValue: hostCommunication}] : []),
+        ...(catalogOverrides !== null && catalogOverrides !== undefined
+          ? [{provide: GUEST_FRAME_CATALOG_MANAGEMENT, useValue: catalogOverrides}]
+          : []),
       ],
     });
   }
@@ -139,20 +147,26 @@ describe('GuestFrame', () => {
 
   describe('with a stubbed HostCommunication', () => {
     let messages: ReplaySubject<MessageEnvelope>;
+    let callAgentFunctionSubject: ReplaySubject<MessageEnvelope>;
     let hostCommunication: {
       registerIframe: ReturnType<typeof vi.fn>;
       unregisterIframe: ReturnType<typeof vi.fn>;
       sendRenderA2UI: ReturnType<typeof vi.fn>;
+      sendMessage: ReturnType<typeof vi.fn>;
       messageStream$: ReplaySubject<MessageEnvelope>;
+      callAgentFunction$: ReplaySubject<MessageEnvelope>;
     };
 
     beforeEach(() => {
       messages = new ReplaySubject<MessageEnvelope>(1);
+      callAgentFunctionSubject = new ReplaySubject<MessageEnvelope>(1);
       hostCommunication = {
         registerIframe: vi.fn(),
         unregisterIframe: vi.fn(),
         sendRenderA2UI: vi.fn(),
+        sendMessage: vi.fn(),
         messageStream$: messages,
+        callAgentFunction$: callAgentFunctionSubject,
       };
       configure(hostCommunication as unknown as Partial<HostCommunication>);
     });
@@ -806,6 +820,95 @@ describe('GuestFrame', () => {
         expect(fixture.componentInstance.events).toEqual([]);
       });
     });
+
+    describe('autoRejectAgentFunctions', () => {
+      it('does not auto-reject when autoRejectAgentFunctions is false (default)', async () => {
+        const {fixture, harness} = await mount();
+        const iframe = await iframeOf(harness);
+
+        callAgentFunctionSubject.next({
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          origin: 'http://localhost:3000',
+          timestamp: Date.now(),
+          sourceWindow: iframe.contentWindow!,
+          payload: {
+            version: 'v1.0',
+            callAgentFunction: {
+              surfaceId: 'surf-1',
+              functionCallId: 'call-1',
+              call: 'testFunc',
+            },
+          },
+        });
+        fixture.detectChanges();
+
+        expect(hostCommunication.sendRenderA2UI).not.toHaveBeenCalled();
+      });
+
+      it('auto-rejects callAgentFunction when autoRejectAgentFunctions is true and sourceWindow matches', async () => {
+        const {fixture, harness} = await mount(host => host.autoRejectAgentFunctions.set(true));
+        const iframe = await iframeOf(harness);
+
+        vi.mocked(hostCommunication.sendRenderA2UI).mockClear();
+
+        callAgentFunctionSubject.next({
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          origin: 'http://localhost:3000',
+          timestamp: Date.now(),
+          sourceWindow: iframe.contentWindow!,
+          payload: {
+            version: 'v1.0',
+            callAgentFunction: {
+              surfaceId: 'surf-1',
+              functionCallId: 'call-xyz-123',
+              call: 'testFunc',
+            },
+          },
+        });
+        fixture.detectChanges();
+
+        expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(
+          [
+            {
+              version: '1.0',
+              agentFunctionResponse: {
+                functionCallId: 'call-xyz-123',
+                error: {
+                  code: 'NO_AGENT_CONNECTED',
+                  message: 'No agent is connected to handle agent function calls.',
+                },
+              },
+            },
+          ],
+          iframe.contentWindow!,
+        );
+      });
+
+      it('ignores callAgentFunction emissions originating from a different sourceWindow', async () => {
+        const {fixture} = await mount(host => host.autoRejectAgentFunctions.set(true));
+
+        vi.mocked(hostCommunication.sendRenderA2UI).mockClear();
+        const differentWindow = {} as Window;
+
+        callAgentFunctionSubject.next({
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          origin: 'http://localhost:3000',
+          timestamp: Date.now(),
+          sourceWindow: differentWindow,
+          payload: {
+            version: 'v1.0',
+            callAgentFunction: {
+              surfaceId: 'surf-1',
+              functionCallId: 'call-xyz-123',
+              call: 'testFunc',
+            },
+          },
+        });
+        fixture.detectChanges();
+
+        expect(hostCommunication.sendRenderA2UI).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('with the real HostCommunication', () => {
@@ -882,6 +985,104 @@ describe('GuestFrame', () => {
         {type: PreviewBridgeMessageType.GET_CATALOG},
         RENDERER_ORIGIN,
       );
+    });
+  });
+
+  describe('protocol version mismatch & unsettled handshake', () => {
+    let messages: ReplaySubject<MessageEnvelope>;
+    let hostCommunication: {
+      registerIframe: ReturnType<typeof vi.fn>;
+      unregisterIframe: ReturnType<typeof vi.fn>;
+      sendRenderA2UI: ReturnType<typeof vi.fn>;
+      sendMessage: ReturnType<typeof vi.fn>;
+      messageStream$: ReplaySubject<MessageEnvelope>;
+    };
+    let hasReceivedCatalogResponseSignal: WritableSignal<boolean>;
+    let activeProtocolVersionSignal: WritableSignal<A2uiProtocolVersion>;
+    let errorLogger: ErrorLogger;
+
+    beforeEach(() => {
+      messages = new ReplaySubject<MessageEnvelope>(1);
+      hostCommunication = {
+        registerIframe: vi.fn(),
+        unregisterIframe: vi.fn(),
+        sendRenderA2UI: vi.fn(),
+        sendMessage: vi.fn(),
+        messageStream$: messages,
+      };
+      hasReceivedCatalogResponseSignal = signal(false);
+      activeProtocolVersionSignal = signal<A2uiProtocolVersion>('v0.9');
+      configure(hostCommunication as unknown as Partial<HostCommunication>, {
+        hasReceivedCatalogResponse: hasReceivedCatalogResponseSignal,
+        activeProtocolVersion: activeProtocolVersionSignal,
+      });
+      errorLogger = TestBed.inject(ErrorLogger);
+    });
+
+    it('defers payload dispatch while catalog response is unsettled (hasReceivedCatalogResponse is false)', async () => {
+      const {fixture, harness} = await mount(host => host.payload.set(PAYLOAD));
+      const iframe = await iframeOf(harness);
+      await harness.simulateFrameLoad();
+
+      messages.next(
+        bridgeEnvelope(
+          PreviewBridgeMessageType.RENDERER_READY,
+          {},
+          {sourceWindow: iframe.contentWindow!},
+        ),
+      );
+      fixture.detectChanges();
+
+      expect(hostCommunication.sendRenderA2UI).not.toHaveBeenCalled();
+
+      // Handshake settles
+      hasReceivedCatalogResponseSignal.set(true);
+      fixture.detectChanges();
+
+      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(PAYLOAD, iframe);
+    });
+
+    it('blocks dispatch and logs PROTOCOL_VERSION_MISMATCH when settled catalog version mismatches payload', async () => {
+      const v1Payload = [
+        {
+          version: 'v1.0',
+          createSurface: {
+            surfaceId: 'surf',
+            catalogId: 'cat',
+            components: [],
+          },
+        },
+      ];
+      hasReceivedCatalogResponseSignal.set(true);
+      activeProtocolVersionSignal.set('v0.9');
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+
+      const {fixture, harness} = await mount(host => host.payload.set(v1Payload));
+      const iframe = await iframeOf(harness);
+      await harness.simulateFrameLoad();
+
+      messages.next(
+        bridgeEnvelope(
+          PreviewBridgeMessageType.RENDERER_READY,
+          {},
+          {sourceWindow: iframe.contentWindow!},
+        ),
+      );
+      fixture.detectChanges();
+
+      expect(hostCommunication.sendRenderA2UI).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceTag: '[GuestFrame]',
+          code: 'PROTOCOL_VERSION_MISMATCH',
+        }),
+      );
+
+      // When activeProtocolVersion updates to v1.0, GuestFrame re-runs syncPayload and dispatches
+      activeProtocolVersionSignal.set('v1.0');
+      fixture.detectChanges();
+
+      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(v1Payload, iframe);
     });
   });
 });

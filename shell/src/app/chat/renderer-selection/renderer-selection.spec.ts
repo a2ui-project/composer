@@ -431,4 +431,32 @@ describe('RendererSelection', () => {
     await Promise.resolve();
     expect(service.isSwitching()).toBe(false);
   });
+
+  it('switches successfully when A2UI_CATALOG arrives wrapped in { catalog, catalogs }', async () => {
+    const switched = vi.fn();
+    const selection = service.selectRenderer('lit').then(switched);
+    await Promise.resolve();
+    ready();
+    emit(PreviewBridgeMessageType.A2UI_CATALOG, {catalog: litCatalog, catalogs: [litCatalog]});
+    activeCatalog.set(structuredClone(litCatalog));
+    isHandshakeInProgress.set(false);
+    TestBed.flushEffects();
+    await selection;
+    expect(switched).toHaveBeenCalledOnce();
+    expect(service.isSwitching()).toBe(false);
+  });
+
+  it('switches successfully when A2UI_CATALOG arrives wrapped in { catalogs } without catalog key', async () => {
+    const switched = vi.fn();
+    const selection = service.selectRenderer('lit').then(switched);
+    await Promise.resolve();
+    ready();
+    emit(PreviewBridgeMessageType.A2UI_CATALOG, {catalogs: [litCatalog]});
+    activeCatalog.set(structuredClone(litCatalog));
+    isHandshakeInProgress.set(false);
+    TestBed.flushEffects();
+    await selection;
+    expect(switched).toHaveBeenCalledOnce();
+    expect(service.isSwitching()).toBe(false);
+  });
 });

@@ -14,10 +14,20 @@
  * limitations under the License.
  */
 
-import {Component, inject, effect, computed, untracked, input, signal} from '@angular/core';
+import {
+  Component,
+  inject,
+  effect,
+  computed,
+  untracked,
+  input,
+  signal,
+  viewChild,
+} from '@angular/core';
 import {type SurfaceResizePayload} from 'a2ui-bridge';
 import {clampContentHeight} from '../content-height';
-import {GuestFrame} from '../guest-frame/guest-frame';
+import {GuestFrame, GUEST_FRAME_CATALOG_MANAGEMENT} from '../guest-frame/guest-frame';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {DefaultTarget} from '../../shell/host-communication/host-communication';
 import {ChatState} from '../../chat/chat-state/chat-state';
 import {StateSync} from '../../chat/state-sync/state-sync';
@@ -38,12 +48,26 @@ export type RenderedFrameSizing = 'fill' | 'content';
   selector: 'a2ui-composer-rendered-frame',
   standalone: true,
   imports: [GuestFrame],
+  providers: [
+    {
+      provide: GUEST_FRAME_CATALOG_MANAGEMENT,
+      useFactory: () => inject(CatalogManagement, {optional: true}),
+    },
+  ],
   templateUrl: './rendered-frame.ng.html',
   styleUrl: './rendered-frame.scss',
 })
 export class RenderedFrame {
-  private chatState = inject(ChatState);
-  private stateSync = inject(StateSync);
+  private readonly chatState = inject(ChatState);
+  private readonly stateSync = inject(StateSync);
+
+  readonly guestFrame = viewChild(GuestFrame);
+
+  /**
+   * Automatically rejects incoming agent function calls with NO_AGENT_CONNECTED
+   * when no live agent is connected to the session.
+   */
+  readonly autoRejectAgentFunctions = input<boolean>(false);
 
   /**
    * The A2UI messages to render in the guest. Sent once the guest's document

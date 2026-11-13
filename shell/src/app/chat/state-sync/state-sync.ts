@@ -21,13 +21,20 @@ import {filter, map, switchMap, takeUntil} from 'rxjs/operators';
 import {ChatState} from '../chat-state/chat-state';
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
 import {MessageRole} from '../llm-client/llm-client';
-import {CAR_BOOKING} from '../chat-service/initial-draft';
+import {BASIC_CATALOG_ID_V0_9, BASIC_CATALOG_ID_V1_0} from '../chat-service/initial-draft';
+import {
+  DraftProtocolStrategy,
+  isUntouchedStarterDraft,
+  isUntouchedBlankDraft,
+} from '../chat-service/draft-protocol-strategy';
+import {V09DraftStrategy} from '../chat-service/v0-9-draft-strategy';
+import {V10DraftStrategy} from '../chat-service/v1-0-draft-strategy';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {RenderA2uiItem, A2uiComponentInstance, UpdateComponentsDetails} from 'a2ui-bridge';
+import {detectProtocolVersion, type A2uiProtocolVersion} from 'a2ui-bridge';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
-import {tryParseJsonArray, formatJson} from '../../utils/json';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {getCatalogId} from '../../storage/models/catalog-storage.model';
+import {tryParseJsonArray} from '../../utils/json';
 
 /**
  * Manages in-memory volatile autosave draft layouts and bidirectionally
@@ -37,16 +44,6 @@ import {getCatalogId} from '../../storage/models/catalog-storage.model';
  * and provides state hydration to prevent layout data loss across session
  * navigation swappings.
  */
-const BASIC_CATALOG_ID = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
-const UPDATE_COMPONENTS = 'updateComponents';
-const COMPONENTS = 'components';
-const REGISTER_MOCK_RULES = 'registerMockRules';
-const MOCK_RULES_CONFIG = 'mockRulesConfig';
-const RULES = 'rules';
-const ID = 'id';
-const CHILDREN = 'children';
-const MOCK_RULES_CONTAINER = 'mock_rules_container';
-
 @Injectable({
   providedIn: 'root',
 })
@@ -57,6 +54,8 @@ export class StateSync {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly logger = inject(ErrorLogger).withTag('[StateSync]');
+  private readonly v09Strategy = inject(V09DraftStrategy);
+  private readonly v10Strategy = inject(V10DraftStrategy);
 
   // A "draft" represents the volatile, unsaved in-memory JSON array
   // payload containing the active surface setup, component hierarchy,
@@ -106,6 +105,21 @@ export class StateSync {
         }
 
         this.previousCatalogId = catalogId;
+      });
+
+    toObservable(this.catalogManagement.activeProtocolVersion)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(version => {
+        this.handleProtocolVersionChange(version);
+      });
+
+    toObservable(this.catalogManagement.hasReceivedCatalogResponse)
+      .pipe(
+        filter(received => received),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => {
+        this.handleProtocolVersionChange(this.getActiveProtocolVersion());
       });
 
     const sharedA2uiPayload$ = this.startupConfigState.sharedA2uiPayload
@@ -214,7 +228,8 @@ export class StateSync {
     let catalogId = (catalog && getCatalogId(catalog)) || '';
     const activeRenderer = this.startupConfigState.activeRenderer();
     if (!activeRenderer?.samplePayload && !catalogId) {
-      catalogId = BASIC_CATALOG_ID;
+      catalogId =
+        this.getActiveProtocolVersion() === 'v1.0' ? BASIC_CATALOG_ID_V1_0 : BASIC_CATALOG_ID_V0_9;
     }
     const initial = this.getInitialDraft(catalogId);
     this._activeDraft.set(initial);
@@ -232,14 +247,64 @@ export class StateSync {
   resetToBlankDraft(): void {
     this.cancelPendingDraftSync$.next();
     const catalog = this.catalogManagement.activeCatalog();
-    const effectiveCatalogId = (catalog && getCatalogId(catalog)) || BASIC_CATALOG_ID;
+    const version = this.getActiveProtocolVersion();
+    const defaultCatalogId = version === 'v1.0' ? BASIC_CATALOG_ID_V1_0 : BASIC_CATALOG_ID_V0_9;
+    const effectiveCatalogId = (catalog && getCatalogId(catalog)) || defaultCatalogId;
     this.isDraftEdited = false;
     this.lastSynchronizedLayout = null;
     this.previousCatalogId = effectiveCatalogId;
-    const blank = this.buildBlankSurfaceDraft(effectiveCatalogId);
+    const strategy = this.getStrategy(version);
+    const blank = strategy.getBlankDraft(effectiveCatalogId);
     this._activeDraft.set(blank);
     this.sessionResetNonce.update(n => n + 1);
     this.syncLayoutToHistory(blank);
+  }
+
+  private handleProtocolVersionChange(version: A2uiProtocolVersion): void {
+    if (!this.hasReceivedCatalogResponse()) {
+      return;
+    }
+
+    if (this.isDraftEdited) {
+      return; // Strictly preserve any user-edited or URL-bootstrapped draft!
+    }
+
+    const currentDraft = this._activeDraft();
+    const strategy = this.getStrategy(version);
+    const catalog = this.catalogManagement.activeCatalog();
+    let targetCatalogId = (catalog?.catalogId || catalog?.$id || '') as string;
+    if (targetCatalogId === BASIC_CATALOG_ID_V0_9 && version === 'v1.0') {
+      targetCatalogId = BASIC_CATALOG_ID_V1_0;
+    } else if (targetCatalogId === BASIC_CATALOG_ID_V1_0 && version === 'v0.9') {
+      targetCatalogId = BASIC_CATALOG_ID_V0_9;
+    }
+
+    if (isUntouchedStarterDraft(currentDraft)) {
+      const newStarter = strategy.getStarterDraft(targetCatalogId);
+      if (newStarter !== currentDraft) {
+        this._activeDraft.set(newStarter);
+        this.userDraftInput$.next(newStarter);
+      }
+    } else if (isUntouchedBlankDraft(currentDraft)) {
+      const newBlank = strategy.getBlankDraft(targetCatalogId || undefined);
+      if (newBlank !== currentDraft) {
+        this._activeDraft.set(newBlank);
+        this.userDraftInput$.next(newBlank);
+      }
+    }
+  }
+
+  private getStrategy(version?: A2uiProtocolVersion): DraftProtocolStrategy {
+    const v = version ?? this.getActiveProtocolVersion();
+    return v === 'v1.0' ? this.v10Strategy : this.v09Strategy;
+  }
+
+  private getActiveProtocolVersion(): A2uiProtocolVersion {
+    return this.catalogManagement.activeProtocolVersion();
+  }
+
+  private hasReceivedCatalogResponse(): boolean {
+    return this.catalogManagement.hasReceivedCatalogResponse();
   }
 
   private getInitialDraft(catalogId: string): string {
@@ -247,27 +312,19 @@ export class StateSync {
     if (activeRenderer?.samplePayload) {
       return activeRenderer.samplePayload;
     }
-    if (catalogId === BASIC_CATALOG_ID) {
-      return CAR_BOOKING;
-    }
     if (!catalogId) {
       return '';
     }
-    return this.buildBlankSurfaceDraft(catalogId);
-  }
-
-  private buildBlankSurfaceDraft(catalogId: string): string {
-    const draftObj: RenderA2uiItem[] = [
-      {
-        version: 'v0.9',
-        createSurface: {
-          surfaceId: 'sample-surface',
-          catalogId: catalogId,
-          sendDataModel: true,
-        },
-      },
-    ];
-    return formatJson(draftObj);
+    const version = this.getActiveProtocolVersion();
+    const strategy = this.getStrategy(version);
+    if (
+      catalogId === BASIC_CATALOG_ID_V0_9 ||
+      catalogId === BASIC_CATALOG_ID_V1_0 ||
+      catalogId === 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json'
+    ) {
+      return strategy.getStarterDraft(catalogId);
+    }
+    return strategy.getBlankDraft(catalogId);
   }
 
   /**
@@ -339,88 +396,26 @@ export class StateSync {
     if (!trimmed) {
       return '';
     }
-
     const parsed = tryParseJsonArray(trimmed);
-    if (parsed.success) {
-      const sanitized = parsed.data
-        .map(block => {
-          if (block && typeof block === 'object' && !Array.isArray(block)) {
-            return this.sanitizeBlock(block as RenderA2uiItem);
-          }
-          return block;
-        })
-        .filter((b): b is RenderA2uiItem => b !== null);
-      return sanitized.length > 0 ? JSON.stringify(sanitized) : '';
-    }
+    const isV10 = parsed.success
+      ? detectProtocolVersion(parsed.data) === 'v1.0'
+      : /"version"\s*:\s*"v?1\.0"/i.test(trimmed);
 
-    this.logger.warn(
-      'Discarding malformed layout JSON during sanitization: not a valid JSON array',
-    );
-    // Return empty fallback content if parsing or sanitization fails completely
-    return '';
-  }
-
-  private sanitizeBlock(parsed: RenderA2uiItem): RenderA2uiItem | null {
-    if (parsed[REGISTER_MOCK_RULES] || parsed[MOCK_RULES_CONFIG]) {
-      return null;
-    }
-
-    if (
-      parsed[UPDATE_COMPONENTS] &&
-      typeof parsed[UPDATE_COMPONENTS] === 'object' &&
-      parsed[UPDATE_COMPONENTS] !== null
-    ) {
-      const updateComponents = parsed[UPDATE_COMPONENTS] as UpdateComponentsDetails;
-      if (Array.isArray(updateComponents[COMPONENTS])) {
-        // Actively filter out component with ID 'mock_rules_container'
-        const filtered = updateComponents[COMPONENTS].filter((comp: unknown) => {
-          if (comp !== null && typeof comp === 'object' && !Array.isArray(comp)) {
-            const compObj = comp as A2uiComponentInstance;
-            return compObj[ID] !== MOCK_RULES_CONTAINER;
-          }
-          return true;
-        });
-
-        updateComponents[COMPONENTS] = filtered.map((component: unknown) => {
-          if (component !== null && typeof component === 'object' && !Array.isArray(component)) {
-            return this.sanitizeComponentObject(component as Record<string, unknown>);
-          }
-          return component;
-        });
+    if (isV10) {
+      const sanitized = this.v10Strategy.sanitizeLayout(trimmed);
+      if (!sanitized) {
+        this.logger.warn(
+          'Discarding malformed layout JSON during sanitization: not a valid JSON array',
+        );
       }
+      return sanitized;
     }
-    return parsed;
-  }
-
-  /**
-   * Recursively sanitizes component declarations mapping. Strips property
-   * keys matching /rules/ or prefix /^mock/i dynamically.
-   */
-  private sanitizeComponentObject(obj: Record<string, unknown>): Record<string, unknown> {
-    const cleaned: Record<string, unknown> = {};
-
-    for (const [key, val] of Object.entries(obj)) {
-      if (key === RULES || /^mock/i.test(key)) {
-        continue;
-      }
-
-      if (key === CHILDREN && Array.isArray(val)) {
-        // Exclude children pointing to the 'mock_rules_container'
-        cleaned[key] = val.filter(childId => childId !== MOCK_RULES_CONTAINER);
-      } else if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
-        cleaned[key] = this.sanitizeComponentObject(val as Record<string, unknown>);
-      } else if (Array.isArray(val)) {
-        cleaned[key] = val.map(item => {
-          if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
-            return this.sanitizeComponentObject(item as Record<string, unknown>);
-          }
-          return item;
-        });
-      } else {
-        cleaned[key] = val;
-      }
+    const sanitized = this.getStrategy().sanitizeLayout(trimmed);
+    if (!sanitized) {
+      this.logger.warn(
+        'Discarding malformed layout JSON during sanitization: not a valid JSON array',
+      );
     }
-
-    return cleaned;
+    return sanitized;
   }
 }

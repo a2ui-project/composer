@@ -16,13 +16,10 @@
 
 import {DOCUMENT} from '@angular/common';
 import {Injectable, inject} from '@angular/core';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {trustedResourceUrl} from 'safevalues';
 import {setScriptSrc} from 'safevalues/dom';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
@@ -238,6 +235,9 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     const activeRendererId = this.startupConfigState.selectedRendererId() || 'default';
     const catalogObj = this.catalogManagement.activeCatalog();
     const catalogId = (catalogObj && getCatalogId(catalogObj)) || '';
+    const protocolVersion = this.catalogManagement.hasReceivedCatalogResponse()
+      ? this.catalogManagement.activeProtocolVersion()
+      : '';
     return {
       ['send_to']: this.config.measurementId,
       ['composer_session_id']: this._composerSessionId,
@@ -245,6 +245,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       ['env_mode']: this.appConfigProvider.envMode(),
       ['active_renderer_id']: activeRendererId,
       ['catalog_id']: catalogId,
+      ['protocol_version']: protocolVersion,
     };
   }
 
@@ -434,11 +435,11 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     const sanitizedInvalidProperty =
       params.invalidProperty && // Second line of defense: bounds SHAPE and LENGTH only.
       // Primary defense against PII is the context-bound extraction in ErrorTelemetryReporter.
-      /^[a-zA-Z0-9_$-]{1,64}$/.test(params.invalidProperty)
+      /^@?[a-zA-Z0-9_$-]{1,64}$/.test(params.invalidProperty)
         ? params.invalidProperty
         : 'none_or_redacted';
 
-    const customParams = {
+    const customParams: Record<string, unknown> = {
       ['event_category']: 'error',
       ['event_label']: params.errorCategory,
       ['source_tag']:
@@ -451,6 +452,9 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       ['column']: params.column ?? -1,
       ['invalid_property']: sanitizedInvalidProperty,
     };
+    if (params.protocolVersion !== undefined) {
+      customParams['protocol_version'] = params.protocolVersion;
+    }
     this.dispatchGtagEvent('composer_error', customParams);
   }
 }

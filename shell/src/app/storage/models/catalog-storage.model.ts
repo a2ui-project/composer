@@ -15,6 +15,11 @@
  */
 
 /**
+ * Type alias for parsed catalog JSON data.
+ */
+export type CatalogJson = Catalog;
+
+/**
  * Database record schema representing a cached component catalog
  * stored inside the IndexedDB object store.
  */
@@ -23,6 +28,8 @@ export declare interface CachedCatalogRecord {
   catalogString: string;
   checksumHash: string;
   lastAccessed: number;
+  catalogJson?: Catalog;
+  catalogsJson?: Catalog[];
 }
 
 /**
@@ -54,6 +61,7 @@ export declare interface Catalog {
   title?: string;
   description?: string;
   catalogId?: string;
+  protocolVersion?: string;
   components?: {[key: string]: CatalogComponentSchema};
   /**
    * The functions the catalog declares, either keyed by name or as a list of
@@ -84,4 +92,29 @@ export function catalogDeclaresFunction(catalog: Catalog, name: string): boolean
     return functions.some(declared => declared.name === name);
   }
   return Object.hasOwn(functions, name);
+}
+
+/**
+ * Returns the function entries declared by a catalog as a list of name-schema pairs,
+ * regardless of whether the catalog declared its functions as a keyed map or a list of schemas.
+ *
+ * @param catalog The catalog to extract declared functions from.
+ * @returns An array of `[name, schema]` tuples representing each declared function.
+ */
+export function getCatalogFunctionEntries(
+  catalog: Catalog,
+): Array<[string, Record<string, unknown>]> {
+  const functions = catalog.functions;
+  if (!functions) {
+    return [];
+  }
+  if (Array.isArray(functions)) {
+    return functions
+      .filter(
+        (fn): fn is CatalogFunctionSchema =>
+          typeof fn === 'object' && fn !== null && typeof fn.name === 'string',
+      )
+      .map(fn => [fn.name, fn as unknown as Record<string, unknown>]);
+  }
+  return Object.entries(functions);
 }

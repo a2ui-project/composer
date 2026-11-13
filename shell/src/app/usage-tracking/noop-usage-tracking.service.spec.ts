@@ -15,9 +15,8 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {beforeEach, describe, expect, it} from 'vitest';
-import {ThemePreference} from '../settings/app-config-provider/app-config-provider';
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {NoopUsageTrackingService} from './noop-usage-tracking.service';
 import {ApiKeyAction, PromptTurnType, ShareTrackingStatus} from './usage-tracking.service';

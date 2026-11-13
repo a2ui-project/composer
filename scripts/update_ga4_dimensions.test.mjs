@@ -74,6 +74,13 @@ describe('update_ga4_dimensions', () => {
         displayName: 'Error Invalid Property',
         description: 'Schema property failing validation',
       });
+
+      assert.ok(dimensions.has('protocol_version'));
+      assert.deepEqual(dimensions.get('protocol_version'), {
+        paramName: 'protocol_version',
+        displayName: 'Protocol Version',
+        description: 'Active A2UI protocol version (v0.9 or v1.0)',
+      });
     });
 
     it('extracts existing custom metrics with measurement units and descriptions', () => {
@@ -114,6 +121,7 @@ describe('update_ga4_dimensions', () => {
       assert.ok(params.has('env_mode'), 'Expected env_mode');
       assert.ok(params.has('active_renderer_id'), 'Expected active_renderer_id');
       assert.ok(params.has('catalog_id'), 'Expected catalog_id');
+      assert.ok(params.has('protocol_version'), 'Expected protocol_version');
 
       // Event parameters
       assert.ok(params.has('prompt_id'), 'Expected prompt_id');
@@ -881,7 +889,9 @@ ${METRICS_END}
         assert.equal(syncResult.hasChanges, true);
         assert.deepEqual(syncResult.newDefinitions.addedDimensions, ['open_file_reason']);
         assert.deepEqual(syncResult.newDefinitions.addedMetrics, ['subclass_duration_seconds']);
-        const reasonDim = syncResult.newDefinitions.dimensions.find(d => d.paramName === 'open_file_reason');
+        const reasonDim = syncResult.newDefinitions.dimensions.find(
+          d => d.paramName === 'open_file_reason',
+        );
         assert.deepEqual(reasonDim, {
           paramName: 'open_file_reason',
           displayName: 'Open File Failure Reason',
@@ -923,7 +933,10 @@ ${METRICS_END}
     });
 
     it('preserves existing SUBCLASS_DESCRIPTIONS parameters during standalone sync but prunes them when subclassPaths are provided without them', () => {
-      assert.equal(SUBCLASS_DESCRIPTIONS.open_file_reason, 'Categorized failure reason for failure to open an A2UI file');
+      assert.equal(
+        SUBCLASS_DESCRIPTIONS.open_file_reason,
+        'Categorized failure reason for failure to open an A2UI file',
+      );
       const existing = {
         dimensions: new Map([
           [
@@ -995,7 +1008,9 @@ ${METRICS_END}
         });
         assert.equal(standaloneSync.isUpToDate, true);
         assert.equal(standaloneSync.hasChanges, false);
-        assert.ok(standaloneSync.newDefinitions.dimensions.some(d => d.paramName === 'open_file_reason'));
+        assert.ok(
+          standaloneSync.newDefinitions.dimensions.some(d => d.paramName === 'open_file_reason'),
+        );
 
         const subclassSync = syncDimensions({
           scriptPath: tempScript,
@@ -1005,7 +1020,9 @@ ${METRICS_END}
         });
         assert.equal(subclassSync.isUpToDate, false);
         assert.equal(subclassSync.hasChanges, true);
-        assert.ok(!subclassSync.newDefinitions.dimensions.some(d => d.paramName === 'open_file_reason'));
+        assert.ok(
+          !subclassSync.newDefinitions.dimensions.some(d => d.paramName === 'open_file_reason'),
+        );
       } finally {
         fs.rmSync(tempDir, {recursive: true, force: true});
       }

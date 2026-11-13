@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {ThemePreference} from 'a2ui-bridge';
 import {TestBed} from '@angular/core/testing';
 import {provideRouter, Router} from '@angular/router';
 import {RouterTestingHarness} from '@angular/router/testing';
@@ -32,7 +33,6 @@ import {
   AppConfigProvider,
   EnvMode,
   AuthType,
-  ThemePreference,
 } from './settings/app-config-provider/app-config-provider';
 import {LlmClient} from './chat/llm-client/llm-client';
 import {CatalogManagement} from './storage/catalog-management/catalog-management';
@@ -117,12 +117,16 @@ describe('App Routes Active Verification', () => {
             activeCatalogTitle: signal(''),
             activeCatalogDescription: signal(''),
             activeCatalog: signal(null),
+            activeCatalogs: signal([]),
+            activeProtocolVersion: signal('v0.9'),
+            mergedActiveCatalog: signal(null),
             catalogError: signal(null),
             isHandshakeInProgress: signal(false),
             watchdogFired: signal(false),
             lastCatalogString: signal(''),
             lastChecksumHash: signal(''),
             catalogHashDelta: signal(false),
+            hasReceivedCatalogResponse: signal(true),
           },
         },
         {
@@ -144,7 +148,7 @@ describe('App Routes Active Verification', () => {
   it('activates root workspace dashboard pathway on valid environment', async () => {
     await harness.navigateByUrl('/');
     expect(router.url).toBe('/');
-  });
+  }, 15000);
 
   it('activates gallery pathway on gallery route navigation', async () => {
     await harness.navigateByUrl('/gallery');

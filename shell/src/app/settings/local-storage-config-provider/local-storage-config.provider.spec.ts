@@ -1,3 +1,4 @@
+import {ThemePreference} from 'a2ui-bridge';
 import {ErrorLogger} from '../../debug/error-logger.service';
 /**
  * Copyright 2026 Google LLC
@@ -20,12 +21,7 @@ import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
-import {
-  EnvMode,
-  AuthType,
-  A2aBackendMode,
-  ThemePreference,
-} from '../app-config-provider/app-config-provider';
+import {EnvMode, AuthType, A2aBackendMode} from '../app-config-provider/app-config-provider';
 import {LocalStorageAppConfigProvider} from './local-storage-config.provider';
 import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';

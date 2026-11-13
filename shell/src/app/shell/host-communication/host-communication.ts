@@ -16,15 +16,21 @@
 
 import {Injectable, effect, inject, signal, Signal, OnDestroy, untracked} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
-import {ReplaySubject} from 'rxjs';
+import {ReplaySubject, Subject, Observable, filter} from 'rxjs';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {EnvironmentContextService} from '../startup-resolution/state/environment-context.service';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {CrossFrameValidator} from '../cross-frame-validator/cross-frame-validator';
-import {PreviewBridgeMessageType, McpRequestPayload} from 'a2ui-bridge';
+import {
+  PreviewBridgeMessageType,
+  McpRequestPayload,
+  SendToServerPayload,
+  ThemePreference,
+} from 'a2ui-bridge';
+import type {
+  V10CallAgentFunctionPayload,
+  V10RendererFunctionResponsePayload,
+} from '../cross-frame-validator/v1-0-wire-validator';
 import {ErrorLogger, ErrorLogLevel} from '../../debug/error-logger.service';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
@@ -43,6 +49,24 @@ export declare interface MessageEnvelope {
   timestamp: number;
   /** Window source that dispatched this message */
   sourceWindow?: Window | null;
+}
+
+/**
+ * Envelope for incoming SEND_TO_SERVER messages preserving the originating window source.
+ */
+export declare interface SendToServerEnvelope<T = SendToServerPayload> {
+  payload: T;
+  sourceWindow: Window | null;
+  origin: string;
+  timestamp: number;
+}
+
+/**
+ * Error payload substituted when an incoming A2UI_CATALOG fails validation or
+ * bridge resolution.
+ */
+export interface CatalogHandshakeErrorPayload {
+  readonly error: {readonly message: string};
 }
 
 /**
@@ -133,6 +157,71 @@ export class HostCommunication implements OnDestroy {
   readonly messageStream = toSignal(this.messageStream$, {
     initialValue: null,
   });
+
+  private readonly sendToServerSubject = new Subject<SendToServerEnvelope>();
+  /** Stream broadcasting all validated incoming SEND_TO_SERVER messages */
+  readonly sendToServer$: Observable<SendToServerEnvelope> =
+    this.sendToServerSubject.asObservable();
+
+  /** Stream of incoming callAgentFunction invocations */
+  readonly callAgentFunction$ = this.sendToServer$.pipe(
+    filter(
+      (
+        env,
+      ): env is SendToServerEnvelope & {
+        payload: {callAgentFunction: V10CallAgentFunctionPayload};
+      } =>
+        !!env.payload &&
+        typeof env.payload === 'object' &&
+        'callAgentFunction' in env.payload &&
+        !!(env.payload as Record<string, unknown>)['callAgentFunction'],
+    ),
+  );
+
+  /** Stream of incoming rendererFunctionResponse results */
+  readonly rendererFunctionResponse$ = this.sendToServer$.pipe(
+    filter(
+      (
+        env,
+      ): env is SendToServerEnvelope & {
+        payload: {rendererFunctionResponse: V10RendererFunctionResponsePayload};
+      } =>
+        !!env.payload &&
+        typeof env.payload === 'object' &&
+        'rendererFunctionResponse' in env.payload &&
+        !!(env.payload as Record<string, unknown>)['rendererFunctionResponse'],
+    ),
+  );
+
+  /** Stream of incoming user action events */
+  readonly action$ = this.sendToServer$.pipe(
+    filter(
+      (
+        env,
+      ): env is SendToServerEnvelope & {
+        payload: {action: unknown};
+      } =>
+        !!env.payload &&
+        typeof env.payload === 'object' &&
+        'action' in env.payload &&
+        !!(env.payload as Record<string, unknown>)['action'],
+    ),
+  );
+
+  /** Stream of incoming error reports */
+  readonly sendToServerError$ = this.sendToServer$.pipe(
+    filter(
+      (
+        env,
+      ): env is SendToServerEnvelope & {
+        payload: {error: unknown};
+      } =>
+        !!env.payload &&
+        typeof env.payload === 'object' &&
+        'error' in env.payload &&
+        !!(env.payload as Record<string, unknown>)['error'],
+    ),
+  );
 
   /**
    * Recent envelopes retained to seed the debug panels (raw messages, events,
@@ -387,6 +476,31 @@ export class HostCommunication implements OnDestroy {
               sourceTag: '[Validation]',
             });
           }
+        }
+      }
+
+      if (type === PreviewBridgeMessageType.A2UI_CATALOG) {
+        const errors: string[] = [];
+        if (!CrossFrameValidator.validateIncomingMessage(envelope, errors, this.logger)) {
+          // Never hand a malformed (possibly prototype-polluted) catalog to
+          // downstream consumers. Substituting an error payload lets
+          // CatalogManagement fail the handshake immediately with the
+          // validator's reason instead of waiting for the catalog watchdog.
+          const errorPayload: CatalogHandshakeErrorPayload = {
+            error: {message: errors[0] ?? 'Malformed A2UI_CATALOG payload.'},
+          };
+          envelope.payload = errorPayload;
+        }
+      }
+
+      if (type === PreviewBridgeMessageType.SEND_TO_SERVER) {
+        if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
+          this.sendToServerSubject.next({
+            payload: data.payload as SendToServerPayload,
+            sourceWindow: (event.source as Window) ?? null,
+            origin: event.origin,
+            timestamp: Date.now(),
+          });
         }
       }
 
@@ -834,6 +948,7 @@ export class HostCommunication implements OnDestroy {
     this.iframeWindow = null;
     this.hasExplicitDefaultTarget = false;
     this.messageStreamSubject.complete();
+    this.sendToServerSubject.complete();
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
     }

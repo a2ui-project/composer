@@ -22,6 +22,7 @@ import {
   effect,
   ElementRef,
   inject,
+  InjectionToken,
   input,
   OnInit,
   output,
@@ -42,7 +43,22 @@ import {
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
+import type {A2uiProtocolVersion} from 'a2ui-bridge';
+import {validatePayloadProtocolVersion} from '../protocol-version-mismatch';
 import {buildRendererUrl} from '../renderer-url';
+
+export interface GuestFrameCatalogState {
+  hasReceivedCatalogResponse(): boolean;
+  activeProtocolVersion(): A2uiProtocolVersion;
+}
+
+export const GUEST_FRAME_CATALOG_MANAGEMENT = new InjectionToken<GuestFrameCatalogState | null>(
+  'GUEST_FRAME_CATALOG_MANAGEMENT',
+  {
+    providedIn: 'root',
+    factory: () => null,
+  },
+);
 
 /**
  * The sandboxed iframe that loads the guest renderer, shared by every preview
@@ -81,7 +97,17 @@ export class GuestFrame implements OnInit {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly logger = inject(ErrorLogger).withTag('[GuestFrame]');
+  private readonly errorLogger = inject(ErrorLogger);
+  private readonly logger = this.errorLogger.withTag('[GuestFrame]');
+  private readonly catalogManagement = inject(GUEST_FRAME_CATALOG_MANAGEMENT, {optional: true});
+
+  get contentWindow(): Window | null {
+    return this.iframeRef()?.nativeElement.contentWindow ?? null;
+  }
+
+  get iframeElement(): HTMLIFrameElement | null {
+    return this.iframeRef()?.nativeElement ?? null;
+  }
 
   /**
    * The A2UI messages to render. Sent once the guest's document has announced
@@ -100,6 +126,12 @@ export class GuestFrame implements OnInit {
    * messages passes {@link DefaultTarget.KEEP} for the others.
    */
   readonly defaultTarget = input<DefaultTarget>(DefaultTarget.REPLACE);
+
+  /**
+   * Whether incoming `callAgentFunction` messages from this frame's guest should
+   * be automatically answered with a NO_AGENT_CONNECTED error response.
+   */
+  readonly autoRejectAgentFunctions = input<boolean>(false);
 
   /** A validated SURFACE_RESIZE report from this frame's guest. */
   readonly surfaceResize = output<SurfaceResizePayload>();
@@ -193,6 +225,8 @@ export class GuestFrame implements OnInit {
 
     effect(() => {
       this.payload();
+      this.catalogManagement?.hasReceivedCatalogResponse();
+      this.catalogManagement?.activeProtocolVersion();
       untracked(() => this.syncPayload());
     });
   }
@@ -205,6 +239,35 @@ export class GuestFrame implements OnInit {
     this.hostCommunication.messageStream$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(envelope => untracked(() => this.handleEnvelope(envelope)));
+
+    this.hostCommunication.callAgentFunction$
+      ?.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(envelope => {
+        if (!this.autoRejectAgentFunctions()) {
+          return;
+        }
+        const guestWindow = this.contentWindow;
+        if (!guestWindow || envelope.sourceWindow !== guestWindow) {
+          return;
+        }
+        const functionCallId = envelope.payload?.callAgentFunction?.functionCallId;
+        if (!functionCallId) {
+          return;
+        }
+        const rejectionPayload = [
+          {
+            version: '1.0',
+            agentFunctionResponse: {
+              functionCallId,
+              error: {
+                code: 'NO_AGENT_CONNECTED',
+                message: 'No agent is connected to handle agent function calls.',
+              },
+            },
+          },
+        ];
+        this.hostCommunication.sendRenderA2UI(rejectionPayload, guestWindow);
+      });
   }
 
   /**
@@ -316,6 +379,33 @@ export class GuestFrame implements OnInit {
     if (!this.readyForCurrentLoad) return;
     const iframe = this.iframeRef()?.nativeElement;
     if (!iframe) return;
+
+    if (
+      this.defaultTarget() === DefaultTarget.REPLACE &&
+      this.catalogManagement &&
+      !this.catalogManagement.hasReceivedCatalogResponse()
+    ) {
+      // Defer render until catalog discovery handshake settles
+      return;
+    }
+
+    const activeVersion =
+      this.catalogManagement && this.catalogManagement.hasReceivedCatalogResponse()
+        ? this.catalogManagement.activeProtocolVersion()
+        : null;
+
+    if (activeVersion !== null) {
+      const validation = validatePayloadProtocolVersion(payload, activeVersion);
+      if (!validation.valid) {
+        this.errorLogger.error({
+          sourceTag: '[GuestFrame]',
+          code: 'PROTOCOL_VERSION_MISMATCH',
+          message: validation.message,
+        });
+        return;
+      }
+    }
+
     const content = stableStringify(payload);
     if (content === this.lastSentPayload) return;
     const initialForDocument = this.lastSentPayload === null;

@@ -16,7 +16,7 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {signal} from '@angular/core';
+import {computed, inject, signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ReplaySubject} from 'rxjs';
 import {Clipboard} from '@angular/cdk/clipboard';
@@ -25,17 +25,20 @@ import {GalleryLauncher} from './gallery-launcher';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {GalleryHarness} from './test/gallery.harness';
 import {GalleryCatalog, CategorizedComponents} from './services/gallery-catalog';
-import {PreviewBridgeMessageType, type ComponentUsage} from 'a2ui-bridge';
+import {
+  type ComponentProvenance,
+  type GalleryProtocolStrategy,
+} from './protocol/gallery-protocol-strategy';
+import {V09GalleryStrategy} from './protocol/v0-9-gallery-strategy';
+import {V10GalleryStrategy} from './protocol/v1-0-gallery-strategy';
+import {PreviewBridgeMessageType, type ComponentUsage, ThemePreference} from 'a2ui-bridge';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {CatalogSchemaResolver, ParsedProperty} from './schema/catalog-schema-resolver';
 import {ErrorLogger} from '../debug/error-logger.service';
-import {Catalog} from '../storage/models/catalog-storage.model';
+import {Catalog, CatalogComponentSchema} from '../storage/models/catalog-storage.model';
 import {HostCommunication} from '../shell/host-communication/host-communication';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
 import {StateSync} from '../chat/state-sync/state-sync';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
@@ -146,14 +149,21 @@ interface TestFriendlyGallery {
 }
 
 class MockGalleryCatalogService {
+  private readonly catalogManagement = inject(CatalogManagement);
   readonly componentsList = signal<CategorizedComponents[]>([]);
   readonly selectedComponentKey = signal<string | null>(null);
   readonly selectedComponentProperties = signal<ParsedProperty[]>([]);
   readonly selectedComponentPreset = signal<ComponentUsage | null>(null);
+  readonly selectedComponentProvenance = signal<ComponentProvenance | undefined>(undefined);
   readonly selectedComponentUsage = signal<string>('');
   private readonly _galleryActive = signal<boolean>(false);
   readonly galleryActive = this._galleryActive.asReadonly();
   readonly loadingUsages = signal<boolean>(false);
+  readonly galleryStrategy = computed<GalleryProtocolStrategy>(() => {
+    return this.catalogManagement.activeProtocolVersion() === 'v1.0'
+      ? new V10GalleryStrategy()
+      : new V09GalleryStrategy();
+  });
 
   selectComponent = vi.fn((key: string | null) => {
     this.selectedComponentKey.set(key);
@@ -166,7 +176,27 @@ class MockGalleryCatalogService {
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);
+  readonly activeCatalogs = signal<Catalog[]>([]);
+  readonly activeProtocolVersion = signal<'v0.9' | 'v1.0'>('v0.9');
+  readonly hasReceivedCatalogResponse = signal<boolean>(true);
   readonly catalogError = signal<string | null>(null);
+  readonly mergedActiveCatalog = computed<Catalog | null>(() => {
+    const primary = this.activeCatalog();
+    const catalogs = this.activeCatalogs();
+    if (catalogs.length === 0) {
+      return primary;
+    }
+    const mergedComponents: Record<string, CatalogComponentSchema> = {};
+    for (const cat of catalogs) {
+      if (cat.components) {
+        Object.assign(mergedComponents, cat.components);
+      }
+    }
+    return {
+      ...(primary ?? catalogs[0]),
+      components: mergedComponents,
+    };
+  });
 }
 
 class MockHostCommunication {
@@ -834,6 +864,89 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentKey.set('Text');
     fixture.detectChanges();
     expect(await (await harness.getPreviewFrame())!.getSizing()).toBe('fill');
+  });
+
+  it('binds autoRejectAgentFunctions to true on the rendered frame', () => {
+    expect(fixture.componentInstance.renderedFrame()?.autoRejectAgentFunctions()).toBe(true);
+  });
+
+  it('defers preview rendering until catalog response handshake settles', () => {
+    hostCommunicationMock.sendRenderA2UI.mockClear();
+    catalogManagementMock.hasReceivedCatalogResponse.set(false);
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'https://a2ui.org/custom_catalog.json',
+      components: {Text: {type: 'object'}},
+    });
+    catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Text', text: 'Hello'}],
+    });
+    fixture.detectChanges();
+
+    expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
+
+    catalogManagementMock.hasReceivedCatalogResponse.set(true);
+    fixture.detectChanges();
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalled();
+  });
+
+  it('rejects payload and logs error when protocol version does not match active renderer', () => {
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
+    catalogManagementMock.activeProtocolVersion.set('v0.9');
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'https://a2ui.org/custom_catalog.json',
+      components: {Text: {type: 'object'}},
+    });
+    catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Text', text: 'Hello'}],
+    });
+    fixture.detectChanges();
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalled();
+    hostCommunicationMock.sendRenderA2UI.mockClear();
+
+    // Active renderer protocol changes to v1.0 while payload is v0.9
+    catalogManagementMock.activeProtocolVersion.set('v1.0');
+    fixture.detectChanges();
+
+    expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'PROTOCOL_VERSION_MISMATCH',
+      }),
+    );
+  });
+
+  it('uses v1.0 protocol strategy and emits single createSurface message when activeProtocolVersion is v1.0', () => {
+    hostCommunicationMock.sendRenderA2UI.mockClear();
+    catalogManagementMock.activeProtocolVersion.set('v1.0');
+    catalogManagementMock.activeCatalog.set({
+      $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+      components: {
+        Button: {type: 'object'},
+      },
+    });
+    catalogServiceMock.selectedComponentKey.set('Button');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Button', label: 'Submit'}],
+      data: {count: 1},
+    });
+    fixture.detectChanges();
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith([
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 'gallery-preview',
+          catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+          components: [{id: 'root', component: 'Button', label: 'Submit'}],
+          dataModel: {count: 1},
+          sendDataModel: true,
+        },
+      },
+    ]);
   });
 
   it('triggers another rendering update call when changing component selection', async () => {
@@ -1942,6 +2055,60 @@ describe('Gallery Component', () => {
         'Bound to /selectedValue — edit in the JSON editor.',
       );
       expect(await harness.getPropertyControlKind('value.0')).toBeNull();
+    });
+
+    it('validates an example composed of components from two catalogs when mergedActiveCatalog combines them', async () => {
+      const primaryCatalog: Catalog = {
+        $id: 'https://example.com/primary.json',
+        title: 'Primary Catalog',
+        protocolVersion: '1.0',
+        components: {
+          Text: {
+            type: 'object',
+            properties: {component: {const: 'Text'}, text: {type: 'string'}},
+            required: ['component', 'text'],
+          },
+        },
+      };
+
+      const secondaryCatalog: Catalog = {
+        $id: 'https://example.com/secondary.json',
+        title: 'Secondary Catalog',
+        protocolVersion: '1.0',
+        components: {
+          Button: {
+            type: 'object',
+            properties: {component: {const: 'Button'}, title: {type: 'string'}},
+            required: ['component', 'title'],
+          },
+        },
+      };
+
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set(primaryCatalog);
+      catalogManagementMock.activeCatalogs.set([primaryCatalog, secondaryCatalog]);
+
+      catalogServiceMock.selectedComponentKey.set('Text');
+      catalogServiceMock.selectedComponentPreset.set({
+        usage: [
+          {id: 'root', component: 'Text', text: 'Hello'},
+          {id: 'btn', component: 'Button', title: 'Click Me'},
+        ],
+      });
+      fixture.detectChanges();
+
+      const multiCatalogDraft = JSON.stringify({
+        components: [
+          {id: 'root', component: 'Text', text: 'Hello World'},
+          {id: 'btn', component: 'Button', title: 'Submit'},
+        ],
+      });
+
+      await harness.selectPlaygroundTab('Edit JSON');
+      await harness.editDraft(multiCatalogDraft);
+
+      expect(await harness.getDraftError()).toBeNull();
+      expect(await harness.getDraftText()).toBe(multiCatalogDraft);
     });
   });
 });

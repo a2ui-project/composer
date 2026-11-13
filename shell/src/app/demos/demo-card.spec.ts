@@ -18,7 +18,7 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal, WritableSignal} from '@angular/core';
 import {afterEach, beforeEach, describe, expect, it, MockInstance, vi} from 'vitest';
-import {Demo, PreviewBridgeMessageType} from 'a2ui-bridge';
+import {Demo, PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {DemoCard, DemoCardState} from './demo-card';
 import {DemoCardHarness} from './test/demo-card.harness';
 import {MEASURE_HEIGHT_PX, READY_TIMEOUT_MS, SIZING_WINDOW_MS} from './demo-card-sizing';
@@ -30,10 +30,7 @@ import {
   HostCommunication,
   MessageEnvelope,
 } from '../shell/host-communication/host-communication';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
 import {DemoLauncher} from './services/demo-launcher';
 
 const RENDERER_URL = 'http://localhost:3000/renderer';
@@ -810,5 +807,81 @@ describe('DemoCard sandboxed live demo frame', () => {
     resize(fixture, iframe, {height: 338, width: 445, viewportWidth: 445, contentReady: true});
     // The synchronous measureAvailableWidth call ensures the fresh commit is accepted
     expect(fixture.componentInstance.cardHeight()).toBe(338);
+  });
+
+  it('auto-rejects callAgentFunction dispatched by the card guest frame with NO_AGENT_CONNECTED', async () => {
+    const {fixture, harness} = await visibleCard();
+    const iframe = (await frameOf(harness))!;
+    const sendRenderA2UISpy = vi.spyOn(hostCommunication, 'sendRenderA2UI');
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: iframe.contentWindow!,
+        origin: RENDERER_ORIGIN,
+        data: {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            version: '1.0',
+            callAgentFunction: {
+              surfaceId: 'surf-demo',
+              functionCallId: 'func-demo-call-1',
+              call: 'executeAction',
+            },
+          },
+        },
+      }),
+    );
+    fixture.detectChanges();
+
+    expect(sendRenderA2UISpy).toHaveBeenCalledWith(
+      [
+        {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId: 'func-demo-call-1',
+            error: {
+              code: 'NO_AGENT_CONNECTED',
+              message: 'No agent is connected to handle agent function calls.',
+            },
+          },
+        },
+      ],
+      iframe.contentWindow!,
+    );
+  });
+
+  it('dispatches a v1.0 single-message createSurface demo cleanly without false PROTOCOL_VERSION_MISMATCH', async () => {
+    const v1Demo: Demo = {
+      id: 'v1-booking',
+      name: 'V1 Booking',
+      description: 'A v1.0 single-message demo.',
+      a2ui: [
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 'surface-v1',
+            catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+            sendDataModel: true,
+            components: [{id: 'root', component: 'Text', text: 'Hello v1.0'}],
+          },
+        } as unknown as Demo['a2ui'][number],
+      ],
+    };
+
+    const fixture = TestBed.createComponent(DemoCard);
+    fixture.componentRef.setInput('demo', v1Demo);
+    fixture.componentRef.setInput('mount', true);
+    fixture.detectChanges();
+    const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, DemoCardHarness);
+    const iframe = (await frameOf(harness))!;
+    sendMessageSpy.mockClear();
+
+    emitFrom(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY, {});
+
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      {type: PreviewBridgeMessageType.RENDER_A2UI, payload: v1Demo.a2ui},
+      iframe,
+    );
   });
 });
