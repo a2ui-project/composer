@@ -23,7 +23,11 @@ import type {
 } from '../../shell/cross-frame-validator/v1-0-wire-validator';
 import type {A2uiProtocolVersion} from 'a2ui-bridge';
 import type {CatalogJson} from '../../storage/models/catalog-storage.model';
-import {type A2aProtocolStrategy, sanitizeA2uiPayload} from './a2a-protocol-strategy';
+import {
+  type A2aProtocolStrategy,
+  A2UI_V10_RPC_KEYS,
+  sanitizeA2uiPayload,
+} from './a2a-protocol-strategy';
 
 /** Canonical A2UI v1.0 operation keys. */
 const V10_OPERATIONS = [
@@ -34,15 +38,6 @@ const V10_OPERATIONS = [
   'callRendererFunction',
   'agentFunctionResponse',
   'callAgentFunctionResponse',
-] as const;
-
-/** Canonical A2UI v1.0 RPC envelope keys. */
-const V10_RPC_KEYS = [
-  'callAgentFunction',
-  'rendererFunctionResponse',
-  'agentFunctionResponse',
-  'callAgentFunctionResponse',
-  'callRendererFunction',
 ] as const;
 
 /**
@@ -58,25 +53,12 @@ export class V10A2aStrategy implements A2aProtocolStrategy {
   readonly canonicalWireVersion: string = '1.0';
   readonly mimeType: string = 'application/a2ui+json';
 
-  getClientConfiguration(activeCatalogs?: CatalogJson[]): Record<string, unknown> {
+  getClientConfiguration(_activeCatalogs?: CatalogJson[]): Record<string, unknown> {
     const supportedExtensions = ['https://a2ui.org/a2a-extension/a2ui/v1.0'];
-    const supportedCatalogIds = (activeCatalogs ?? [])
-      .map(
-        c =>
-          (c as Record<string, unknown>)['$id'] ||
-          (c as Record<string, unknown>)['id'] ||
-          (c as Record<string, unknown>)['catalogId'],
-      )
-      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
 
     return {
-      ['capabilities']: {
-        ['extensions']: supportedExtensions.map(uri => ({['uri']: uri})),
-        ['supportedCatalogIds']: supportedCatalogIds,
-      },
       ['extensions']: supportedExtensions,
       ['acceptedOutputModes']: ['text/plain', 'application/json', 'application/a2ui+json'],
-      ['supportedCatalogIds']: supportedCatalogIds,
     };
   }
 
@@ -89,12 +71,22 @@ export class V10A2aStrategy implements A2aProtocolStrategy {
     userMessage?: string,
     metadata?: Record<string, unknown>,
   ): A2aPart {
+    const actionObj: Record<string, unknown> =
+      typeof action === 'object' && action !== null && !Array.isArray(action)
+        ? {...(action as Record<string, unknown>)}
+        : {value: action};
+
+    if (userMessage && !actionObj['userMessage']) {
+      actionObj['userMessage'] = userMessage;
+    }
+    if (metadata && !actionObj['metadata']) {
+      actionObj['metadata'] = metadata;
+    }
+
     return {
       data: {
         ['version']: this.canonicalWireVersion,
-        ['action']: action,
-        ...(userMessage ? {['userMessage']: userMessage} : {}),
-        ...(metadata ? {['metadata']: metadata} : {}),
+        ['action']: actionObj,
       },
       metadata: {
         ['mimeType']: this.mimeType,
@@ -170,6 +162,6 @@ export class V10A2aStrategy implements A2aProtocolStrategy {
   isA2uiRpcEnvelope(item: unknown): boolean {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
     const obj = item as Record<string, unknown>;
-    return V10_RPC_KEYS.some(key => key in obj && obj[key] !== undefined && obj[key] !== null);
+    return A2UI_V10_RPC_KEYS.some(key => key in obj && obj[key] !== undefined && obj[key] !== null);
   }
 }

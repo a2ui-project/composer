@@ -18,6 +18,7 @@ import {
   parseAndHealJsonLines,
   isRenderA2uiItem,
   runCatalogComponentSchemaCheck,
+  countBlockComponents,
   sanitizeComponentObject,
   getPayloadStrategy,
   A2uiPayloadParser,
@@ -368,6 +369,30 @@ describe('a2ui-payload-parser', () => {
         expect(v09Result.count).toBe(2);
         expect((v09Result.blocks[0] as Record<string, unknown>)['version']).toBe('v0.9');
       }
+    });
+
+    it('counts components accurately using countBlockComponents', () => {
+      const blocks = [
+        {
+          createSurface: {
+            surfaceId: 's1',
+            components: [{id: 'c1'}, {id: 'c2'}],
+          },
+        },
+        {
+          createSurface: {
+            surfaceId: 's2', // bare createSurface without inline components
+          },
+        },
+        {
+          updateComponents: {
+            surfaceId: 's1',
+            components: [{id: 'c3'}],
+          },
+        },
+      ];
+      expect(countBlockComponents(blocks)).toBe(3);
+      expect(A2uiPayloadParser.countBlockComponents(blocks)).toBe(3);
     });
   });
 });

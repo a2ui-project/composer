@@ -2433,13 +2433,13 @@ I'll output bad JSON.
       expect(committedText).toContain('"catalogId": "auto.healed.catalog"');
     });
 
-    it('fails outgoing validation when createSurface lacks catalogId and active catalog is empty', async () => {
+    it('fails outgoing validation when createSurface has invalid empty catalogId', async () => {
       catalogManagementMock.activeProtocolVersion.set('v1.0');
       catalogManagementMock.activeCatalog.set(null);
       catalogManagementMock.activeCatalogs.set([]);
 
       const payload =
-        '{"version": "1.0", "createSurface": {"surfaceId": "orphan-surf", "components": [{"component": "Card", "id": "c1"}]}}';
+        '{"version": "1.0", "createSurface": {"surfaceId": "orphan-surf", "catalogId": "", "components": [{"component": "Card", "id": "c1"}]}}';
 
       llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
         const contentStream = createMockStream([payload]);
@@ -2452,7 +2452,7 @@ I'll output bad JSON.
       const history = chatStateMock.chatHistory();
       const errorMsg = history[history.length - 1];
       expect(errorMsg.role).toBe(MessageRole.ERROR);
-      expect(errorMsg.errorDetails).toContain('must contain a non-empty string catalogId');
+      expect(errorMsg.errorDetails).toContain('catalogId must be a non-empty string when provided');
     });
 
     it('normalizes shorthand callRendererFunction with { call, args } into canonical callFunction', async () => {

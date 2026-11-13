@@ -16,7 +16,7 @@
 import {A2uiComponentInstance, RenderA2uiItem, type A2uiProtocolVersion} from 'a2ui-bridge';
 import {extractErrorDetails, tryParseJsonArray} from '../../utils/json';
 import {stripPrototypePollutionKeys} from '../../shell/cross-frame-validator/wire-version-validator';
-import type {CatalogJson} from '../../storage/models/catalog-storage.model';
+import type {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import type {PayloadProtocolStrategy} from './payload-protocol-strategy';
 import {V09PayloadStrategy} from './v0-9-payload-strategy';
 import {V10PayloadStrategy} from './v1-0-payload-strategy';
@@ -214,9 +214,41 @@ export function runCatalogComponentSchemaCheck(
   componentsOrCatalog?: Record<string, unknown> | CatalogJson,
   strategyOrVersion: PayloadProtocolStrategy | A2uiProtocolVersion | string = 'v0.9',
   catalogObj?: Record<string, unknown> | CatalogJson,
+  activeCatalogs?: readonly (Catalog | CatalogJson)[],
 ): boolean {
   const strategy = getPayloadStrategy(strategyOrVersion);
-  return strategy.runCatalogComponentSchemaCheck(parsedBlocks, componentsOrCatalog, catalogObj);
+  return strategy.runCatalogComponentSchemaCheck(
+    parsedBlocks,
+    componentsOrCatalog,
+    catalogObj,
+    activeCatalogs,
+  );
+}
+
+/**
+ * Counts total components inside parsed A2UI command blocks (both createSurface and updateComponents).
+ *
+ * @param blocks - The list of parsed A2UI blocks.
+ * @returns Total number of declared UI components across all blocks.
+ */
+export function countBlockComponents(blocks: unknown[]): number {
+  return (blocks as Array<Record<string, unknown>>).reduce((count, block) => {
+    if (!block || typeof block !== 'object' || Array.isArray(block)) {
+      return count;
+    }
+    const b = block as Record<string, unknown>;
+    const cs =
+      b['createSurface'] !== null && typeof b['createSurface'] === 'object'
+        ? (b['createSurface'] as Record<string, unknown>)
+        : undefined;
+    const uc =
+      b['updateComponents'] !== null && typeof b['updateComponents'] === 'object'
+        ? (b['updateComponents'] as Record<string, unknown>)
+        : undefined;
+    const csCount = Array.isArray(cs?.['components']) ? cs['components'].length : 0;
+    const ucCount = Array.isArray(uc?.['components']) ? uc['components'].length : 0;
+    return count + csCount + ucCount;
+  }, 0);
 }
 
 /**
@@ -251,6 +283,7 @@ export class A2uiPayloadParser {
 
   static parseAndHealJsonLines = parseAndHealJsonLines;
   static runCatalogComponentSchemaCheck = runCatalogComponentSchemaCheck;
+  static countBlockComponents = countBlockComponents;
   static attemptSyntaxHealing = attemptSyntaxHealing;
   static isRenderA2uiItem = isRenderA2uiItem;
   static sanitizeValue = sanitizeValue;

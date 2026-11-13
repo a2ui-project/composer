@@ -382,6 +382,35 @@ describe('ComposerWorkspace Dashboard', () => {
       expect(fixture.componentInstance.unreadEventsCount()).toBe(1);
     });
 
+    it('unregisters preview window and cancels pending RPCs when preview panel is disposed in Dockview', () => {
+      const pendingRpcRegistry = TestBed.inject(PendingRpcRegistry);
+      const manager = fixture.componentRef.injector.get(ComposerDockview);
+      const renderedFrame = manager.getRenderedFrame();
+      expect(renderedFrame).toBeDefined();
+
+      const stubWindow = {} as Window;
+      vi.spyOn(renderedFrame!, 'contentWindow', 'get').mockReturnValue(stubWindow);
+
+      fixture.componentInstance['registerActivePreviewFrame'](stubWindow);
+      expect(pendingRpcRegistry.isRegisteredFrame(stubWindow)).toBe(true);
+
+      const entry = pendingRpcRegistry.registerRpc({
+        functionCallId: 'call-dockview-dispose',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'fetchData'},
+        sourceWindow: stubWindow,
+      });
+      expect(entry.status).toBe('pending');
+
+      const renderedPanel = manager.api.getGroupPanel(ComposerPanelId.Rendered);
+      expect(renderedPanel).toBeDefined();
+      manager.api.removePanel(renderedPanel!);
+
+      expect(pendingRpcRegistry.isRegisteredFrame(stubWindow)).toBe(false);
+      expect(entry.status).toBe('rejected');
+      expect(fixture.componentInstance['activeRegisteredPreviewWindow']).toBeNull();
+    });
+
     it('unregisters old contentWindow and recognizes new contentWindow when preview switches', () => {
       const pendingRpcRegistry = TestBed.inject(PendingRpcRegistry);
       const manager = fixture.componentRef.injector.get(ComposerDockview);

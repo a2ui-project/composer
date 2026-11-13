@@ -27,7 +27,16 @@ import {
   PromptStrategyOptions,
   stripReturnTypeDeep,
 } from './prompt-protocol-strategy';
-import {serializeCatalogForPrompt} from './v0-9-prompt-strategy';
+import {
+  quoteCatalogValue,
+  iconSupport,
+  imageUrlGuidance,
+  iconGuidance,
+  visualAffordanceGuidance,
+  componentTreeMappingGuidance,
+  IconSupport,
+  serializeCatalogForPrompt,
+} from './prompt-strategy-helpers';
 
 /** Canonical default schema ID for secondary MCP tools catalog in v1.0. */
 export const DEFAULT_V10_MCP_FUNCTIONS_CATALOG_ID =
@@ -113,6 +122,7 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
           primaryCatalogId,
           mcpCatalogId,
           options.includeMultimodalGuidelines ?? false,
+          primaryCatalog,
         ) + mcpInstructions
       ).trimEnd() + customPromptSuffix
     );
@@ -171,27 +181,29 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
       })
       .join('\n');
 
+    const quotedMcpId = quoteCatalogValue(mcpCatalogId);
+
     return `
 
   ## Available MCP Tools & Catalog Instructions
 
   When building surfaces that interact with MCP tools:
 
-  1. Trigger MCP tools via button action function calls that chain \`updateDataModel\`, \`jmespath\`, and \`callMcpTool\`, explicitly specifying the function's \`catalogId\` (\`"${mcpCatalogId}"\`):
+  1. Trigger MCP tools via button action function calls that chain \`updateDataModel\`, \`jmespath\`, and \`callMcpTool\`, explicitly specifying the function's \`catalogId\` (${quotedMcpId}):
      \`\`\`json
      "action": {
        "functionCall": {
          "@call": "updateDataModel",
-         "catalogId": "${mcpCatalogId}",
+         "catalogId": ${quotedMcpId},
          "args": {
            "updates": {
              "@call": "jmespath",
-             "catalogId": "${mcpCatalogId}",
+             "catalogId": ${quotedMcpId},
              "args": {
                "expression": "{\\"/result\\": content[0].text}",
                "data": {
                  "@call": "callMcpTool",
-                 "catalogId": "${mcpCatalogId}",
+                 "catalogId": ${quotedMcpId},
                  "args": {
                    "name": "<tool_name>",
                    "arguments": {
@@ -228,7 +240,12 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
     primaryCatalogId: string,
     mcpCatalogId: string,
     includeMultimodalGuidelines = false,
+    primaryCatalog: Catalog | null = null,
   ): string {
+    const support = primaryCatalog ? iconSupport(primaryCatalog) : IconSupport.NONE;
+    const quotedPrimaryId = quoteCatalogValue(primaryCatalogId);
+    const quotedMcpId = quoteCatalogValue(mcpCatalogId);
+
     const multimodalGuidelinesSection = includeMultimodalGuidelines
       ? `
 
@@ -286,59 +303,13 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
     from the "components" map in the active catalog schema provided above.
     Never invent or guess component names not present in the active catalog.
 
-  ### 3. Icon Fidelity, Custom SVG & Styling Intent
-  * **Composite Icon & Feature Matching**: Closely examine visual icon
-    shapes for composite features (e.g., a document with an edit badge, a
-    search icon with a filter indicator, or a custom symbol). First check if
-    the active catalog's Icon component includes an exact visual match in
-    its enum.
-  * **Custom SVG Fallback (No Close Icon Match)**: If an icon in the
-    screenshot has distinct visual features that do NOT have a close match
-    in the active catalog's predefined icon list:
-    - **Do NOT** substitute a visually mismatched, generic, or oversimplified
-      placeholder icon.
-    - **Fallback to SVG**: Generate an inline vector graphic instead using
-      one of the mechanisms supported by the active catalog schema:
-      1. If the Icon component in the active catalog accepts custom path
-         data, specify the svgPath property with a valid SVG path d string.
-      2. If an Image component is available in the active catalog, supply an
-         inline SVG Data URL in its url/image source property
-         ("data:image/svg+xml;utf8,<svg ...>...</svg>").
+  ### 3. Icon, Image & Styling Intent
+  ${iconGuidance(support)}
   * **Visual Hierarchy**: Preserve typography scale, text weight, button
     prominence, and color intent using supported catalog properties.
 
   ### 4. Visual Affordance Recognition
-  Recognize common UI visual affordance symbols and map them strictly using
-  components defined in the active catalog schema provided above:
-  * **Downward Chevrons / Disclosure Carets (Collapsible Rows)**:
-    - **Visual Indicator**: Downward-facing arrows (∨, expand_more) at row
-      edges denote expandable/collapsible sections.
-    - **Catalog Mapping**: If the active catalog schema includes an expansion
-      or accordion component, use it. Otherwise, compose the row using
-      layout primitives in the catalog: e.g., a horizontal layout container
-      (Row) holding leading text/icons and a trailing downward icon.
-  * **Search Cues (Search Inputs)**:
-    - **Visual Indicator**: Magnifying glass symbols (🔍) inside or adjacent
-      to text entry boxes.
-    - **Catalog Mapping**: If a search component exists in the active catalog
-      schema, use it; otherwise, use a text input component paired with a
-      search icon.
-  * **Toggle Track & Thumb (Switches & Toggles)**:
-    - **Visual Indicator**: Pill-shaped track with a circular thumb (⚪━━).
-    - **Catalog Mapping**: Use a toggle, switch, or selection control
-      component defined in the active catalog schema.
-  * **Selection Controls (Option Pickers)**:
-    - **Visual Indicator**: Radio circles (◯ / 🔘), checkboxes (☐ / ☑), or
-      dropdown carets.
-    - **Catalog Mapping**: Look up selection, picker, or option components
-      in the active catalog schema; if none exist, compose using interactive
-      button components.
-  * **Pill Badges & Chips (Status & Tags)**:
-    - **Visual Indicator**: Small rounded rectangle or oval containing short
-      text/status labels.
-    - **Catalog Mapping**: Use a chip, badge, or tag component if defined in
-      the active catalog schema; otherwise, compose using a text component
-      inside a container or card.
+  ${visualAffordanceGuidance(support)}
 
   ### 5. Grounding, Data Binding & Sequence
   * **Complete Data Model Extraction**: ALL text strings, label names, image
@@ -361,7 +332,8 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
   2. **Extract Data**: Extract all visible text strings, values, and list
      items into dataModel.
   3. **Build Component Tree**: Map visual elements strictly to active
-     catalog component types with exact icon names/SVGs, full-width
+     catalog component types with
+     ${componentTreeMappingGuidance(support)}, full-width
      properties, Markdown \`#\`–\`#####\` headings, and \`@path\` bindings.
   4. **Emit JSONL Message**: Output the complete initial UI as a single
      \`createSurface\` message with inline \`components\` and \`dataModel\`.`
@@ -390,12 +362,12 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
   3. **No Hallucinated Properties**: Include ONLY properties explicitly
     defined in the JSON Schema for that specific component type in the
     active catalog. Do NOT emit unauthorized keys (e.g., "rules", "mock*",
-    or unsupported CSS/styling parameters).
+    or unsupported CSS/styling parameters).${primaryCatalog ? imageUrlGuidance(primaryCatalog) : ''}
 
   ### Active Catalog Schema (Mandatory Allowlist)
   The following active catalog schemas are available. Note each catalog's \`$id\`.
-  The primary UI catalog is \`"${primaryCatalogId}"\`. When calling functions
-  defined in another catalog (such as MCP functions in \`"${mcpCatalogId}"\`),
+  The primary UI catalog is ${quotedPrimaryId}. When calling functions
+  defined in another catalog (such as MCP functions in ${quotedMcpId}),
   you MUST explicitly set \`"catalogId"\` on the \`@call\` invocation.
   \`\`\`json
   ${catalogsJsonStr}
@@ -447,7 +419,7 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
   1. **createSurface (Single-Message Initial UI)**: Sent **FIRST** when creating a
     new surface. It defines:
     - \`"surfaceId"\`: unique ID for the surface (e.g., \`"main"\`).
-    - \`"catalogId"\`: default catalog ID for the surface (\`"${primaryCatalogId}"\`).
+    - \`"catalogId"\`: default catalog ID for the surface (${quotedPrimaryId}).
     - \`"sendDataModel"\`: \`true\` (informs renderer to sync data changes back).
     - \`"components"\`: inline flat array of UI components (with one root component having \`"id": "root"\`).
     - \`"dataModel"\`: initial inline data model object.
@@ -467,12 +439,12 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
 
     * **Single-Message New Surface Example**:
       \`\`\`jsonl
-      {"version": "1.0", "createSurface": {"surfaceId": "main", "catalogId": "${primaryCatalogId}", "sendDataModel": true, "components": [{"id": "root", "component": "Column", "children": ["heading", "name_in", "btn"]}, {"id": "heading", "component": "Text", "text": "# Registration"}, {"id": "name_in", "component": "TextField", "label": {"@path": "/label"}, "value": {"@path": "/name"}}, {"id": "btn_text", "component": "Text", "text": "Submit"}, {"id": "btn", "component": "Button", "child": "btn_text", "action": {"functionCall": {"@call": "submitForm", "args": {"name": {"@path": "/name"}}}}}], "dataModel": {"label": "Name", "name": "Alice"}}}
+      {"version": "1.0", "createSurface": {"surfaceId": "main", "catalogId": ${quotedPrimaryId}, "sendDataModel": true, "components": [{"id": "root", "component": "Column", "children": ["heading", "name_in", "btn"]}, {"id": "heading", "component": "Text", "text": "# Registration"}, {"id": "name_in", "component": "TextField", "label": {"@path": "/label"}, "value": {"@path": "/name"}}, {"id": "btn_text", "component": "Text", "text": "Submit"}, {"id": "btn", "component": "Button", "child": "btn_text", "action": {"event": {"name": "submitForm", "context": {"name": {"@path": "/name"}}}}}], "dataModel": {"label": "Name", "name": "Alice"}}}
       \`\`\`
 
     * **Dynamic List Example**:
       \`\`\`jsonl
-      {"version":"1.0","createSurface":{"surfaceId":"list","catalogId":"${primaryCatalogId}","sendDataModel":true,"components":[{"id":"root","component":"Column","children":{"componentId":"item_template","path":"/items"}},{"id":"item_template","component":"Text","text":{"@path":"text"}}],"dataModel":{"items":[{"text":"One"},{"text":"Two"}]}}}
+      {"version":"1.0","createSurface":{"surfaceId":"list","catalogId":${quotedPrimaryId},"sendDataModel":true,"components":[{"id":"root","component":"Column","children":{"componentId":"item_template","path":"/items"}},{"id":"item_template","component":"Text","text":{"@path":"text"}}],"dataModel":{"items":[{"text":"One"},{"text":"Two"}]}}}
       \`\`\`
 
     * **Incremental Updates Example**:
@@ -483,7 +455,7 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
   ## Data Binding & Function Invocations
   - **Data Binding**: Every dynamic property value bound to the data model MUST use \`{"@path": "/..."}\` (with leading slash for root paths, or relative \`{"@path": "prop"}\` within dynamic item templates). Never use \`"path"\` without the \`@\` prefix for data bindings.
   - **Function Invocations**: Function expressions MUST use \`{"@call": "<functionName>", "args": {...}}\`, and \`Button.action\` MUST wrap function calls in \`{"functionCall": {"@call": "<functionName>", "args": {...}}}\` (or events in \`{"event": {"name": "..."}}\`).
-  - **Cross-Catalog Calls**: When invoking a function defined in a secondary catalog (such as MCP functions in \`"${mcpCatalogId}"\`), you MUST explicitly specify \`"catalogId": "${mcpCatalogId}"\`.
+  - **Cross-Catalog Calls**: When invoking a function defined in a secondary catalog (such as MCP functions in ${quotedMcpId}), you MUST explicitly specify \`"catalogId": ${quotedMcpId}\`.
   `;
   }
 }

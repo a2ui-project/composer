@@ -728,7 +728,7 @@ describe('Standard3pA2aTransport', () => {
     expect(events[0].taskId).toBe('task-int-state');
   });
 
-  it('advertises v1.0 extension, application/a2ui+json output mode, and supportedCatalogIds in capabilities', async () => {
+  it('advertises v1.0 extension, application/a2ui+json output mode, and supportedCatalogIds in message metadata', async () => {
     let capturedBody: Record<string, unknown> | null = null;
 
     globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
@@ -769,10 +769,63 @@ describe('Standard3pA2aTransport', () => {
     const config = params['configuration'] as Record<string, unknown>;
     expect(config['extensions']).toContain('https://a2ui.org/a2a-extension/a2ui/v1.0');
     expect(config['acceptedOutputModes']).toContain('application/a2ui+json');
-    expect(config['supportedCatalogIds']).toEqual([
-      'https://a2ui.org/catalogs/basic',
-      'https://a2ui.org/catalogs/custom',
-    ]);
+    expect(config['supportedCatalogIds']).toBeUndefined();
+    expect(config['capabilities']).toBeUndefined();
+
+    const msg = params['message'] as Record<string, unknown>;
+    const metadata = msg['metadata'] as Record<string, unknown>;
+    expect(metadata['a2uiRendererCapabilities']).toEqual({
+      '1.0': {
+        supportedCatalogIds: [
+          'https://a2ui.org/catalogs/basic',
+          'https://a2ui.org/catalogs/custom',
+        ],
+      },
+    });
+  });
+
+  it('does not attach v1.0 supportedCatalogIds onto metadata or config when protocolVersion is v0.9', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+
+    globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.body) {
+        capturedBody = JSON.parse(init.body as string);
+      }
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              'data: {"taskId": "task-v09-caps", "status": {"state": "TASK_STATE_COMPLETED"}}\n\n',
+            ),
+          );
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: {'Content-Type': 'text/event-stream'},
+      });
+    });
+
+    const message: A2aMessage = {
+      role: 'user',
+      parts: [{text: 'Test v0.9'}],
+    };
+
+    for await (const _ of transport.sendMessageStream('http://localhost:8000', message, {
+      protocolVersion: 'v0.9',
+      supportedCatalogIds: ['https://a2ui.org/catalogs/basic'],
+    })) {
+      // consume
+    }
+
+    expect(capturedBody).toBeDefined();
+    const params = (capturedBody as unknown as {params: Record<string, unknown>}).params;
+    const config = params['configuration'] as Record<string, unknown>;
+    expect(config['supportedCatalogIds']).toBeUndefined();
+    const msg = params['message'] as Record<string, unknown>;
+    const metadata = msg['metadata'] as Record<string, unknown> | undefined;
+    expect(metadata?.['a2uiRendererCapabilities']).toBeUndefined();
   });
 
   it('formats action data parts with canonical version 1.0 when protocolVersion is 1.0 in sendActionStream', async () => {

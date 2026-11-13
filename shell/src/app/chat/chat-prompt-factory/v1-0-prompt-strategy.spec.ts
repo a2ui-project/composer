@@ -190,7 +190,10 @@ describe('V10PromptStrategy', () => {
     const btn = comps.find(c => c['component'] === 'Button');
     expect(btn).toBeDefined();
     expect(btn?.['child']).toBe('btn_text');
-    expect((btn?.['action'] as Record<string, unknown>)?.['functionCall']).toBeDefined();
+    expect((btn?.['action'] as Record<string, unknown>)?.['event']).toEqual({
+      name: 'submitForm',
+      context: {name: {'@path': '/name'}},
+    });
   });
 
   describe('strict zero-bleed guarantees', () => {
@@ -244,6 +247,91 @@ describe('V10PromptStrategy', () => {
       const serialized = strategy.serializeCatalogForPrompt(maliciousCatalog);
       expect(serialized).not.toContain('polluted');
       expect(serialized).not.toContain('returnType');
+    });
+  });
+
+  describe('catalog-gated guidance and quoting', () => {
+    it('quotes catalog IDs safely preventing injection or escape', () => {
+      const injectionCatalog = {
+        ['$id']: 'https://a2ui.org/`malicious`_catalog.json',
+        components: {Column: {type: 'object'}},
+      };
+      const prompt = strategy.buildSystemPrompt({
+        activeCatalog: injectionCatalog,
+      });
+      expect(prompt).toContain('"https://a2ui.org/\\u0060malicious\\u0060_catalog.json"');
+      expect(prompt).not.toContain('`https://a2ui.org/`');
+    });
+
+    it('emits IconSupport.NONE guidance when catalog has no Icon component', () => {
+      const prompt = strategy.buildSystemPrompt({
+        activeCatalog: basicUiCatalog, // only Column, Text, Button
+        includeMultimodalGuidelines: true,
+      });
+      expect(prompt).toContain('The active catalog does not support custom icon drawing');
+      expect(prompt).toContain('Do NOT invent Icon');
+    });
+
+    it('emits IconSupport.NAMED guidance when catalog has Icon with enum but no svgPath', () => {
+      const namedIconCatalog = {
+        ['$id']: 'https://a2ui.org/named_icon.json',
+        components: {
+          Icon: {
+            type: 'object',
+            properties: {
+              name: {type: 'string', enum: ['star', 'favorite']},
+            },
+          },
+        },
+      };
+      const prompt = strategy.buildSystemPrompt({
+        activeCatalog: namedIconCatalog,
+        includeMultimodalGuidelines: true,
+      });
+      expect(prompt).toContain(
+        "Use Icon components only with icon names the active catalog's Icon",
+      );
+      expect(prompt).toContain('NOT emit svgPath fields');
+    });
+
+    it('emits IconSupport.NAMED_AND_CUSTOM_SVG guidance when catalog has svgPath on Icon', () => {
+      const svgIconCatalog = {
+        ['$id']: 'https://a2ui.org/svg_icon.json',
+        components: {
+          Icon: {
+            type: 'object',
+            properties: {
+              name: {type: 'string'},
+              svgPath: {type: 'string'},
+            },
+          },
+        },
+      };
+      const prompt = strategy.buildSystemPrompt({
+        activeCatalog: svgIconCatalog,
+        includeMultimodalGuidelines: true,
+      });
+      expect(prompt).toContain('Custom SVG fields are allowed only');
+      expect(prompt).toContain('when the Icon schema explicitly defines them');
+    });
+
+    it('emits imageUrlGuidance when Image component has url pattern rejecting data URLs', () => {
+      const imagePatternCatalog = {
+        ['$id']: 'https://a2ui.org/image_catalog.json',
+        components: {
+          Image: {
+            type: 'object',
+            properties: {
+              url: {type: 'string', pattern: '^https://images\\.example\\.com/.*$'},
+            },
+          },
+        },
+      };
+      const prompt = strategy.buildSystemPrompt({
+        activeCatalog: imagePatternCatalog,
+      });
+      expect(prompt).toContain('4. **Image URLs**: For Image.url, use only URLs matching');
+      expect(prompt).toContain('^https://images\\\\.example\\\\.com/.*$');
     });
   });
 });

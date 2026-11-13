@@ -193,6 +193,9 @@ function extractChildReferences(comp: Record<string, unknown>): string[] {
       }
     } else if (typeof val === 'object') {
       const obj = val as Record<string, unknown>;
+      if (typeof obj['componentId'] === 'string') {
+        refs.push(obj['componentId']);
+      }
       if ('child' in obj) collectFrom(obj['child']);
       if ('children' in obj) collectFrom(obj['children']);
       if ('items' in obj) collectFrom(obj['items']);
@@ -233,12 +236,26 @@ function removeReferences(
         const id = typeof item === 'string' ? item : (item as Record<string, unknown>)?.['id'];
         return !idsToRemove.has(String(id));
       });
+    } else if (
+      obj['children'] &&
+      typeof obj['children'] === 'object' &&
+      typeof (obj['children'] as Record<string, unknown>)['componentId'] === 'string' &&
+      idsToRemove.has((obj['children'] as Record<string, unknown>)['componentId'] as string)
+    ) {
+      delete obj['children'];
     }
     if (Array.isArray(obj['items'])) {
       obj['items'] = obj['items'].filter((item: unknown) => {
         const id = typeof item === 'string' ? item : (item as Record<string, unknown>)?.['id'];
         return !idsToRemove.has(String(id));
       });
+    } else if (
+      obj['items'] &&
+      typeof obj['items'] === 'object' &&
+      typeof (obj['items'] as Record<string, unknown>)['componentId'] === 'string' &&
+      idsToRemove.has((obj['items'] as Record<string, unknown>)['componentId'] as string)
+    ) {
+      delete obj['items'];
     }
     if (typeof obj['child'] === 'string' && idsToRemove.has(obj['child'])) {
       delete obj['child'];
@@ -283,12 +300,8 @@ export function hasA2uiCanvasComponent(items: RenderA2uiItem[]): boolean {
  */
 export const A2UI_PROTOCOL_VERSION = 'v0.9';
 
-/** Canonical A2UI v1.0 RPC envelope keys. */
-export const A2UI_V10_RPC_KEYS = [
-  'callRendererFunction',
-  'agentFunctionResponse',
-  'callAgentFunctionResponse',
-] as const;
+/** Re-export canonical A2UI v1.0 RPC envelope keys. */
+export {A2UI_V10_RPC_KEYS} from '../protocol/a2a-protocol-strategy';
 
 /**
  * Canonical MIME types for A2UI data parts across A2UI and A2A specs.
@@ -372,6 +385,10 @@ export function normalizeA2uiItems(
       continue;
     }
     const sanitized = sanitizeA2uiPayload(raw) as Record<string, unknown>;
+    if (sanitized['callAgentFunctionResponse'] && !sanitized['agentFunctionResponse']) {
+      sanitized['agentFunctionResponse'] = sanitized['callAgentFunctionResponse'];
+      delete sanitized['callAgentFunctionResponse'];
+    }
     const rawVersion = typeof sanitized['version'] === 'string' ? sanitized['version'].trim() : '';
     let version = A2UI_PROTOCOL_VERSION;
     if (rawVersion === '1.0' || rawVersion === 'v1.0') {
@@ -395,19 +412,10 @@ export function normalizeA2uiItems(
       }
     }
 
-    let item: RenderA2uiItem;
-    if (version === '1.0') {
-      const res = defaultV10A2aStrategy.normalizeItems([raw]);
-      item = res[0] ?? ({...sanitized, version} as RenderA2uiItem);
-    } else if (version === 'v0.9') {
-      const res = defaultV09A2aStrategy.normalizeItems([raw]);
-      item = res[0] ?? ({...sanitized, version} as RenderA2uiItem);
-    } else {
-      item = {
-        ...sanitized,
-        version,
-      } as RenderA2uiItem;
-    }
+    const item: RenderA2uiItem = {
+      ...sanitized,
+      version,
+    } as RenderA2uiItem;
 
     if (item.createSurface?.surfaceId) {
       const surfaceId = item.createSurface.surfaceId;
@@ -572,12 +580,7 @@ function categorizeSurfaceItems(items: RenderA2uiItem[]): CategorizedSurfaceItem
         }
       }
     }
-    if (
-      item.deleteSurface ||
-      item.callRendererFunction ||
-      item.agentFunctionResponse ||
-      item['callAgentFunctionResponse']
-    ) {
+    if (item.deleteSurface) {
       otherItems.push(item);
     }
   }

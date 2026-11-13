@@ -28,7 +28,7 @@ describe('V10A2aStrategy', () => {
   });
 
   describe('getClientConfiguration', () => {
-    it('advertises v1.0 extension URI and supportedCatalogIds from active catalogs', () => {
+    it('advertises standard v1.0 extension URI and acceptedOutputModes without non-standard capabilities', () => {
       const activeCatalogs = [
         {
           ['$id']: 'https://a2ui.org/specification/v1_0/basic_catalog.json',
@@ -40,27 +40,26 @@ describe('V10A2aStrategy', () => {
         },
       ] as unknown as CatalogJson[];
       const config = strategy.getClientConfiguration(activeCatalogs);
-      const capabilities = config['capabilities'] as Record<string, unknown>;
-      const extensions = capabilities['extensions'] as Array<Record<string, unknown>>;
-      expect(extensions).toEqual([{['uri']: 'https://a2ui.org/a2a-extension/a2ui/v1.0'}]);
       expect(config['extensions']).toEqual(['https://a2ui.org/a2a-extension/a2ui/v1.0']);
-
-      const catalogIds = capabilities['supportedCatalogIds'] as string[];
-      expect(catalogIds).toEqual([
-        'https://a2ui.org/specification/v1_0/basic_catalog.json',
-        'https://company.org/catalogs/mcp_functions.json',
+      expect(config['acceptedOutputModes']).toEqual([
+        'text/plain',
+        'application/json',
+        'application/a2ui+json',
       ]);
-      expect(config['supportedCatalogIds']).toEqual(catalogIds);
-
-      const modes = config['acceptedOutputModes'] as string[];
-      expect(modes).toEqual(['text/plain', 'application/json', 'application/a2ui+json']);
+      expect(config['capabilities']).toBeUndefined();
+      expect(config['supportedCatalogIds']).toBeUndefined();
     });
 
     it('handles empty activeCatalogs gracefully', () => {
       const config = strategy.getClientConfiguration([]);
-      const capabilities = config['capabilities'] as Record<string, unknown>;
-      expect(capabilities['supportedCatalogIds']).toEqual([]);
-      expect(config['supportedCatalogIds']).toEqual([]);
+      expect(config['extensions']).toEqual(['https://a2ui.org/a2a-extension/a2ui/v1.0']);
+      expect(config['acceptedOutputModes']).toEqual([
+        'text/plain',
+        'application/json',
+        'application/a2ui+json',
+      ]);
+      expect(config['capabilities']).toBeUndefined();
+      expect(config['supportedCatalogIds']).toBeUndefined();
     });
   });
 
@@ -74,21 +73,24 @@ describe('V10A2aStrategy', () => {
   });
 
   describe('buildActionDataPart', () => {
-    it('formats outbound action DataPart with canonical version 1.0, userMessage, and metadata', () => {
+    it('formats outbound action DataPart with canonical version 1.0, userMessage, and metadata nested inside action', () => {
       const action = {name: 'submitOrder', context: {orderId: 'xyz'}};
       const part = strategy.buildActionDataPart(action, 'Please confirm my order', {clientTs: 123});
       expect(part).toEqual({
         data: {
           ['version']: '1.0',
-          ['action']: action,
-          ['userMessage']: 'Please confirm my order',
-          ['metadata']: {clientTs: 123},
+          ['action']: {
+            ...action,
+            userMessage: 'Please confirm my order',
+            metadata: {clientTs: 123},
+          },
         },
         metadata: {
           ['mimeType']: 'application/a2ui+json',
           ['type']: 'a2ui_action',
         },
       });
+      expect(Object.keys(part.data as Record<string, unknown>)).toEqual(['version', 'action']);
     });
 
     it('omits userMessage and metadata when undefined', () => {
@@ -179,7 +181,6 @@ describe('V10A2aStrategy', () => {
             surfaceId: 'surf_v1',
             catalogId: 'https://a2ui.org/specification/v1_0/basic_catalog.json',
             sendDataModel: true,
-            theme: 'dark',
             dataModel: {user: 'Alice'},
             components: [
               {
@@ -203,7 +204,6 @@ describe('V10A2aStrategy', () => {
       expect(cs?.surfaceId).toBe('surf_v1');
       expect(cs?.catalogId).toBe('https://a2ui.org/specification/v1_0/basic_catalog.json');
       expect(cs?.sendDataModel).toBe(true);
-      expect(cs?.['theme']).toBe('dark');
       expect(cs?.dataModel).toEqual({user: 'Alice'});
       expect(cs?.components?.length).toBe(2);
       expect(Object.hasOwn(cs?.components?.[0] as Record<string, unknown>, 'constructor')).toBe(

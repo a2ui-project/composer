@@ -108,6 +108,13 @@ export class PendingRpcRegistry implements OnDestroy {
   }
 
   /**
+   * Alias for unregisterFrame for semantic compatibility.
+   */
+  unregisterWindow(win: Window): void {
+    this.unregisterFrame(win);
+  }
+
+  /**
    * Determines whether the given window belongs to a registered workspace preview frame.
    * Checks explicitly registered frames first, then queries the workspace frame resolver if set.
    */
@@ -164,10 +171,11 @@ export class PendingRpcRegistry implements OnDestroy {
     const remaining = Math.max(0, deadlineMs - Date.now());
     if (remaining === 0) {
       entry.status = 'timed_out';
-      this.sendWireResponse(params.sourceWindow, params.functionCallId, undefined, {
+      entry.error = {
         code: 'AGENT_FUNCTION_TIMEOUT',
         message: 'Agent function call timed out after 30s in Composer workspace.',
-      });
+      };
+      this.sendWireResponse(params.sourceWindow, params.functionCallId, undefined, entry.error);
     } else {
       entry.timerId = setTimeout(() => {
         this.handleTimeout(params.functionCallId);
