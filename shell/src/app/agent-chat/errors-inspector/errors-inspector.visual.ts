@@ -15,9 +15,13 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {mockLocalRenderersConfig} from '../../../../e2e/helpers';
 import {connectMockAgent} from '../test/mock-a2a-agent';
 
 test.describe('A2aErrorsInspector Visual Regression & Layout', () => {
+  test.beforeEach(async ({context}) => {
+    await mockLocalRenderersConfig(context);
+  });
   test('renders initial errors inspector', async ({page}) => {
     await page.clock.setFixedTime(new Date('2026-09-18T11:24:22Z'));
 

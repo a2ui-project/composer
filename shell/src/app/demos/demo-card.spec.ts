@@ -795,4 +795,20 @@ describe('DemoCard sandboxed live demo frame', () => {
     expect(fixture.componentInstance.cardHeight()).toBeNull();
     expect(sendMessageSpy).not.toHaveBeenCalled();
   });
+
+  it('refreshes available surface width synchronously when SURFACE_RESIZE arrives before ResizeObserver fires', async () => {
+    const {fixture, harness} = await visibleCard();
+    const iframe = (await frameOf(harness))!;
+    const surface = await surfaceOf(harness);
+    const surfaceWidth = vi.spyOn(surface, 'clientWidth', 'get').mockReturnValue(480);
+    resize(fixture, iframe, {height: 300, width: 480, viewportWidth: 480, contentReady: true});
+    expect(fixture.componentInstance.cardHeight()).toBe(300);
+
+    // Host DOM width changes to 445px before the host ResizeObserver callback fires
+    surfaceWidth.mockReturnValue(445);
+    // Guest frame emits SURFACE_RESIZE with the new viewportWidth
+    resize(fixture, iframe, {height: 338, width: 445, viewportWidth: 445, contentReady: true});
+    // The synchronous measureAvailableWidth call ensures the fresh commit is accepted
+    expect(fixture.componentInstance.cardHeight()).toBe(338);
+  });
 });

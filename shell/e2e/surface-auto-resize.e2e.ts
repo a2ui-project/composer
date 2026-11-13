@@ -21,10 +21,15 @@ import {
   dragPreviewSplitter,
   guestContentHeight,
   guestScrollRange,
+  mockLocalRenderersConfig,
   setMonacoContent,
   showInlineSurface,
   waitForPreviewTab,
 } from './helpers';
+
+test.beforeEach(async ({context}) => {
+  await mockLocalRenderersConfig(context);
+});
 import {
   dockedPreview,
   inlineSurfaceContainer,

@@ -15,6 +15,7 @@
  */
 
 import {test, expect, type Locator} from '@playwright/test';
+import {mockLocalRenderersConfig} from '../../../../e2e/helpers';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 
 async function waitForImageLoad(locator: Locator): Promise<void> {
@@ -29,11 +30,15 @@ async function waitForImageLoad(locator: Locator): Promise<void> {
 }
 
 test.describe('AgentConfigPanel Visual Regression & Layout', () => {
-  test.beforeEach(async ({page}) => {
+  test.beforeEach(async ({page, context}) => {
+    await mockLocalRenderersConfig(context);
     await page.goto('/a2a');
     await page.evaluate(() => {
       try {
-        localStorage.clear();
+        if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
+          sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
+          localStorage.clear();
+        }
       } catch (e) {}
     });
     await page.reload();

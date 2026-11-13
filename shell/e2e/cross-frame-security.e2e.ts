@@ -16,9 +16,11 @@
 
 import {test, expect} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {mockLocalRenderersConfig} from './helpers';
 
 test.describe('Cross-Frame Security & Sandboxing', () => {
-  test.beforeEach(async ({page}) => {
+  test.beforeEach(async ({page, context}) => {
+    await mockLocalRenderersConfig(context);
     await page.route('**/config.json', async route => {
       await route.fulfill({
         contentType: 'application/json',

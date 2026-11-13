@@ -300,7 +300,10 @@ export async function connectMockAgent(
   await page.goto('/a2a');
   await page.evaluate(() => {
     try {
-      localStorage.clear();
+      if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
+        sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
+        localStorage.clear();
+      }
     } catch (e) {}
   });
   await page.goto('/a2a');

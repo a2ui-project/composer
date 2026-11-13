@@ -33,7 +33,7 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState} from '../../chat/chat-state/chat-state';
-import {MonacoEditor} from '../../shared/monaco-editor/monaco-editor';
+import {isErrorOrWarningMarker, MonacoEditor} from '../../shared/monaco-editor/monaco-editor';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {tryParseJsonArray} from '../../utils/json';
@@ -262,11 +262,13 @@ export class RawFrame {
               return payload;
             }
             this.clearWatchdog();
+            this.lastErrorSignature = null;
             this.lastSyntaxError = null;
             this.scheduleInvalidJsonError();
             return null;
           } catch (err) {
             this.clearWatchdog();
+            this.lastErrorSignature = null;
             this.lastSyntaxError = this.extractCoordinatesFromError(err);
             this.scheduleInvalidJsonError();
             return null;
@@ -299,14 +301,28 @@ export class RawFrame {
   }
 
   protected onMarkersChange(markers: editor.IMarker[]): void {
-    const hasErrors = markers.some(m => m.severity === 8 || m.severity === 4);
+    const isSyntaxValid = tryParseJsonArray(this.layoutJson()).success;
+    const hasErrors = isSyntaxValid && markers.some(isErrorOrWarningMarker);
     if (hasErrors) {
       this.clearWatchdog();
       this.hasActiveSchemaErrors = true;
     } else {
       this.hasActiveSchemaErrors = false;
     }
-    this.markerSubject.next(markers);
+    if (isSyntaxValid) {
+      this.markerSubject.next(markers);
+    } else {
+      this.lastErrorSignature = null;
+      if (this.lastSyntaxError?.line === undefined) {
+        const marker = this.monacoEditor()?.getFirstErrorMarker(true);
+        if (marker) {
+          this.lastSyntaxError = {line: marker.line, column: marker.column};
+          if (this.isJsonInvalid()) {
+            this.showJsonSyntaxError();
+          }
+        }
+      }
+    }
   }
 
   private scheduleInvalidJsonError(): void {
@@ -365,7 +381,11 @@ export class RawFrame {
   }
 
   private notifySchemaErrors(markers: editor.IMarker[]): void {
-    const errorMarkers = markers.filter(m => m.severity === 8 || m.severity === 4);
+    if (this.isJsonInvalid() || !tryParseJsonArray(this.layoutJson()).success) {
+      this.lastErrorSignature = null;
+      return;
+    }
+    const errorMarkers = markers.filter(isErrorOrWarningMarker);
     if (errorMarkers.length === 0) {
       this.lastErrorSignature = null;
       return;
@@ -434,10 +454,11 @@ export class RawFrame {
     let column = this.lastSyntaxError?.column;
 
     if (line === undefined) {
-      const marker = this.monacoEditor()?.getFirstErrorMarker();
+      const marker = this.monacoEditor()?.getFirstErrorMarker(true);
       if (marker) {
         line = marker.line;
         column = marker.column;
+        this.lastSyntaxError = {line, column};
       }
     }
 
