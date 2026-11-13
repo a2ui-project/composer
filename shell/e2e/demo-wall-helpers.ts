@@ -35,7 +35,7 @@ export const DEMO_RENDERERS = [
 export type DemoRenderer = (typeof DEMO_RENDERERS)[number];
 
 /** Number of demos every bundled renderer provides. */
-export const DEMO_CARD_COUNT = 47;
+export const DEMO_CARD_COUNT = 46;
 
 /**
  * Largest difference allowed between a card's committed height and a height it

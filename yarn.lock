@@ -3697,7 +3697,6 @@ __metadata:
   dependencies:
     "@a2ui/angular": "npm:0.14.0"
     "@a2ui/lit": "npm:0.15.0"
-    "@a2ui/react": "npm:0.15.0"
     "@a2ui/web_core": "npm:0.15.0"
     "@angular/core": "npm:22.2.3"
     "@lit/context": "npm:1.1.6"
@@ -3720,11 +3719,17 @@ __metadata:
     vitest: "npm:4.1.11"
     zod: "npm:4.6.5"
   peerDependencies:
+    "@a2ui/angular": 0.15.0
+    "@a2ui/lit": 0.15.0
     "@angular/core": 22.2.3
     lit: 3.3.3
     react: 19.2.8
     react-dom: 19.2.8
   peerDependenciesMeta:
+    "@a2ui/angular":
+      optional: true
+    "@a2ui/lit":
+      optional: true
     "@angular/core":
       optional: true
     lit:
@@ -8243,7 +8248,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "react-slack-catalog@workspace:samples/react-slack-catalog"
   dependencies:
-    "@a2ui/web_core": "npm:0.10.7"
+    "@a2ui/web_core": "npm:0.15.0"
     "@copilotkit/channels-slack": "npm:0.10.0"
     "@copilotkit/channels-ui": "npm:0.10.0"
     "@slack/types": "npm:2.22.0"

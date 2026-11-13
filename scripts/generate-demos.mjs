@@ -162,6 +162,12 @@ function buildDemos(filenames) {
     const filePath = join(EXAMPLES_DIR, filename);
     const example = readJsonFile(filePath);
 
+    // Skip upstream examples requiring custom components not provided by
+    // the standard basic catalog (such as 37_native-grid.json).
+    if (Array.isArray(example.customComponents) && example.customComponents.length > 0) {
+      continue;
+    }
+
     if (!example.name) {
       throw new Error(`Example file ${filename} is missing a "name" field.`);
     }
