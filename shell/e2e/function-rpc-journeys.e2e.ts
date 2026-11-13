@@ -21,8 +21,9 @@ import {
   inlineSurfaceFrame,
   previewFrame,
 } from '../src/app/preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 import {connectMockAgent, sseEvent} from '../src/app/agent-chat/test/mock-a2a-agent';
-import {waitForMonacoEditor, waitForPreviewTab} from './helpers';
+import {setMonacoContent, waitForMonacoEditor, waitForPreviewTab} from './helpers';
 
 const V10_RENDERER_URL = 'http://mock-v10-renderer.local/index.html';
 
@@ -155,6 +156,10 @@ async function setupV10Config(context: BrowserContext | Page): Promise<void> {
         rendererUrl: V10_RENDERER_URL,
         displayName: 'Mock V10',
       },
+      liveAngular: {
+        rendererUrl: RENDERER_URLS.angular,
+        displayName: 'Angular Basic',
+      },
     },
     apiKeys: {
       fake: {
@@ -196,7 +201,11 @@ test.describe('A2UI v1.0 Function RPC Journeys Suite', () => {
         localStorage.setItem('a2ui_composer_force_1p', 'true');
         localStorage.setItem(
           'a2ui_composer_allowed_origins',
-          JSON.stringify(['http://mock-v10-renderer.local', 'http://mock-agent.local']),
+          JSON.stringify([
+            'http://mock-v10-renderer.local',
+            'http://mock-agent.local',
+            'http://localhost:3456',
+          ]),
         );
       }
     });
@@ -705,5 +714,130 @@ test.describe('A2UI v1.0 Function RPC Journeys Suite', () => {
     const demoResp = demoResult['agentFunctionResponse'] as Record<string, unknown>;
     const demoErr = demoResp['error'] as Record<string, unknown>;
     expect(demoErr['code']).toBe('NO_AGENT_CONNECTED');
+  });
+
+  test('d. live v1.0 sample renderer: a2uiBridge.callAgentFunction round-trips via Debug Events reply form and auto-rejects on /gallery in < 1s', async ({
+    page,
+  }) => {
+    // 1. In /workspace with live sample renderer: load a simple surface
+    await page.goto(`/?renderer=${encodeURIComponent(RENDERER_URLS.angular)}`);
+    await waitForMonacoEditor(page);
+    await waitForPreviewTab(page);
+
+    const liveRpcPayload = JSON.stringify([
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 'live-rpc-surface',
+          catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+          components: [
+            {
+              id: 'root',
+              component: 'Text',
+              text: 'Live RPC Surface',
+            },
+          ],
+        },
+      },
+    ]);
+
+    await setMonacoContent(page, liveRpcPayload);
+
+    const iframe = previewFrame(page);
+    await expect(iframe.getByText('Live RPC Surface')).toBeVisible({timeout: 15_000});
+
+    // 2. Trigger callAgentFunction via real RpcHandler / PreviewBridge in live sample renderer
+    await iframe.locator('body').evaluate(() => {
+      const bridge = (
+        window as unknown as {
+          a2uiBridge?: {
+            callAgentFunction: (
+              surfaceId: string,
+              call: Record<string, unknown>,
+              opts?: {functionCallId?: string},
+            ) => Promise<unknown>;
+          };
+        }
+      ).a2uiBridge;
+      if (!bridge?.callAgentFunction) {
+        throw new Error('a2uiBridge.callAgentFunction is not available in renderer iframe');
+      }
+      (window as unknown as {__rpcCallPromise?: Promise<unknown>}).__rpcCallPromise =
+        bridge.callAgentFunction(
+          'live-rpc-surface',
+          {'@call': 'orderCoffee', args: {size: 'large'}},
+          {functionCallId: 'rpc-live-order'},
+        );
+    });
+
+    // 3. Events tab in Debug drawer gets unread badge
+    const eventsTab = page.locator('.dv-tab', {hasText: /^Events/});
+    await expect(eventsTab).toContainText('(1)');
+
+    // 4. Open Events tab and verify RpcReplyForm
+    await eventsTab.click();
+    await expect(page.locator('td.mat-column-action').first()).toContainText('orderCoffee');
+    const replyForm = page
+      .locator('a2ui-composer-rpc-reply-form')
+      .filter({hasText: 'rpc-live-order'});
+    await expect(replyForm).toBeVisible();
+
+    // 5. Submit Reply Value
+    await replyForm.locator('.rpc-value-input').fill('{"orderId":"coffee-42","status":"brewing"}');
+    await replyForm.locator('.rpc-reply-value-btn').click();
+
+    // Verify reply form actions are dismissed and status becomes Replied
+    await expect(replyForm.locator('.rpc-actions-section')).not.toBeVisible();
+    await expect(replyForm.locator('.rpc-status-badge')).toContainText('Replied');
+
+    // Verify renderer promise resolves with the replied value
+    const rpcResult = await iframe.locator('body').evaluate(async () => {
+      return (window as unknown as {__rpcCallPromise: Promise<unknown>}).__rpcCallPromise;
+    });
+    expect(rpcResult).toEqual({orderId: 'coffee-42', status: 'brewing'});
+
+    // 6. Test /gallery auto-reject with live sample renderer in < 1s
+    await page.goto(`/gallery?renderer=${encodeURIComponent(RENDERER_URLS.angular)}`);
+    const galleryCard = page.locator('.preview-card');
+    await expect(galleryCard).toBeVisible();
+
+    const galleryFrame = firstPreviewFrame(galleryCard);
+    await expect(galleryFrame.locator('body')).toBeVisible();
+
+    const galleryStartTime = Date.now();
+    const galleryError = await galleryFrame.locator('body').evaluate(async () => {
+      const bridge = (
+        window as unknown as {
+          a2uiBridge?: {
+            callAgentFunction: (
+              surfaceId: string,
+              call: Record<string, unknown>,
+              opts?: {functionCallId?: string},
+            ) => Promise<unknown>;
+          };
+        }
+      ).a2uiBridge;
+      if (!bridge?.callAgentFunction) {
+        throw new Error('a2uiBridge.callAgentFunction is not available in gallery frame');
+      }
+      try {
+        await bridge.callAgentFunction(
+          'gallery-surface',
+          {'@call': 'orderCoffee', args: {}},
+          {functionCallId: 'live-gal-reject'},
+        );
+        return null;
+      } catch (err: unknown) {
+        return {
+          message: (err as Error).message,
+          code: (err as {code?: string}).code,
+        };
+      }
+    });
+
+    const galleryDuration = Date.now() - galleryStartTime;
+    expect(galleryDuration).toBeLessThan(1000);
+    expect(galleryError).toBeDefined();
+    expect(galleryError?.code || galleryError?.message).toMatch(/NO_AGENT_CONNECTED/);
   });
 });

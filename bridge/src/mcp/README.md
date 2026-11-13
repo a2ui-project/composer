@@ -28,18 +28,18 @@ NPM package.
 The following table maps each vendored file in this directory to its upstream
 source in `a2ui/catalogs/mcp/v0_9/`:
 
-| Local Path                     | Upstream Source                    | Description                                                                  |
-| :----------------------------- | :--------------------------------- | :--------------------------------------------------------------------------- |
-| `index.ts`                     | `src/index.ts`                     | Catalog function factory (`createMcpCatalogFunctions`) and catalog constants |
-| `dynamic-values.ts`            | `src/dynamic-values.ts`            | Recursive resolution of data bindings and dynamic function calls             |
-| `functions/callMcpTool.ts`     | `src/functions/callMcpTool.ts`     | MCP tool execution function and UI resource extractor                        |
-| `functions/common.ts`          | `src/functions/common.ts`          | Schema helpers and Promise settling utilities                                |
-| `functions/jmespath.ts`        | `src/functions/jmespath.ts`        | JMESPath query evaluation function                                           |
-| `functions/regexCapture.ts`    | `src/functions/regexCapture.ts`    | RE2 regular expression capture group extractor                               |
-| `functions/regexReplace.ts`    | `src/functions/regexReplace.ts`    | RE2 regular expression replacement function                                  |
-| `functions/split.ts`           | `src/functions/split.ts`           | String delimiter split function                                              |
-| `functions/updateDataModel.ts` | `src/functions/updateDataModel.ts` | Surface data model mutation function                                         |
-| `mcp.spec.ts`                  | `src/**/*.test.ts`                 | Vitest test suite adapted from upstream unit tests                           |
+| Local Path                       | Upstream Source                    | Description                                                                  |
+| :------------------------------- | :--------------------------------- | :--------------------------------------------------------------------------- |
+| `index.ts`                       | `src/index.ts`                     | Catalog function factory (`createMcpCatalogFunctions`) and catalog constants |
+| `v0-9-dynamic-value-strategy.ts` | `src/dynamic-values.ts`            | Recursive resolution of data bindings and dynamic function calls             |
+| `functions/callMcpTool.ts`       | `src/functions/callMcpTool.ts`     | MCP tool execution function and UI resource extractor                        |
+| `functions/common.ts`            | `src/functions/common.ts`          | Schema helpers and Promise settling utilities                                |
+| `functions/jmespath.ts`          | `src/functions/jmespath.ts`        | JMESPath query evaluation function                                           |
+| `functions/regexCapture.ts`      | `src/functions/regexCapture.ts`    | RE2 regular expression capture group extractor                               |
+| `functions/regexReplace.ts`      | `src/functions/regexReplace.ts`    | RE2 regular expression replacement function                                  |
+| `functions/split.ts`             | `src/functions/split.ts`           | String delimiter split function                                              |
+| `functions/updateDataModel.ts`   | `src/functions/updateDataModel.ts` | Surface data model mutation function                                         |
+| `mcp.spec.ts`                    | `src/**/*.test.ts`                 | Vitest test suite adapted from upstream unit tests                           |
 
 ## Temporary Dependencies
 

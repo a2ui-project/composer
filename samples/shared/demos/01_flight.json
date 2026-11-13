@@ -3,17 +3,11 @@
   "description": "A boarding pass with the route, gate, and departure details.",
   "messages": [
     {
-      "version": "v0.9",
+      "version": "1.0",
       "createSurface": {
         "surfaceId": "showcase-01-flight",
-        "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
-        "sendDataModel": true
-      }
-    },
-    {
-      "version": "v0.9",
-      "updateComponents": {
-        "surfaceId": "showcase-01-flight",
+        "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
+        "sendDataModel": true,
         "components": [
           {
             "id": "root",
@@ -48,8 +42,7 @@
           {
             "id": "title",
             "component": "Text",
-            "text": "OS 87 \u00b7 Vienna to New York",
-            "variant": "h3"
+            "text": "### OS 87 · Vienna to New York"
           },
           {
             "id": "status",
@@ -67,17 +60,16 @@
           {
             "id": "origin",
             "component": "Column",
-            "children": ["origin-code", "origin-name"],
+            "children": ["origin_code", "origin_name"],
             "align": "start"
           },
           {
-            "id": "origin-code",
+            "id": "origin_code",
             "component": "Text",
-            "text": "VIE",
-            "variant": "h1"
+            "text": "# VIE"
           },
           {
-            "id": "origin-name",
+            "id": "origin_name",
             "component": "Text",
             "text": "Vienna",
             "variant": "caption"
@@ -85,23 +77,21 @@
           {
             "id": "arrow",
             "component": "Text",
-            "text": "\u2192",
-            "variant": "h2"
+            "text": "## →"
           },
           {
             "id": "destination",
             "component": "Column",
-            "children": ["destination-code", "destination-name"],
+            "children": ["destination_code", "destination_name"],
             "align": "end"
           },
           {
-            "id": "destination-code",
+            "id": "destination_code",
             "component": "Text",
-            "text": "JFK",
-            "variant": "h1"
+            "text": "# JFK"
           },
           {
-            "id": "destination-name",
+            "id": "destination_name",
             "component": "Text",
             "text": "New York",
             "variant": "caption"
@@ -119,68 +109,59 @@
           {
             "id": "departs",
             "component": "Column",
-            "children": ["departs-label", "departs-value"],
+            "children": ["departs_label", "departs_value"],
             "align": "start"
           },
           {
-            "id": "departs-label",
+            "id": "departs_label",
             "component": "Text",
             "text": "Departs",
             "variant": "caption"
           },
           {
-            "id": "departs-value",
+            "id": "departs_value",
             "component": "Text",
-            "text": "10:15 AM",
-            "variant": "h3"
+            "text": "### 10:15 AM"
           },
           {
             "id": "gate",
             "component": "Column",
-            "children": ["gate-label", "gate-value"],
+            "children": ["gate_label", "gate_value"],
             "align": "center"
           },
           {
-            "id": "gate-label",
+            "id": "gate_label",
             "component": "Text",
             "text": "Gate",
             "variant": "caption"
           },
           {
-            "id": "gate-value",
+            "id": "gate_value",
             "component": "Text",
             "text": {
-              "path": "/gate"
-            },
-            "variant": "h3"
+              "@path": "/gate"
+            }
           },
           {
             "id": "arrives",
             "component": "Column",
-            "children": ["arrives-label", "arrives-value"],
+            "children": ["arrives_label", "arrives_value"],
             "align": "end"
           },
           {
-            "id": "arrives-label",
+            "id": "arrives_label",
             "component": "Text",
             "text": "Arrives",
             "variant": "caption"
           },
           {
-            "id": "arrives-value",
+            "id": "arrives_value",
             "component": "Text",
-            "text": "2:30 PM",
-            "variant": "h3"
+            "text": "### 2:30 PM"
           }
-        ]
-      }
-    },
-    {
-      "version": "v0.9",
-      "updateDataModel": {
-        "surfaceId": "showcase-01-flight",
-        "value": {
-          "gate": "F12"
+        ],
+        "dataModel": {
+          "gate": "### F12"
         }
       }
     }

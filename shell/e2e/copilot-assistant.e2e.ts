@@ -88,19 +88,21 @@ test.afterEach(async ({page}) => {
  */
 async function openDraftInWorkspace(page: Page): Promise<void> {
   await page.goto('/?renderer=http://localhost:3456');
-  await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+  await expect(page.locator('.header-title')).toContainText('Basic Catalog');
   await expect.poll(() => readRawDraft(page)).toContain('createSurface');
   const defaultDraft: RenderA2uiItem[] = JSON.parse(await readRawDraft(page));
-  const catalogId = defaultDraft.find(message => message.createSurface)?.createSurface?.catalogId;
+  const createSurface = defaultDraft.find(message => message.createSurface)?.createSurface;
+  const catalogId = createSurface?.catalogId;
   if (!catalogId) {
     throw new Error('Expected the default draft to name its catalog.');
   }
+  const surfaceId = createSurface.surfaceId ?? 'selected-example';
   const draft = [
-    {version: 'v0.9', createSurface: {surfaceId: 'selected-example', catalogId}},
     {
-      version: 'v0.9',
-      updateComponents: {
-        surfaceId: 'selected-example',
+      version: '1.0',
+      createSurface: {
+        surfaceId,
+        catalogId,
         components: [{id: 'root', component: 'Text', text: DRAFT_TEXT}],
       },
     },
@@ -138,16 +140,10 @@ const LIT_SAMPLE_TEXT = 'Sample canvas from the Lit renderer';
 async function serveTwoRenderers(page: Page): Promise<void> {
   const litSample = [
     {
-      version: 'v0.9',
+      version: '1.0',
       createSurface: {
         surfaceId: 'lit-sample',
-        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-      },
-    },
-    {
-      version: 'v0.9',
-      updateComponents: {
-        surfaceId: 'lit-sample',
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
         components: [{id: 'root', component: 'Text', text: LIT_SAMPLE_TEXT}],
       },
     },
@@ -175,7 +171,7 @@ async function serveTwoRenderers(page: Page): Promise<void> {
 /** Opens the workspace on the Angular renderer's unedited sample. */
 async function openSampleInWorkspace(page: Page): Promise<void> {
   await page.goto(`/?renderer=${RENDERER_URLS.angular}`);
-  await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+  await expect(page.locator('.header-title')).toContainText('Basic Catalog');
   await expect(
     previewFrame(page.locator('.workspace-container')).getByText('Book a Car'),
   ).toBeVisible();
@@ -237,7 +233,7 @@ async function expectGeminiRequestForCurrentDraft(page: Page, expectedDraftText:
   expect(request.headers['x-goog-api-key']).toBe(FAKE_GEMINI_API_KEY);
   const bodyText = JSON.stringify(request.body);
   expect(bodyText).toContain(expectedDraftText);
-  expect(bodyText).toContain('my_basic_catalog');
+  expect(bodyText).toContain('Basic Catalog');
   expect(bodyText).toContain('thinkingConfig');
   return request;
 }
@@ -262,7 +258,6 @@ test.describe('Copilot assistant replacement browser journey', () => {
       'src',
       /localhost:3457/,
     );
-    // Only Lit Basic's catalog has this title; Angular Basic's is "my_basic_catalog A2UI Catalog".
     await expect(page.locator('.header-title')).toHaveText('A2UI Composer - Basic Catalog');
     await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
     await expect(prompt).toHaveValue('Create a simple card in this renderer');
@@ -274,7 +269,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
     );
     await page.getByRole('menuitemradio', {name: 'Angular Basic'}).click();
     await expect(selector).toHaveAccessibleName('Choose renderer, current: Angular Basic');
-    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await expect(page.locator('.header-title')).toContainText('Basic Catalog');
     await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
     await expect(prompt).toHaveValue('Create a simple card in this renderer');
   });
@@ -335,7 +330,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
     const instructions = page.getByRole('dialog');
     await expect(instructions.getByRole('heading', {name: 'System Instructions'})).toBeVisible();
     await expect(instructions.getByRole('textbox', {name: 'System instructions text'})).toHaveValue(
-      /my_basic_catalog/,
+      /Basic Catalog/,
     );
     await instructions.getByRole('button', {name: 'Close', exact: true}).click();
 
@@ -457,8 +452,12 @@ test.describe('Copilot assistant replacement browser journey', () => {
     await openDraftInWorkspace(page);
     const originalDraft = await readRawDraft(page);
     const messages: RenderA2uiItem[] = JSON.parse(originalDraft);
-    const components = messages.find(message => message.updateComponents)?.updateComponents;
-    const target = components?.components.find(
+    const createSurface = messages.find(message => message.createSurface)?.createSurface;
+    const surfaceId = createSurface?.surfaceId ?? 'selected-example';
+    const components =
+      createSurface?.components ??
+      messages.find(message => message.updateComponents)?.updateComponents?.components;
+    const target = components?.find(
       (component): component is Record<string, unknown> =>
         component !== null &&
         typeof component === 'object' &&
@@ -474,7 +473,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
         chunks: [
           geminiTextChunk(
             JSON.stringify({
-              version: 'v0.9',
+              version: '1.0',
               updateDataModel: {
                 surfaceId: 'vacation_booking',
                 path: '/destination_value',
@@ -495,9 +494,9 @@ test.describe('Copilot assistant replacement browser journey', () => {
         chunks: [
           geminiTextChunk(
             JSON.stringify({
-              version: 'v0.9',
+              version: '1.0',
               updateComponents: {
-                surfaceId: components.surfaceId,
+                surfaceId,
                 components: [{...target, text: MODEL_TEXT}],
               },
             }),

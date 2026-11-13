@@ -41,35 +41,24 @@ export const mockAgentCard = {
 
 export const flightA2uiPayload = [
   {
-    version: 'v0.9',
+    version: '1.0',
     createSurface: {
       surfaceId: 'flight-options',
-      catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-      sendDataModel: true,
-    },
-  },
-  {
-    version: 'v0.9',
-    updateComponents: {
-      surfaceId: 'flight-options',
+      catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
       components: [
         {
           id: 'root',
-          component: {
-            Canvas: {
-              cardTitle: 'Flight Options',
-              cardDescription: 'Review and select non-stop flights',
-              cardIcon: 'flight',
-              autoOpen: true,
-              children: ['header_text', 'flight_card_ana', 'flight_card_jal', 'confirm_btn'],
-            },
-          },
+          component: 'Canvas',
+          cardTitle: 'Flight Options',
+          cardDescription: 'Review and select non-stop flights',
+          cardIcon: 'flight',
+          autoOpen: true,
+          children: ['header_text', 'flight_card_ana', 'flight_card_jal', 'confirm_btn'],
         },
         {
           id: 'header_text',
           component: 'Text',
-          text: 'Available Non-Stop Flights (SFO ➔ NRT)',
-          variant: 'h2',
+          text: '## Available Non-Stop Flights (SFO ➔ NRT)',
         },
         {
           id: 'flight_card_ana',
@@ -84,20 +73,17 @@ export const flightA2uiPayload = [
         {
           id: 'ana_title',
           component: 'Text',
-          text: '✈️ All Nippon Airways (ANA NH007)',
-          variant: 'h3',
+          text: '### ✈️ All Nippon Airways (ANA NH007)',
         },
         {
           id: 'ana_route',
           component: 'Text',
           text: 'Depart 11:30 AM (SFO) ➔ Arrive 3:45 PM (+1 day, NRT)',
-          variant: 'body',
         },
         {
           id: 'ana_meta',
           component: 'Text',
           text: 'Duration: 11h 15m (Non-stop) • Fare: $1,180 (Economy)',
-          variant: 'caption',
         },
         {
           id: 'flight_card_jal',
@@ -112,20 +98,17 @@ export const flightA2uiPayload = [
         {
           id: 'jal_title',
           component: 'Text',
-          text: '✈️ Japan Airlines (JAL JL001)',
-          variant: 'h3',
+          text: '### ✈️ Japan Airlines (JAL JL001)',
         },
         {
           id: 'jal_route',
           component: 'Text',
           text: 'Depart 1:15 PM (SFO) ➔ Arrive 5:30 PM (+1 day, NRT)',
-          variant: 'body',
         },
         {
           id: 'jal_meta',
           component: 'Text',
           text: 'Duration: 11h 15m (Non-stop) • Fare: $1,240 (Economy)',
-          variant: 'caption',
         },
         {
           id: 'confirm_btn',
@@ -145,16 +128,9 @@ export const flightA2uiPayload = [
           id: 'confirm_btn_text',
           component: 'Text',
           text: 'Select ANA NH007 & Continue',
-          variant: 'body',
         },
       ],
-    },
-  },
-  {
-    version: 'v0.9',
-    updateDataModel: {
-      surfaceId: 'flight-options',
-      value: {
+      dataModel: {
         selectedFlight: 'NH007',
         tripType: 'RoundTrip',
       },

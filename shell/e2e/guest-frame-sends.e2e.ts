@@ -83,7 +83,7 @@ interface GuestDocument {
 const RENDERER_ORIGINS = DEMO_RENDERERS.map(renderer => renderer.url);
 
 /** The bundled catalog every test surface uses. */
-const BASIC_CATALOG = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
+const BASIC_CATALOG = 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json';
 
 /** Long enough for any follow-up traffic to have arrived. */
 const QUIET_MS = 1_500;
@@ -100,36 +100,32 @@ const FORM_VALUE = 'Ada Lovelace';
  */
 function formPayload(): unknown[] {
   return [
-    {version: 'v0.9', createSurface: {surfaceId: 'qa-form', catalogId: BASIC_CATALOG}},
     {
-      version: 'v0.9',
-      updateComponents: {
+      version: '1.0',
+      createSurface: {
         surfaceId: 'qa-form',
+        catalogId: BASIC_CATALOG,
         components: [
           {id: 'root', component: 'Column', children: ['name', 'canvas']},
           {
             id: 'name',
             component: 'TextField',
             label: 'Guest name',
-            value: {path: '/name'},
-            variant: 'shortText',
+            value: {'@path': '/name'},
           },
           {
             id: 'canvas',
-            component: {
-              Canvas: {
-                cardTitle: 'Form details',
-                cardIcon: 'dashboard',
-                autoOpen: false,
-                children: ['canvas_text'],
-              },
-            },
+            component: 'Canvas',
+            cardTitle: 'Form details',
+            cardIcon: 'dashboard',
+            autoOpen: false,
+            children: ['canvas_text'],
           },
-          {id: 'canvas_text', component: 'Text', text: 'CANVAS FORM DETAILS', variant: 'h3'},
+          {id: 'canvas_text', component: 'Text', text: '### CANVAS FORM DETAILS'},
         ],
+        dataModel: {name: ''},
       },
     },
-    {version: 'v0.9', updateDataModel: {surfaceId: 'qa-form', path: '/name', value: ''}},
   ];
 }
 

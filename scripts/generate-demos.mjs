@@ -29,7 +29,11 @@
 import {existsSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {A2uiMessageListSchema, BASIC_COMPONENTS} from '@a2ui/web_core/v0_9';
+import {AgentToRendererMessageSchema as A2uiMessageSchema} from '@a2ui/web_core/v1_0';
+import {
+  extractSurfaceComponents,
+  validateV10Components,
+} from '../samples/shared/validate-components.ts';
 import {normalizeDemoHeadings} from './normalize-demo-headings.mjs';
 
 // `fileURLToPath` (rather than `new URL(...).pathname`) is required here:
@@ -52,7 +56,7 @@ const CHECK_MODE = process.argv.slice(2).includes('--check');
 // never causes an install on its own. `.yarnrc.yml` sets
 // `nodeLinker: node-modules`, so the hoisted location is deterministic.
 const PKG_DIR = join(REPO_ROOT, 'node_modules/@a2ui/web_core');
-const EXAMPLES_SUBPATH = 'src/v0_9/schemas/catalogs/basic/examples';
+const EXAMPLES_SUBPATH = 'src/v1_0/schemas/catalogs/basic/examples';
 const EXAMPLES_DIR = join(PKG_DIR, EXAMPLES_SUBPATH);
 
 const SHOWCASE_DIR = join(REPO_ROOT, 'samples/shared/demos');
@@ -154,7 +158,7 @@ function idFromFilename(filename) {
   return filename.replace(/^\d+_/, '').replace(/\.json$/, '');
 }
 
-function buildDemos(filenames) {
+function readExamples(filenames) {
   const demos = [];
   const seenIds = new Map();
 
@@ -177,6 +181,13 @@ function buildDemos(filenames) {
     if (!Array.isArray(example.messages) || example.messages.length === 0) {
       throw new Error(`Example file ${filename} has a missing or empty "messages" array.`);
     }
+
+    for (const message of example.messages) {
+      A2uiMessageSchema.parse(message);
+    }
+
+    const components = extractSurfaceComponents(example.messages, filename);
+    validateV10Components(components, filename);
 
     const id = idFromFilename(filename);
     if (!id) {
@@ -204,6 +215,8 @@ function buildDemos(filenames) {
   return demos;
 }
 
+const buildDemos = readExamples;
+
 /** Validates the hand-authored examples before they enter any renderer bundle. */
 function readShowcaseDemos() {
   return (
@@ -217,24 +230,15 @@ function readShowcaseDemos() {
         if (typeof example.name !== 'string' || typeof example.description !== 'string') {
           throw new Error(`${filename}: showcase name and description must be strings.`);
         }
-        A2uiMessageListSchema.parse(example.messages);
-        const components = example.messages.flatMap(
-          message => message.updateComponents?.components ?? [],
-        );
-        const ids = new Set(components.map(component => component.id));
-        if (!ids.has('root') || ids.size !== components.length) {
-          throw new Error(`${filename}: showcase needs a root and unique component ids.`);
+        if (!Array.isArray(example.messages) || example.messages.length === 0) {
+          throw new Error(`${filename}: showcase has a missing or empty "messages" array.`);
         }
-        for (const {id, component, ...props} of components) {
-          const api = BASIC_COMPONENTS.find(api => api.name === component);
-          if (!api) throw new Error(`${filename}: unknown basic component ${component}.`);
-          api.schema.strict().parse(props);
-          const children = [props.child, ...(Array.isArray(props.children) ? props.children : [])];
-          for (const child of children.filter(Boolean)) {
-            if (!ids.has(child))
-              throw new Error(`${filename}: ${id} references missing child ${child}.`);
-          }
+        for (const message of example.messages) {
+          A2uiMessageSchema.parse(message);
         }
+        const components = extractSurfaceComponents(example.messages, filename);
+        validateV10Components(components, filename);
+
         return {
           id: `showcase-${idFromFilename(filename)}`,
           name: example.name,
@@ -301,4 +305,17 @@ function main() {
   writeOutput(json, demos.length);
 }
 
-main();
+export {
+  readExamples,
+  buildDemos,
+  readShowcaseDemos,
+  idFromFilename,
+  compareFilenames,
+  withoutReplacedExamples,
+  renderJson,
+  main,
+};
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
+}

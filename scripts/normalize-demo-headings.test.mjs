@@ -58,3 +58,69 @@ test('preserves Markdown bodies, bindings, mismatched levels, and meaningful has
 
   assert.deepEqual(normalizeDemoHeadings(messages), messages);
 });
+
+function singleMessageWith(components) {
+  return {
+    version: '1.0',
+    createSurface: {
+      surfaceId: 'demo',
+      catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+      components,
+    },
+  };
+}
+
+test('preserves v1.0 Markdown heading prefixes in createSurface and updateComponents when variant is omitted or body/caption', () => {
+  const components = [
+    {id: 'h1', component: 'Text', text: '# Heading 1'},
+    {id: 'h2', component: 'Text', text: '## Login'},
+    {id: 'h3', component: 'Text', text: '### OS 87 · Vienna to New York'},
+    {id: 'h4', component: 'Text', text: '#### Total'},
+    {id: 'h5', component: 'Text', text: '##### Subsection'},
+    {id: 'h6', component: 'Text', text: '###### Minor detail'},
+    {id: 'body-heading', component: 'Text', variant: 'body', text: '## Body Heading'},
+    {id: 'caption-text', component: 'Text', variant: 'caption', text: 'Caption text'},
+  ];
+  const createSurfaceMessages = [singleMessageWith(components)];
+  const updateComponentsMessages = [
+    {version: '1.0', updateComponents: {surfaceId: 'demo', components}},
+  ];
+
+  assert.deepEqual(normalizeDemoHeadings(createSurfaceMessages), createSurfaceMessages);
+  assert.deepEqual(normalizeDemoHeadings(updateComponentsMessages), updateComponentsMessages);
+});
+
+test('removes duplicate Markdown markers when legacy heading variants h1-h6 are present in createSurface or updateComponents', () => {
+  const components = Array.from({length: 6}, (_, index) => ({
+    id: `heading-${index + 1}`,
+    component: 'Text',
+    variant: `h${index + 1}`,
+    text: `${'#'.repeat(index + 1)} h${index + 1} Section Title`,
+  }));
+  const messages = [singleMessageWith(components)];
+  const original = structuredClone(messages);
+
+  const normalized = normalizeDemoHeadings(messages);
+
+  assert.deepEqual(
+    normalized[0].createSurface.components,
+    components.map((component, index) => ({
+      ...component,
+      text: `h${index + 1} Section Title`,
+    })),
+  );
+  assert.deepEqual(messages, original, 'normalization must not mutate source messages');
+});
+
+test('preserves v1.0 non-heading hashes, bindings, and other components in createSurface', () => {
+  const components = [
+    {id: 'hashtag', component: 'Text', text: '#Trending'},
+    {id: 'internal', component: 'Text', text: 'PR #42 and Issue #123'},
+    {id: 'binding', component: 'Text', text: {'@path': '/title'}},
+    {id: 'button-label', component: 'Button', text: '# Submit'},
+  ];
+  const messages = [singleMessageWith(components)];
+
+  assert.deepEqual(normalizeDemoHeadings(messages), messages);
+});
+

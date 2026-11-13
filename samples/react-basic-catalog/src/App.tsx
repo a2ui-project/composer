@@ -16,19 +16,27 @@
 
 import React from 'react';
 import {useA2uiSandbox} from 'a2ui-bridge/react';
-import {ERROR_OVERLAY_DEBOUNCE_MS} from 'a2ui-bridge';
-import {COMPONENT_USAGES} from './usages.js';
+import {createMcpFunctionsCatalog, ERROR_OVERLAY_DEBOUNCE_MS} from 'a2ui-bridge';
+import {attachCatalogSchema} from '../../shared/attach-catalog-schema.js';
+import {COMPONENT_USAGES} from '../../shared/usages.js';
 import {DEMOS} from '../../shared/demos';
 import {renderMarkdown} from '@a2ui/markdown-it';
-import {A2uiSurface, MarkdownContext} from '@a2ui/react/v0_9';
-import {basicCatalog} from '@a2ui/web_core/v0_9/basic_catalog';
+import {A2uiSurface, MarkdownContext, type ReactCatalogComponent} from '@a2ui/react';
+import {basicCatalog} from '@a2ui/web_core/catalogs/basic/v1';
 import {useDebouncedValue} from './hooks/use-debounced-value.js';
 
+attachCatalogSchema(basicCatalog);
+
+const mcpFunctionsCatalog = createMcpFunctionsCatalog();
+
 export function App() {
-  const {surface, hasRoot, error} = useA2uiSandbox([basicCatalog], {
-    getComponentUsages: async () => COMPONENT_USAGES,
-    getDemos: async () => DEMOS,
-  });
+  const {surface, hasRoot, error} = useA2uiSandbox<ReactCatalogComponent>(
+    [basicCatalog, mcpFunctionsCatalog],
+    {
+      getComponentUsages: async () => COMPONENT_USAGES,
+      getDemos: async () => DEMOS,
+    },
+  );
 
   // Buffer overlay triggers to prevent flicker cascades during rapid
   // keypresses or layout changes as JSON arrays stream across the bridge.
@@ -47,7 +55,6 @@ export function App() {
           A2UI React Sandbox active. Waiting for RENDER_A2UI payloads...
         </p>
       )}
-
       {debouncedError && (
         <div className="error-overlay">
           <h3>JSON Preview Error</h3>
