@@ -44,6 +44,20 @@ test.describe('Settings and Client Configuration', () => {
                 rendererUrl: '/samples/ng-basic-catalog/',
               },
             },
+            models: [
+              {
+                model: 'gemini-flash-latest',
+                displayName: 'Gemini Flash',
+                thinkingLevels: ['low', 'medium', 'high'],
+                defaultThinkingLevel: 'medium',
+              },
+              {
+                model: 'gemini-pro-latest',
+                displayName: 'Gemini Pro',
+                thinkingLevels: ['low', 'medium', 'high'],
+                defaultThinkingLevel: 'medium',
+              },
+            ],
           },
         });
       });
@@ -170,6 +184,38 @@ test.describe('Settings and Client Configuration', () => {
         () => JSON.parse(localStorage.getItem('a2ui_composer_custom_renderers') || '[]').length,
       );
       expect(customRenderersCount).toBe(0);
+    });
+
+    test('persists model and thinking level selections immediately upon change', async ({page}) => {
+      const modelSelect = page.locator('#model-select');
+      await expect(modelSelect).toBeVisible();
+      await expect(modelSelect).toContainText('Gemini Flash');
+
+      const thinkingSelect = page.locator('#thinking-level-select');
+      await expect(thinkingSelect).toBeVisible();
+      await expect(thinkingSelect).toContainText('Medium');
+
+      await thinkingSelect.click();
+      const highOption = page.getByRole('option', {name: 'High', exact: true});
+      await highOption.click();
+      await expect(thinkingSelect).toContainText('High');
+
+      await page.waitForFunction(
+        () => localStorage.getItem('a2ui_composer_selected_thinking_level') === 'HIGH',
+      );
+
+      await modelSelect.click();
+      const proOption = page.getByRole('option', {name: 'Gemini Pro', exact: true});
+      await proOption.click();
+      await expect(modelSelect).toContainText('Gemini Pro');
+
+      await page.waitForFunction(
+        () => localStorage.getItem('a2ui_composer_selected_model') === 'gemini-pro-latest',
+      );
+
+      await page.goto('/settings');
+      await expect(page.locator('#model-select')).toContainText('Gemini Pro');
+      await expect(page.locator('#thinking-level-select')).toContainText('High');
     });
   });
 

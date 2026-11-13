@@ -21,8 +21,13 @@ import {beforeEach, describe, expect, it} from 'vitest';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
-import {ModelSelectionService, parseThinkingLevel} from './model-selection.service';
+import {
+  ModelSelectionService,
+  isSupportedThinkingLevel,
+  parseThinkingLevel,
+} from './model-selection.service';
 
 class FakeLocalStorage {
   readonly items = new Map<string, string>();
@@ -141,7 +146,7 @@ describe('ModelSelectionService', () => {
     expect(service.thinkingLevel()).toBeUndefined();
   });
 
-  it('persists the thinking level choice and ignores unspecified levels', () => {
+  it('persists the thinking level choice and ignores unspecified or arbitrary levels', () => {
     const service = setup();
     configState.setModels([{model: 'gemini-flash-latest', thinkingLevels: ['low', 'high']}]);
     service.selectThinkingLevel(ThinkingLevel.HIGH);
@@ -150,6 +155,60 @@ describe('ModelSelectionService', () => {
 
     service.selectThinkingLevel(ThinkingLevel.THINKING_LEVEL_UNSPECIFIED);
     expect(service.thinkingLevel()).toBe(ThinkingLevel.HIGH);
+
+    service.selectThinkingLevel('ULTRA' as ThinkingLevel);
+    expect(service.thinkingLevel()).toBe(ThinkingLevel.HIGH);
+  });
+
+  it('sanitizes unmapped or arbitrary levels in storage and ignores unmapped model levels', () => {
+    storage.setItem(LocalStorageKey.SELECTED_THINKING_LEVEL, 'ULTRA');
+    const service = setup();
+    configState.setModels([
+      {
+        model: 'gemini-flash-latest',
+        thinkingLevels: ['ultra', 'low', 'high'],
+        defaultThinkingLevel: 'ultra',
+      },
+    ]);
+    expect(service.selectedModel()?.thinkingLevels).toEqual([
+      ThinkingLevel.LOW,
+      ThinkingLevel.HIGH,
+    ]);
+    expect(service.selectedModel()?.defaultThinkingLevel).toBeUndefined();
+    expect(service.thinkingLevel()).toBe(ThinkingLevel.LOW);
+  });
+
+  it('logs a warning via ErrorLogger when unmapped thinking levels are configured in model options', () => {
+    const service = setup();
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const streamCalls = signal(0);
+    const sub = errorLogger.errorStream$.subscribe(() => {
+      streamCalls.update(n => n + 1);
+    });
+
+    configState.setModels([
+      {
+        model: 'gemini-test',
+        thinkingLevels: ['xhigh', 'low'],
+        defaultThinkingLevel: 'xhigh',
+      },
+    ]);
+    TestBed.flushEffects();
+
+    expect(service.models()[0].thinkingLevels).toEqual([ThinkingLevel.LOW]);
+    const history = errorLogger.getHistory();
+    expect(history.map(h => h.message)).toEqual([
+      'Unrecognized thinking level "xhigh" for model "gemini-test"',
+      'Unrecognized default thinking level "xhigh" for model "gemini-test"',
+    ]);
+    expect(streamCalls()).toBe(2);
+
+    // Changing authType must not re-emit warnings or re-run warning logging
+    authType.set(AuthType.FIRST_PARTY);
+    TestBed.flushEffects();
+    expect(errorLogger.getHistory().length).toBe(2);
+
+    sub.unsubscribe();
   });
 
   it('only offers models matching the active auth type', () => {
@@ -165,11 +224,26 @@ describe('ModelSelectionService', () => {
     expect(service.models().map(m => m.id)).toEqual(['models/internal', 'shared']);
   });
 
-  it('parses thinking levels case-insensitively', () => {
+  it('parses thinking levels case-insensitively and rejects unmapped or arbitrary levels', () => {
+    expect(parseThinkingLevel('minimaL')).toBe(ThinkingLevel.MINIMAL);
+    expect(parseThinkingLevel('low')).toBe(ThinkingLevel.LOW);
     expect(parseThinkingLevel(' Medium ')).toBe(ThinkingLevel.MEDIUM);
     expect(parseThinkingLevel('HIGH')).toBe(ThinkingLevel.HIGH);
     expect(parseThinkingLevel(ThinkingLevel.THINKING_LEVEL_UNSPECIFIED)).toBeUndefined();
     expect(parseThinkingLevel('ultra')).toBeUndefined();
     expect(parseThinkingLevel(42)).toBeUndefined();
+  });
+
+  it('validates supported thinking levels using isSupportedThinkingLevel', () => {
+    expect(isSupportedThinkingLevel(ThinkingLevel.MINIMAL)).toBe(true);
+    expect(isSupportedThinkingLevel(ThinkingLevel.LOW)).toBe(true);
+    expect(isSupportedThinkingLevel(ThinkingLevel.MEDIUM)).toBe(true);
+    expect(isSupportedThinkingLevel(ThinkingLevel.HIGH)).toBe(true);
+    expect(isSupportedThinkingLevel(ThinkingLevel.THINKING_LEVEL_UNSPECIFIED)).toBe(false);
+    expect(isSupportedThinkingLevel('ULTRA')).toBe(false);
+    expect(isSupportedThinkingLevel('toString')).toBe(false);
+    expect(isSupportedThinkingLevel(123)).toBe(false);
+    expect(isSupportedThinkingLevel(null)).toBe(false);
+    expect(isSupportedThinkingLevel(undefined)).toBe(false);
   });
 });

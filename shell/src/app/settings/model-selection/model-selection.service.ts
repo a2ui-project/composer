@@ -14,28 +14,28 @@
  * limitations under the License.
  */
 
-import {Injectable, Signal, computed, inject, signal} from '@angular/core';
+import {Injectable, Signal, computed, effect, inject, signal, untracked} from '@angular/core';
 import {ThinkingLevel} from '@google/genai';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 
-const ALL_THINKING_LEVELS: readonly ThinkingLevel[] = [
-  ThinkingLevel.MINIMAL,
-  ThinkingLevel.LOW,
-  ThinkingLevel.MEDIUM,
-  ThinkingLevel.HIGH,
-];
-
 /** Human-friendly labels for the thinking level selector. */
-export const THINKING_LEVEL_LABELS: Readonly<Record<ThinkingLevel, string>> = {
-  [ThinkingLevel.THINKING_LEVEL_UNSPECIFIED]: 'Unspecified',
+export const THINKING_LEVEL_LABELS = {
   [ThinkingLevel.MINIMAL]: 'Minimal',
   [ThinkingLevel.LOW]: 'Low',
   [ThinkingLevel.MEDIUM]: 'Medium',
   [ThinkingLevel.HIGH]: 'High',
-};
+} as const satisfies Partial<Record<ThinkingLevel, string>>;
+
+export type SupportedThinkingLevel = keyof typeof THINKING_LEVEL_LABELS;
+
+/** Type guard checking whether a value is a supported thinking level. */
+export function isSupportedThinkingLevel(level: unknown): level is SupportedThinkingLevel {
+  return typeof level === 'string' && Object.hasOwn(THINKING_LEVEL_LABELS, level);
+}
 
 /** A selectable LLM model, resolved from `config.json.models`. */
 export declare interface LlmModelOption {
@@ -46,9 +46,9 @@ export declare interface LlmModelOption {
   /** Model identifier sent to the backend. */
   readonly model: string;
   /** Thinking levels the model accepts, in display order. Empty if unsupported. */
-  readonly thinkingLevels: readonly ThinkingLevel[];
+  readonly thinkingLevels: readonly SupportedThinkingLevel[];
   /** Level used when the user has not chosen one, if the model supports levels. */
-  readonly defaultThinkingLevel?: ThinkingLevel;
+  readonly defaultThinkingLevel?: SupportedThinkingLevel;
   /** Authentication mode the entry is restricted to, if any. */
   readonly authType?: AuthType;
 }
@@ -57,12 +57,12 @@ export declare interface LlmModelOption {
  * Parses a user- or config-supplied thinking level string, returning
  * `undefined` for unknown or unspecified values.
  */
-export function parseThinkingLevel(value: unknown): ThinkingLevel | undefined {
+export function parseThinkingLevel(value: unknown): SupportedThinkingLevel | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
   const normalized = value.trim().toUpperCase();
-  return ALL_THINKING_LEVELS.find(level => level === normalized);
+  return isSupportedThinkingLevel(normalized) ? normalized : undefined;
 }
 
 /**
@@ -81,13 +81,29 @@ export class ModelSelectionService {
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly storage = inject(LocalStorageInteractions);
   private readonly configProvider = inject(AppConfigProvider);
+  private readonly errorLogger = inject(ErrorLogger);
 
   private readonly storedModelId = signal<string | null>(
     this.storage.getItem(LocalStorageKey.SELECTED_MODEL),
   );
-  private readonly storedThinkingLevel = signal<ThinkingLevel | undefined>(
+  private readonly storedThinkingLevel = signal<SupportedThinkingLevel | undefined>(
     parseThinkingLevel(this.storage.getItem(LocalStorageKey.SELECTED_THINKING_LEVEL)),
   );
+
+  private readonly parsedStartupModels = computed<ParsedStartupModels>(() =>
+    parseModelConfigs(this.startupConfigState.models()),
+  );
+
+  constructor() {
+    effect(() => {
+      const warnings = this.parsedStartupModels().warnings;
+      untracked(() => {
+        for (const warning of warnings) {
+          this.errorLogger.warn(warning);
+        }
+      });
+    });
+  }
 
   /**
    * Models the user may choose from in the active authentication mode, in
@@ -95,13 +111,9 @@ export class ModelSelectionService {
    */
   readonly models: Signal<readonly LlmModelOption[]> = computed(() => {
     const authType = this.configProvider.authType();
-    return this.startupConfigState
-      .models()
-      .map(config => toModelOption(config))
-      .filter(
-        (option): option is LlmModelOption =>
-          option !== null && (option.authType === undefined || option.authType === authType),
-      );
+    return this.parsedStartupModels().options.filter(
+      option => option.authType === undefined || option.authType === authType,
+    );
   });
 
   /** Whether the deployment declares any selectable models. */
@@ -130,7 +142,7 @@ export class ModelSelectionService {
    * accepts it, otherwise the model's default, otherwise its first level.
    * `undefined` when the active model does not support thinking levels.
    */
-  readonly thinkingLevel: Signal<ThinkingLevel | undefined> = computed(() => {
+  readonly thinkingLevel: Signal<SupportedThinkingLevel | undefined> = computed(() => {
     const model = this.selectedModel();
     if (!model || model.thinkingLevels.length === 0) {
       return undefined;
@@ -139,7 +151,10 @@ export class ModelSelectionService {
     if (stored && model.thinkingLevels.includes(stored)) {
       return stored;
     }
-    return model.defaultThinkingLevel ?? model.thinkingLevels[0];
+    if (model.defaultThinkingLevel && model.thinkingLevels.includes(model.defaultThinkingLevel)) {
+      return model.defaultThinkingLevel;
+    }
+    return model.thinkingLevels[0];
   });
 
   /**
@@ -156,15 +171,39 @@ export class ModelSelectionService {
 
   /** Persists the user's thinking level choice. */
   selectThinkingLevel(level: ThinkingLevel): void {
-    if (!parseThinkingLevel(level)) {
+    const parsed = parseThinkingLevel(level);
+    if (!parsed) {
       return;
     }
-    this.storedThinkingLevel.set(level);
-    this.storage.setItem(LocalStorageKey.SELECTED_THINKING_LEVEL, level);
+    this.storedThinkingLevel.set(parsed);
+    this.storage.setItem(LocalStorageKey.SELECTED_THINKING_LEVEL, parsed);
   }
 }
 
-function toModelOption(config: unknown): LlmModelOption | null {
+interface ParsedModelResult {
+  readonly option: LlmModelOption;
+  readonly warnings: readonly string[];
+}
+
+interface ParsedStartupModels {
+  readonly options: readonly LlmModelOption[];
+  readonly warnings: readonly string[];
+}
+
+function parseModelConfigs(configs: readonly unknown[]): ParsedStartupModels {
+  const options: LlmModelOption[] = [];
+  const warnings: string[] = [];
+  for (const config of configs) {
+    const parsed = toModelOption(config);
+    if (parsed) {
+      options.push(parsed.option);
+      warnings.push(...parsed.warnings);
+    }
+  }
+  return {options, warnings};
+}
+
+function toModelOption(config: unknown): ParsedModelResult | null {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     return null;
   }
@@ -179,20 +218,40 @@ function toModelOption(config: unknown): LlmModelOption | null {
   if (!model) {
     return null;
   }
-  const thinkingLevels = Array.isArray(raw.thinkingLevels)
-    ? raw.thinkingLevels
-        .map(parseThinkingLevel)
-        .filter((level): level is ThinkingLevel => level !== undefined)
-    : [];
+  const warnings: string[] = [];
+  const thinkingLevels: SupportedThinkingLevel[] = [];
+  if (Array.isArray(raw.thinkingLevels)) {
+    for (const item of raw.thinkingLevels) {
+      const parsed = parseThinkingLevel(item);
+      if (parsed) {
+        thinkingLevels.push(parsed);
+      } else if (item !== undefined && item !== null && item !== '') {
+        warnings.push(`Unrecognized thinking level "${item}" for model "${model}"`);
+      }
+    }
+  }
   const defaultLevel = parseThinkingLevel(raw.defaultThinkingLevel);
+  if (
+    raw.defaultThinkingLevel !== undefined &&
+    raw.defaultThinkingLevel !== null &&
+    raw.defaultThinkingLevel !== '' &&
+    !defaultLevel
+  ) {
+    warnings.push(
+      `Unrecognized default thinking level "${raw.defaultThinkingLevel}" for model "${model}"`,
+    );
+  }
   return {
-    id: model,
-    name: typeof raw.displayName === 'string' && raw.displayName.trim() ? raw.displayName : model,
-    model,
-    thinkingLevels: [...new Set(thinkingLevels)],
-    defaultThinkingLevel:
-      defaultLevel && thinkingLevels.includes(defaultLevel) ? defaultLevel : undefined,
-    authType: parseAuthType(raw.authType),
+    option: {
+      id: model,
+      name: typeof raw.displayName === 'string' && raw.displayName.trim() ? raw.displayName : model,
+      model,
+      thinkingLevels: [...new Set(thinkingLevels)],
+      defaultThinkingLevel:
+        defaultLevel && thinkingLevels.includes(defaultLevel) ? defaultLevel : undefined,
+      authType: parseAuthType(raw.authType),
+    },
+    warnings,
   };
 }
 
