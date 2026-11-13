@@ -92,8 +92,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command:
-        "node -e \"const fs = require('fs'), {execSync} = require('child_process'); if (!fs.existsSync('../bridge/dist')) execSync('corepack yarn workspace a2ui-bridge build', {stdio: 'inherit'}); if (!fs.existsSync('../samples/ng-basic-catalog/dist')) execSync('corepack yarn workspace ng-basic-catalog build', {stdio: 'inherit'}); if (!fs.existsSync('../samples/lit-basic-catalog/dist')) execSync('corepack yarn workspace lit-basic-catalog build', {stdio: 'inherit'}); if (!fs.existsSync('../samples/react-basic-catalog/dist')) execSync('corepack yarn workspace react-basic-catalog build', {stdio: 'inherit'});\" && npx ng serve",
+      command: 'node ../scripts/ensure-e2e-samples.mjs && npx ng serve',
       url: 'http://localhost:4200',
       reuseExistingServer,
       timeout: 120 * 1000,

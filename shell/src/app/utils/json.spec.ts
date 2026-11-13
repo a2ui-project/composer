@@ -209,6 +209,26 @@ describe('extractErrorDetails', () => {
     expect(extractErrorDetails(error2, rawText2)).toEqual({line: 1, column: 10});
   });
 
+  it('identifies error position at start of bare identifier keywords like trueish, falsehood, and nullable', () => {
+    const rawTextTrue = '{"a": trueish}';
+    const errorTrue = new SyntaxError(
+      'Unexpected token \'t\', "{\\"a\\": trueish}" is not valid JSON',
+    );
+    expect(extractErrorDetails(errorTrue, rawTextTrue)).toEqual({line: 1, column: 7});
+
+    const rawTextFalse = '{"a": falsehood}';
+    const errorFalse = new SyntaxError(
+      'Unexpected token \'f\', "{\\"a\\": falsehood}" is not valid JSON',
+    );
+    expect(extractErrorDetails(errorFalse, rawTextFalse)).toEqual({line: 1, column: 7});
+
+    const rawTextNull = '{"a": nullable}';
+    const errorNull = new SyntaxError(
+      'Unexpected token \'n\', "{\\"a\\": nullable}" is not valid JSON',
+    );
+    expect(extractErrorDetails(errorNull, rawTextNull)).toEqual({line: 1, column: 7});
+  });
+
   it('returns empty object for unrecognized error formats', () => {
     const error = new SyntaxError('Unexpected token');
     const result = extractErrorDetails(error, 'some text');
