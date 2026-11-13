@@ -331,6 +331,14 @@ export function stubRendererHtml(
       ? 'https://a2ui.org/specification/v1_0/stub_catalog.json'
       : 'https://a2ui.org/specification/v0_9/stub_catalog.json';
 
+  const catalogPayload = {
+    catalogId,
+    title,
+    description: 'Stub Catalog Description',
+    version,
+    components: {},
+  };
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -349,13 +357,7 @@ export function stubRendererHtml(
     clearIntervalSafe();
     window.parent.postMessage({
       type: 'A2UI_CATALOG',
-      payload: {
-        catalogId: '${catalogId}',
-        title: '${title}',
-        description: 'Stub Catalog Description',
-        version: '${version}',
-        components: {}
-      }
+      payload: ${JSON.stringify(catalogPayload)}
     }, '*');
   }
   interval = setInterval(() => {

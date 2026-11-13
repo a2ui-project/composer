@@ -294,6 +294,7 @@ class MockStateSync {
     this.activeDraftSignal.set(val);
   });
   hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
+  syncCatalogDraft = vi.fn(() => this.activeDraftSignal());
 }
 
 describe('RawFrame JSON Source Editor View', () => {
@@ -1620,6 +1621,46 @@ describe('RawFrame JSON Source Editor View', () => {
 
       mockActiveProtocolVersion.set('v1.0');
       fixture.detectChanges();
+
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+      expect(errorLoggerMock.error).not.toHaveBeenCalledWith(
+        expect.objectContaining({code: 'PROTOCOL_VERSION_MISMATCH'}),
+      );
+    });
+
+    it('does not log PROTOCOL_VERSION_MISMATCH when switching from a v0.9 renderer with samplePayload to a v1.0 renderer while layoutJson is awaiting microtask update', async () => {
+      vi.useFakeTimers();
+      const v09SamplePayload = JSON.stringify([
+        {
+          version: 'v0.9',
+          createSurface: {surfaceId: 'sample', catalogId: 'c-v09'},
+        },
+      ]);
+      const v10Draft = JSON.stringify([
+        {version: '1.0', createSurface: {surfaceId: 'sample', catalogId: 'c-v10', components: []}},
+      ]);
+
+      mockHasReceivedCatalogResponse.set(true);
+      mockActiveProtocolVersion.set('v0.9');
+      stateSyncMock.activeDraftSignal.set(v09SamplePayload);
+
+      const {fixture} = await setup(false);
+      sendRenderA2UIMock.mockClear();
+      errorLoggerMock.error.mockClear();
+
+      // Configure stateSyncMock.syncCatalogDraft to simulate switching to the v1.0 draft
+      stateSyncMock.syncCatalogDraft.mockImplementation(() => {
+        stateSyncMock.activeDraftSignal.set(v10Draft);
+        return v10Draft;
+      });
+
+      // Switch activeProtocolVersion to v1.0 and trigger catalog effect
+      mockActiveProtocolVersion.set('v1.0');
+      fixture.detectChanges();
+
+      // Also trigger RENDERER_READY and A2UI_CATALOG events while layoutJson is still v09SamplePayload
+      messageStreamSubject.next({type: PreviewBridgeMessageType.RENDERER_READY});
+      messageStreamSubject.next({type: PreviewBridgeMessageType.A2UI_CATALOG});
 
       expect(sendRenderA2UIMock).not.toHaveBeenCalled();
       expect(errorLoggerMock.error).not.toHaveBeenCalledWith(

@@ -232,6 +232,49 @@ test.describe('Slack examples in the JSON editor', () => {
     expect(await getJsonValidationProblems(page)).toEqual([]);
     expect(unexpectedErrors).toEqual([]);
   });
+
+  test('loads Slack renderer without recursive-reference warnings and switches to Angular Basic without protocol mismatch', async ({
+    page,
+  }) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openComposerWithSlackRenderer(page, {rendererId: 'slack'});
+    await waitForMonacoEditor(page);
+
+    // Switch to preview tab and verify Slack preview is rendered
+    await page.getByRole('tab', {name: 'Rendered A2UI Preview'}).click();
+    await expect(slackPreviewSurface(page)).toBeVisible();
+    await expect(slackPreviewSurface(page).getByText('Book a Car')).toBeVisible();
+
+    // Verify Errors tab has 0 errors/warnings (no "Recursive reference detected" warnings)
+    const errorsTab = page.locator('.dv-tab', {hasText: /^Errors/});
+    await expect(errorsTab).toHaveText('Errors');
+    await errorsTab.click();
+    await expect(page.locator('.errors-container .level-badge.warn')).toHaveCount(0);
+    await expect(page.locator('.errors-container .level-badge.error')).toHaveCount(0);
+    await expect(page.locator('.errors-container')).not.toContainText(
+      'Recursive reference detected',
+    );
+
+    // Switch to Angular Basic renderer via Settings
+    await page.getByRole('link', {name: 'Settings', exact: true}).click();
+    await page.locator('a2ui-composer-renderer-selector mat-select').click();
+    await page
+      .locator('mat-option', {hasText: /Angular Basic/})
+      .first()
+      .click();
+    await page.getByRole('link', {name: 'Composer Workspace'}).click();
+    await waitForMonacoEditor(page);
+
+    // Verify preview renders Angular Basic and Errors tab has 0 errors/warnings
+    await expect(errorsTab).toHaveText('Errors');
+    await errorsTab.click();
+    await expect(page.locator('.errors-container .level-badge.warn')).toHaveCount(0);
+    await expect(page.locator('.errors-container .level-badge.error')).toHaveCount(0);
+    await expect(page.locator('.errors-container')).not.toContainText('PROTOCOL_VERSION_MISMATCH');
+    await expect(page.locator('.errors-container')).not.toContainText('Payload protocol version');
+
+    expect(unexpectedErrors).toEqual([]);
+  });
 });
 
 /** Opens Composer on the Slack renderer and shows the Components Gallery. */
