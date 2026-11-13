@@ -723,13 +723,17 @@ describe('React Hook Adapter Spec', () => {
     container.remove();
   });
 
-  it('disposes processor.model on unmount', async () => {
-    let capturedProcessor: {model: {dispose: () => void}} | undefined;
-    const disposeSpy = vi.fn();
+  it('disposes processor and processor.model on unmount', async () => {
+    let capturedProcessor: {dispose?: () => void; model: {dispose: () => void}} | undefined;
+    const modelDisposeSpy = vi.fn();
+    const processorDisposeSpy = vi.fn();
     const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer').mockImplementation((proc, cfg) => {
       capturedProcessor = proc as unknown as typeof capturedProcessor;
-      if (capturedProcessor?.model) {
-        capturedProcessor.model.dispose = disposeSpy;
+      if (capturedProcessor) {
+        capturedProcessor.dispose = processorDisposeSpy;
+        if (capturedProcessor.model) {
+          capturedProcessor.model.dispose = modelDisposeSpy;
+        }
       }
       return {unsubscribe: vi.fn()};
     });
@@ -753,7 +757,8 @@ describe('React Hook Adapter Spec', () => {
       root.unmount();
     });
 
-    expect(disposeSpy).toHaveBeenCalled();
+    expect(processorDisposeSpy).toHaveBeenCalled();
+    expect(modelDisposeSpy).toHaveBeenCalled();
     attachSpy.mockRestore();
     container.remove();
   });

@@ -29,7 +29,6 @@ export interface V10DataBinding {
 /** Representation of an A2UI v1.0 function call strictly omitting returnType. */
 export interface V10FunctionCall {
   ['@call']: string;
-  ['@args']?: Record<string, unknown>;
   ['args']?: Record<string, unknown>;
   ['catalogId']?: string;
 }
@@ -60,11 +59,11 @@ export class V10DynamicValueStrategy implements DynamicValueStrategy<
     if (!isRecord(value) || typeof value['@call'] !== 'string') {
       return false;
     }
-    // Strictly omit returnType on v1.0 function calls.
-    if ('returnType' in value) {
+    // Strictly omit returnType on v1.0 function calls. In v1.0 args is strictly 'args' (no '@args').
+    if ('returnType' in value || '@args' in value) {
       return false;
     }
-    const args = value['@args'] ?? value['args'];
+    const args = value['args'];
     const catalogId = value['catalogId'];
     return (
       (args === undefined || isRecord(args)) &&
@@ -75,7 +74,7 @@ export class V10DynamicValueStrategy implements DynamicValueStrategy<
   normalizeFunctionCall(call: V10FunctionCall): V10FunctionCall {
     const normalized: V10FunctionCall = {
       ['@call']: call['@call'],
-      ['@args']: call['@args'] ?? call['args'] ?? {},
+      ['args']: call['args'] ?? {},
     };
     if (typeof call['catalogId'] === 'string') {
       normalized['catalogId'] = call['catalogId'];

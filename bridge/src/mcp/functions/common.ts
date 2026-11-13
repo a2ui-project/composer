@@ -26,7 +26,6 @@
  * resolved.
  */
 
-import {isSafeRegex} from '@a2ui/web_core';
 import {A2uiExpressionError, type createFunctionImplementation} from '@a2ui/web_core/v0_9';
 import {RE2JS} from 're2js';
 import {z} from 'zod/v3';
@@ -119,12 +118,6 @@ const compiledPatterns = new Map<string, ReturnType<typeof RE2JS.compile>>();
 export function pattern(source: string, fn: string): ReturnType<typeof RE2JS.compile> {
   let compiled = compiledPatterns.get(source);
   if (!compiled) {
-    if (typeof isSafeRegex === 'function' && !isSafeRegex(source)) {
-      throw new A2uiExpressionError(
-        `Unsafe regular expression pattern '${source}': potential ReDoS risk.`,
-        fn,
-      );
-    }
     try {
       compiled = RE2JS.compile(source);
     } catch (error) {

@@ -149,22 +149,69 @@ export function getDynamicValueStrategy(
 }
 
 /**
+ * Detects the appropriate DynamicValueStrategy from the given context by inspecting
+ * standard protocol version properties (`atLeastV10`, `surfaceProtocolVersion`, `protocolVersion`, etc.).
+ */
+export function detectDynamicValueStrategy(
+  context: DynamicValueContext,
+): DynamicValueStrategy | undefined {
+  const ctx = context as {
+    atLeastV10?: boolean;
+    surfaceProtocolVersion?: string;
+    protocolVersion?: string;
+    dynamicValueStrategy?: DynamicValueStrategy;
+  };
+  if (ctx.dynamicValueStrategy) {
+    return ctx.dynamicValueStrategy;
+  }
+  if (ctx.atLeastV10 === true) {
+    return v10DynamicValueStrategy;
+  }
+  if (ctx.atLeastV10 === false) {
+    return v09DynamicValueStrategy;
+  }
+  const version = ctx.surfaceProtocolVersion ?? ctx.protocolVersion;
+  if (typeof version === 'string') {
+    const v = version.trim();
+    if (v === '1.0' || v === 'v1.0' || v.startsWith('1.') || v.startsWith('v1.')) {
+      return v10DynamicValueStrategy;
+    }
+    return v09DynamicValueStrategy;
+  }
+  return undefined;
+}
+
+/**
  * Resolves a dynamic value or tree against context using either version-specific strategies
  * or inspecting the value nodes against both v0.9 and v1.0 patterns.
  *
  * @param value The value, array, or object to resolve.
  * @param context The data context used for evaluation.
- * @param version Optional protocol version to select strategy explicitly.
+ * @param versionOrDepth Optional protocol version or starting recursion depth.
+ * @param depth Current recursion depth when version string is passed.
  * @returns Fully resolved value structure.
  */
 export function resolveDynamicValueWithContext<T = unknown>(
   value: unknown,
   context: DynamicValueContext,
-  version?: 'v0.9' | 'v1.0' | '0.9' | '1.0' | string | null,
+  versionOrDepth?: 'v0.9' | 'v1.0' | '0.9' | '1.0' | string | null | number,
+  depth = 0,
 ): T {
-  if (version) {
-    const strategy = getDynamicValueStrategy(version);
-    return strategy.resolveDynamicValueDeep<T>(value, context);
+  let effectiveVersion: string | null | undefined;
+  let effectiveDepth = depth;
+  if (typeof versionOrDepth === 'number') {
+    effectiveDepth = versionOrDepth;
+  } else {
+    effectiveVersion = versionOrDepth;
+  }
+
+  if (effectiveVersion) {
+    const strategy = getDynamicValueStrategy(effectiveVersion);
+    return strategy.resolveDynamicValueDeep<T>(value, context, effectiveDepth);
+  }
+  const detectedStrategy = detectDynamicValueStrategy(context);
+  if (detectedStrategy) {
+    return detectedStrategy.resolveDynamicValueDeep<T>(value, context, effectiveDepth);
   }
   return resolveDynamicTree<T>(
     value,
@@ -185,7 +232,7 @@ export function resolveDynamicValueWithContext<T = unknown>(
       }
       return {resolved: false};
     },
-    0,
+    effectiveDepth,
   );
 }
 
@@ -204,10 +251,11 @@ export function resolveDynamicValueDeep<T = unknown>(
   depth = 0,
   strategy?: DynamicValueStrategy,
 ): T {
-  if (strategy) {
-    return strategy.resolveDynamicValueDeep<T>(value, context, depth);
+  const effectiveStrategy = strategy ?? detectDynamicValueStrategy(context);
+  if (effectiveStrategy) {
+    return effectiveStrategy.resolveDynamicValueDeep<T>(value, context, depth);
   }
-  return resolveDynamicValueWithContext<T>(value, context);
+  return resolveDynamicValueWithContext<T>(value, context, depth);
 }
 
 /**
@@ -225,8 +273,9 @@ export function resolveDynamicRecord(
   depth = 0,
   strategy?: DynamicValueStrategy,
 ): Record<string, unknown> {
-  if (strategy) {
-    return strategy.resolveDynamicRecord(record, context, depth);
+  const effectiveStrategy = strategy ?? detectDynamicValueStrategy(context);
+  if (effectiveStrategy) {
+    return effectiveStrategy.resolveDynamicRecord(record, context, depth);
   }
   const resolved: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(record)) {

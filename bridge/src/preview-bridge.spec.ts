@@ -3151,12 +3151,7 @@ describe('PreviewBridge Core API Runtime', () => {
           type: PreviewBridgeMessageType.A2UI_CATALOG,
           payload: expect.objectContaining({
             catalogId: 'async-cat',
-            catalogs: [
-              expect.objectContaining({
-                catalogId: 'async-cat',
-                $id: 'async-cat',
-              }),
-            ],
+            $id: 'async-cat',
           }),
         }),
         window.location.origin,
@@ -3185,16 +3180,17 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   describe('Multi-Surface Reset and v1.0 Initial Content', () => {
-    it('resets all surface IDs in a multi-surface batch', () => {
+    it('resets all surface IDs in a multi-surface batch and notifies onSurfaceReady with firstSurfaceId', () => {
       vi.useFakeTimers();
       const processSpy = vi.fn();
+      const readySpy = vi.fn();
       bridge.attachRenderer(
         {processMessages: processSpy},
         {
           surfaceGroup: {
             onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
           } as unknown as SurfaceGroupLike,
-          onSurfaceReady: vi.fn(),
+          onSurfaceReady: readySpy,
         },
       );
 
@@ -3222,6 +3218,7 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(processSpy).toHaveBeenCalledWith([
         {version: '1.0', deleteSurface: {surfaceId: 'surf-y'}},
       ]);
+      expect(readySpy).toHaveBeenCalledWith('surf-x');
       vi.useRealTimers();
     });
 

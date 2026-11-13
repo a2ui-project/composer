@@ -15,6 +15,8 @@
  */
 
 import {describe, it, expect} from 'vitest';
+import {DataContext, DataModel, Catalog, createFunctionImplementation} from '@a2ui/web_core/v1_0';
+import {z} from 'zod/v3';
 import {V10DynamicValueStrategy, v10DynamicValueStrategy} from './v1-0-dynamic-value-strategy.js';
 import type {DynamicValueContext} from './dynamic-value-strategy.js';
 
@@ -42,14 +44,8 @@ describe('V10DynamicValueStrategy', () => {
   });
 
   describe('isFunctionCall', () => {
-    it('identifies valid v1.0 function calls with @call and @args / args and catalogId', () => {
+    it('identifies valid v1.0 function calls with @call and args and catalogId', () => {
       expect(strategy.isFunctionCall({['@call']: 'formatString'})).toBe(true);
-      expect(
-        strategy.isFunctionCall({
-          ['@call']: 'formatString',
-          ['@args']: {value: 'hi'},
-        }),
-      ).toBe(true);
       expect(
         strategy.isFunctionCall({
           ['@call']: 'formatString',
@@ -59,17 +55,24 @@ describe('V10DynamicValueStrategy', () => {
       expect(
         strategy.isFunctionCall({
           ['@call']: 'customFn',
-          ['@args']: {x: 1},
+          ['args']: {x: 1},
           ['catalogId']: 'https://example.com/catalog.json',
         }),
       ).toBe(true);
+      // Rejects legacy @args prefix in v1.0
+      expect(
+        strategy.isFunctionCall({
+          ['@call']: 'formatString',
+          ['@args']: {value: 'hi'},
+        }),
+      ).toBe(false);
     });
 
     it('strictly rejects function calls containing returnType per v1.0 specification', () => {
       expect(
         strategy.isFunctionCall({
           ['@call']: 'formatString',
-          ['@args']: {value: 'hi'},
+          ['args']: {value: 'hi'},
           returnType: 'string',
         }),
       ).toBe(false);
@@ -84,21 +87,23 @@ describe('V10DynamicValueStrategy', () => {
     it('rejects invalid function calls', () => {
       expect(strategy.isFunctionCall({call: 'formatString'})).toBe(false);
       expect(strategy.isFunctionCall({['@call']: 123})).toBe(false);
-      expect(strategy.isFunctionCall({['@call']: 'fn', ['@args']: 'invalid'})).toBe(false);
+      expect(strategy.isFunctionCall({['@call']: 'fn', ['args']: 'invalid'})).toBe(false);
+      expect(strategy.isFunctionCall({['@call']: 'fn', ['@args']: {x: 1}})).toBe(false);
       expect(strategy.isFunctionCall({['@call']: 'fn', ['catalogId']: 123})).toBe(false);
       expect(strategy.isFunctionCall(null)).toBe(false);
     });
   });
 
   describe('normalizeFunctionCall', () => {
-    it('normalizes function call strictly omitting returnType', () => {
+    it('normalizes function call strictly omitting returnType and emitting args', () => {
       const bareCall = {['@call']: 'now'};
       const normalized = strategy.normalizeFunctionCall(bareCall);
       expect(normalized).toEqual({
         ['@call']: 'now',
-        ['@args']: {},
+        ['args']: {},
       });
       expect('returnType' in (normalized as Record<string, unknown>)).toBe(false);
+      expect('@args' in (normalized as Record<string, unknown>)).toBe(false);
     });
 
     it('normalizes function call preserving catalogId and arguments without returnType', () => {
@@ -110,7 +115,7 @@ describe('V10DynamicValueStrategy', () => {
       const normalized = strategy.normalizeFunctionCall(call);
       expect(normalized).toEqual({
         ['@call']: 'calc',
-        ['@args']: {factor: 2},
+        ['args']: {factor: 2},
         ['catalogId']: 'math-catalog',
       });
       expect('returnType' in (normalized as Record<string, unknown>)).toBe(false);
@@ -135,7 +140,7 @@ describe('V10DynamicValueStrategy', () => {
         title: {['@path']: '/title'},
         list: [{['@call']: 'fn1'}, {['@path']: '/item'}],
         nested: {
-          inner: {['@call']: 'fn2', ['@args']: {x: 1}},
+          inner: {['@call']: 'fn2', ['args']: {x: 1}},
         },
       };
 
@@ -172,6 +177,46 @@ describe('V10DynamicValueStrategy', () => {
     it('passes through Promises without blocking', () => {
       const promise = Promise.resolve('v1.0 async');
       expect(strategy.resolveDynamicValueDeep(promise, mockContext)).toBe(promise);
+    });
+
+    it('evaluates dynamic values against a real @a2ui/web_core/v1_0 DataContext', () => {
+      const dataModel = new DataModel();
+      dataModel.set('/user/name', 'Alice');
+      dataModel.set('/user/count', 42);
+
+      const catalog = new Catalog(
+        'test-catalog',
+        '1.0',
+        [],
+        [
+          createFunctionImplementation(
+            {
+              name: 'double',
+              returnType: 'any',
+              schema: z.object({value: z.number()}),
+            },
+            args => (args.value as number) * 2,
+          ),
+        ],
+      );
+
+      const surface = {
+        protocolVersion: '1.0',
+        dataModel,
+        defaultCatalog: catalog,
+      };
+      const context = new DataContext(surface);
+
+      const input = {
+        name: {['@path']: '/user/name'},
+        doubled: {['@call']: 'double', args: {value: 21}},
+      };
+
+      const resolved = strategy.resolveDynamicValueDeep(input, context);
+      expect(resolved).toEqual({
+        name: 'Alice',
+        doubled: 42,
+      });
     });
   });
 });

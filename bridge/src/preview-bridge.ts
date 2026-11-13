@@ -157,6 +157,14 @@ export function safeSerialize(val: unknown): string {
  */
 export declare interface RendererProcessor {
   /**
+   * Optional reference to the underlying surface group or drawing model.
+   */
+  model?: {
+    getSurface?(surfaceId: string): unknown;
+    dispose?(): void;
+  };
+
+  /**
    * Processes the incoming message payload array.
    * @param payload The array of A2UI protocol commands.
    */
@@ -697,16 +705,21 @@ export class PreviewBridge {
       candidates.push(
         ...(Array.isArray(config.catalogJson) ? config.catalogJson : [config.catalogJson]),
       );
-    } else if (config.catalog !== undefined) {
+    }
+    if (config.catalog !== undefined) {
       candidates.push(...(Array.isArray(config.catalog) ? config.catalog : [config.catalog]));
-    } else if (Array.isArray(config.catalogs)) {
-      candidates.push(...config.catalogs);
+    }
+    if (config.catalogs !== undefined) {
+      candidates.push(...(Array.isArray(config.catalogs) ? config.catalogs : [config.catalogs]));
     }
     for (const entry of candidates) {
       if (entry && typeof entry === 'object') {
         const ver = (entry as {protocolVersion?: unknown}).protocolVersion;
-        if (ver === '1.0' || ver === 'v1.0') {
-          return '1.0';
+        if (typeof ver === 'string') {
+          const v = ver.trim();
+          if (v === '1.0' || v === 'v1.0' || v.startsWith('1.') || v.startsWith('v1.')) {
+            return '1.0';
+          }
         }
       }
     }
@@ -811,7 +824,7 @@ export class PreviewBridge {
    */
   sendOutboundMessage(msg: unknown): void {
     if (!msg || typeof msg !== 'object') return;
-    const strategy = resolveProtocolStrategy(this.activeProtocolVersion === '1.0' ? '1.0' : 'v1.0');
+    const strategy = resolveProtocolStrategy('1.0');
     const stamped = strategy.stampOutboundMessage(msg as Record<string, unknown>);
     this.sendMessage({
       type: PreviewBridgeMessageType.SEND_TO_SERVER,
@@ -1024,7 +1037,7 @@ export class PreviewBridge {
       ) as CreateSurfaceCommand[];
 
       let hasCreateSurface = false;
-      let lastSurfaceId: string | undefined;
+      let firstSurfaceId: string | undefined;
 
       for (const cmd of createSurfaceCommands) {
         const createSurface = cmd.createSurface;
@@ -1036,7 +1049,7 @@ export class PreviewBridge {
           }
           const surfaceId = createSurface.surfaceId;
           if (surfaceId) {
-            lastSurfaceId = surfaceId;
+            firstSurfaceId ??= surfaceId;
             // Proactively clear any pre-existing instance of this surface in the
             // renderer processor to prevent "Surface <surfaceId> already exists"
             // collisions upon recreate.
@@ -1093,8 +1106,8 @@ export class PreviewBridge {
         });
       }
 
-      if (rendered && hasCreateSurface && lastSurfaceId) {
-        this.activeRenderer.config.onSurfaceReady(lastSurfaceId);
+      if (rendered && hasCreateSurface && firstSurfaceId) {
+        this.activeRenderer.config.onSurfaceReady(firstSurfaceId);
       }
 
       if (rendered) {
@@ -1359,18 +1372,24 @@ export class PreviewBridge {
       [key: string]: unknown;
     };
 
-    const jsonMeta =
-      typeof catObj['toJson'] === 'function'
-        ? (catObj['toJson'] as () => Record<string, unknown> | null | undefined)()
-        : undefined;
+    let jsonMeta: Record<string, unknown> | null | undefined;
+    const getJsonMeta = (): Record<string, unknown> | null | undefined => {
+      if (jsonMeta === undefined && typeof catObj['toJson'] === 'function') {
+        jsonMeta = (catObj['toJson'] as () => Record<string, unknown> | null | undefined)();
+      }
+      return jsonMeta;
+    };
 
     let schema: Record<string, unknown>;
     if (catObj.catalogSchema && typeof catObj.catalogSchema === 'object') {
       schema = {...(catObj.catalogSchema as Record<string, unknown>)};
-    } else if (jsonMeta && typeof jsonMeta === 'object') {
-      schema = {...jsonMeta};
     } else {
-      schema = {...catObj};
+      const meta = getJsonMeta();
+      if (meta && typeof meta === 'object') {
+        schema = {...meta};
+      } else {
+        schema = {...catObj};
+      }
     }
 
     const id =
@@ -1391,7 +1410,9 @@ export class PreviewBridge {
     const title =
       (schema['title'] as string | undefined) ??
       (catObj['title'] as string | undefined) ??
-      (jsonMeta?.['title'] as string | undefined);
+      (schema['title'] === undefined && catObj['title'] === undefined
+        ? (getJsonMeta()?.['title'] as string | undefined)
+        : undefined);
     if (title) {
       schema['title'] = title;
     }
@@ -1399,7 +1420,9 @@ export class PreviewBridge {
     const description =
       (schema['description'] as string | undefined) ??
       (catObj['description'] as string | undefined) ??
-      (jsonMeta?.['description'] as string | undefined);
+      (schema['description'] === undefined && catObj['description'] === undefined
+        ? (getJsonMeta()?.['description'] as string | undefined)
+        : undefined);
     if (description) {
       schema['description'] = description;
     }
@@ -1420,22 +1443,31 @@ export class PreviewBridge {
     isInMemory: boolean;
   }> {
     const allSchemas: Array<Record<string, unknown>> = [];
-    for (const item of rawList) {
-      const normalized = await this.normalizeCatalogEntry(item);
-      if (normalized) {
-        allSchemas.push(normalized);
+    try {
+      for (const item of rawList) {
+        const normalized = await this.normalizeCatalogEntry(item);
+        if (normalized) {
+          allSchemas.push(normalized);
+        }
       }
-    }
 
-    if (allSchemas.length > 0) {
-      return {
-        primarySchema: allSchemas[0],
-        allSchemas,
-        isMultiCatalog,
-        isInMemory: true,
-      };
+      if (allSchemas.length > 0) {
+        return {
+          primarySchema: allSchemas[0],
+          allSchemas,
+          isMultiCatalog,
+          isInMemory: true,
+        };
+      }
+      const err = new Error('Failed to resolve valid catalog from configuration.');
+      (err as {isInMemory?: boolean}).isInMemory = true;
+      throw err;
+    } catch (err) {
+      if (err && typeof err === 'object') {
+        (err as {isInMemory?: boolean}).isInMemory = true;
+      }
+      throw err;
     }
-    throw new Error('Failed to resolve valid catalog from configuration.');
   }
 
   private async fetchCatalogFromNetwork(renderer: ActiveRenderer | null): Promise<{
@@ -1534,7 +1566,7 @@ export class PreviewBridge {
 
     if (explicitOverride !== undefined) {
       const rawList = Array.isArray(explicitOverride) ? explicitOverride : [explicitOverride];
-      return this.normalizeCatalogList(rawList, Array.isArray(explicitOverride));
+      return this.normalizeCatalogList(rawList, rawList.length > 1);
     }
 
     if (config?.catalogs !== undefined) {
@@ -1554,7 +1586,7 @@ export class PreviewBridge {
           firstItem?.protocolVersion !== 'v1.0';
 
         if (!isSingleNonV10RuntimeCatalog) {
-          return this.normalizeCatalogList(rawList, true);
+          return this.normalizeCatalogList(rawList, rawList.length > 1);
         }
 
         const canExtractSchema =
@@ -1626,12 +1658,16 @@ export class PreviewBridge {
       }
 
       const {primarySchema, allSchemas, isMultiCatalog} = resolved;
-      if (
-        primarySchema['protocolVersion'] === '1.0' ||
-        primarySchema['protocolVersion'] === 'v1.0'
-      ) {
-        this.activeProtocolVersion = '1.0';
-      }
+      const isV1 = allSchemas.some(schema => {
+        const ver = schema['protocolVersion'];
+        if (typeof ver === 'string') {
+          const v = ver.trim();
+          return v === '1.0' || v === 'v1.0' || v.startsWith('1.') || v.startsWith('v1.');
+        }
+        return false;
+      });
+      this.activeProtocolVersion = isV1 ? '1.0' : 'v0.9';
+
       const catalogId =
         (primarySchema['catalogId'] as string | undefined) ??
         (primarySchema['$id'] as string | undefined);
@@ -1640,7 +1676,7 @@ export class PreviewBridge {
       }
 
       let payload: unknown;
-      if (isMultiCatalog || catalogId !== undefined) {
+      if (isMultiCatalog) {
         payload = {
           ...primarySchema,
           catalog: primarySchema,
@@ -1663,12 +1699,7 @@ export class PreviewBridge {
         return;
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const isInMemory =
-        Boolean(
-          this.activeRenderer?.config?.catalogs ??
-          this.activeRenderer?.config?.catalog ??
-          this.activeRenderer?.config?.catalogJson,
-        ) || Boolean(resolved?.isInMemory);
+      const isInMemory = Boolean((error as {isInMemory?: boolean})?.isInMemory);
       if (isInMemory) {
         console.error('PreviewBridge: Error processing/parsing in-memory catalog:', error);
       }

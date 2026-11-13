@@ -52,7 +52,13 @@ describe('v1.0 MCP Functions Catalog', () => {
     const catalog = createMcpFunctionsCatalog();
     const schema = catalog.catalogSchema as {
       catalogId?: string;
-      functions?: Record<string, {properties?: {args?: {properties?: Record<string, unknown>}}}>;
+      functions?: Record<
+        string,
+        {
+          required?: string[];
+          properties?: {args?: {required?: string[]; properties?: Record<string, unknown>}};
+        }
+      >;
     };
 
     expect(schema.catalogId).toBe(MCP_FUNCTIONS_CATALOG_ID);
@@ -71,10 +77,27 @@ describe('v1.0 MCP Functions Catalog', () => {
       expect(schema.functions).toHaveProperty(fnName);
       const fnDef = schema.functions![fnName];
       expect(fnDef).toBeDefined();
+      expect(fnDef.required).toEqual(expect.arrayContaining(['@call', 'args']));
       const argProps = fnDef.properties?.args?.properties;
       expect(argProps).toBeDefined();
       expect(Object.keys(argProps!)).not.toHaveLength(0);
+      expect(fnDef.properties?.args?.required).toBeDefined();
     }
+
+    expect(schema.functions!['callMcpTool'].properties!.args!.required).toEqual(['name']);
+    expect(schema.functions!['jmespath'].properties!.args!.required).toEqual(
+      expect.arrayContaining(['expression', 'data']),
+    );
+    expect(schema.functions!['regexCapture'].properties!.args!.required).toEqual(
+      expect.arrayContaining(['value', 'pattern']),
+    );
+    expect(schema.functions!['regexReplace'].properties!.args!.required).toEqual(
+      expect.arrayContaining(['value', 'pattern', 'replacement']),
+    );
+    expect(schema.functions!['split'].properties!.args!.required).toEqual(
+      expect.arrayContaining(['value', 'separator']),
+    );
+    expect(schema.functions!['updateDataModel'].properties!.args!.required).toEqual(['updates']);
 
     expect(Object.keys(schema.functions!['callMcpTool'].properties!.args!.properties!)).toEqual(
       expect.arrayContaining(['name', 'arguments']),
@@ -94,6 +117,18 @@ describe('v1.0 MCP Functions Catalog', () => {
     expect(Object.keys(schema.functions!['updateDataModel'].properties!.args!.properties!)).toEqual(
       expect.arrayContaining(['updates']),
     );
+
+    const doc = catalog.toJson() as {
+      functions?: Record<
+        string,
+        {required?: string[]; properties?: {args?: {required?: string[]}}}
+      >;
+    };
+    for (const fnName of expectedFunctions) {
+      expect(doc.functions![fnName].required).toEqual(expect.arrayContaining(['@call', 'args']));
+      expect(doc.functions![fnName].properties?.args?.required).toBeDefined();
+    }
+    expect(doc.functions!['callMcpTool'].properties!.args!.required).toEqual(['name']);
   });
 
   it('executes data transformation functions (jmespath, split, regexCapture, regexReplace, updateDataModel)', async () => {
@@ -301,6 +336,85 @@ describe('v1.0 MCP Functions Catalog', () => {
     expect(processor.model).toBeDefined();
     const surface = processor.model.getSurface('surface-1');
     expect(surface).toBeDefined();
+  });
+
+  it('executes agent callRendererFunction for split on MCP_FUNCTIONS_CATALOG_ID and emits response', async () => {
+    const mcpCatalog = createMcpFunctionsCatalog();
+    const emittedMessages: Array<{
+      version?: string;
+      rendererFunctionResponse?: {functionCallId: string; value?: unknown};
+    }> = [];
+
+    const processor = new MessageProcessor([basicCatalog, mcpCatalog], () => {}, {
+      outboundListener: msg => {
+        emittedMessages.push(
+          msg as {
+            version?: string;
+            rendererFunctionResponse?: {functionCallId: string; value?: unknown};
+          },
+        );
+      },
+    });
+
+    processor.processMessages([
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 'surf-agent-rpc',
+          catalogId: MCP_FUNCTIONS_CATALOG_ID,
+        },
+      },
+      {
+        version: '1.0',
+        callRendererFunction: {
+          surfaceId: 'surf-agent-rpc',
+          functionCallId: 'rpc-split-test',
+          callFunction: {
+            '@call': 'split',
+            catalogId: MCP_FUNCTIONS_CATALOG_ID,
+            args: {
+              value: 'alpha,beta,gamma',
+              separator: ',',
+            },
+          },
+        },
+      },
+    ]);
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(emittedMessages).toHaveLength(1);
+    expect(emittedMessages[0].version).toBe('1.0');
+    expect(emittedMessages[0].rendererFunctionResponse).toEqual({
+      functionCallId: 'rpc-split-test',
+      value: ['alpha', 'beta', 'gamma'],
+    });
+  });
+
+  it('preserves literal object {call: "sales", phone: "123"} intact when resolved in v1.0', async () => {
+    const catalog = createMcpFunctionsCatalog();
+    const jmesFn = catalog.functions.get('jmespath')!;
+
+    const store: Record<string, unknown> = {};
+    const v10Context = {
+      atLeastV10: true,
+      surfaceProtocolVersion: '1.0',
+      resolveDynamicValue: (v: unknown) => v,
+      set: (path: string, val: unknown) => {
+        store[path] = val;
+      },
+    } as never;
+
+    const literalObj = {call: 'sales', phone: '123'};
+    const result = jmesFn.execute(
+      {
+        expression: 'info',
+        data: {info: literalObj},
+      },
+      v10Context,
+    );
+
+    expect(result).toEqual({call: 'sales', phone: '123'});
   });
 
   it('normalizes cleanly in PreviewBridge catalog resolution as multi-catalog', async () => {

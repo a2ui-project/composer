@@ -139,6 +139,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     return () => {
       connection.unsubscribe();
       for (const resolve of contentRenderWaiters.current.splice(0)) resolve();
+      (processor as {dispose?: () => void}).dispose?.();
       processor.model.dispose();
     };
 
