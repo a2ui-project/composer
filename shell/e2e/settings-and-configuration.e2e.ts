@@ -55,7 +55,7 @@ test.describe('Settings and Client Configuration', () => {
                 model: 'gemini-pro-latest',
                 displayName: 'Gemini Pro',
                 thinkingLevels: ['low', 'medium', 'high'],
-                defaultThinkingLevel: 'high',
+                defaultThinkingLevel: 'medium',
               },
             ],
           },
