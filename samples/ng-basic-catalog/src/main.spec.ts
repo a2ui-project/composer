@@ -150,7 +150,7 @@ describe('A2uiSandbox', () => {
 
   it('serves the full basic-catalog demo set', async () => {
     const {DEMOS} = await import('../../shared/demos');
-    expect(DEMOS).toHaveLength(47);
+    expect(DEMOS).toHaveLength(46);
     for (const demo of DEMOS) {
       expect(demo.id).toBeTruthy();
       expect(demo.name).toBeTruthy();
@@ -208,7 +208,7 @@ describe('A2uiSandbox', () => {
 
     const {DEMOS} = await import('../../shared/demos');
     const served = await rendererConfig.getDemos!();
-    expect(served).toHaveLength(47);
+    expect(served).toHaveLength(46);
     expect(served).toBe(DEMOS);
   });
 });
