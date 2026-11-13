@@ -16,6 +16,7 @@
 
 import {ComponentHarness} from '@angular/cdk/testing';
 import {MatTableHarness} from '@angular/material/table/testing';
+import {RpcReplyFormHarness} from '../rpc-reply-form/test/rpc-reply-form.harness';
 
 export interface EventRowValues {
   time: string;
@@ -29,6 +30,7 @@ export class EventsHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-events';
 
   protected getTable = this.locatorForOptional(MatTableHarness);
+  protected getRpcForms = this.locatorForAll(RpcReplyFormHarness);
 
   async getRowsCount(): Promise<number> {
     const table = await this.getTable();
@@ -62,5 +64,24 @@ export class EventsHarness extends ComponentHarness {
   async hasPlaceholder(): Promise<boolean> {
     const placeholder = await this.locatorForOptional('.events-placeholder')();
     return placeholder !== null;
+  }
+
+  async getRpcReplyForms(): Promise<RpcReplyFormHarness[]> {
+    return this.getRpcForms();
+  }
+
+  async getRpcReplyFormAt(index: number): Promise<RpcReplyFormHarness | null> {
+    const table = await this.getTable();
+    if (table === null) {
+      return null;
+    }
+    const rows = await table.getRows();
+    if (index < 0 || index >= rows.length) {
+      return null;
+    }
+    const locator = this.locatorForOptional(
+      RpcReplyFormHarness.with({ancestor: `tr[data-row-index="${index}"]`}),
+    );
+    return locator();
   }
 }

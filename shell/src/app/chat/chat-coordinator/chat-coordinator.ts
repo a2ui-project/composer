@@ -17,9 +17,7 @@
 import {computed, inject, Injectable, signal} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {skip} from 'rxjs/operators';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {PromptTurnType, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {formatJson, tryParseJsonArray} from '../../utils/json';
@@ -39,10 +37,10 @@ import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {StateSync} from '../state-sync/state-sync';
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
 import {
+  getPayloadStrategy,
   parseAndHealJsonLines,
-  runCatalogComponentSchemaCheck,
 } from '../a2ui-payload-parser/a2ui-payload-parser';
-import {ChatPromptFactoryService} from '../chat-prompt-factory/chat-prompt-factory.service';
+import {ChatPromptFactory} from '../chat-prompt-factory/chat-prompt-factory';
 import {ChatErrorFormatterService} from '../chat-error-formatter/chat-error-formatter.service';
 import {cleanErrorMessage, redactApiKey} from '../chat-service/error-utils';
 import {RendererSelection} from '../renderer-selection/renderer-selection';
@@ -128,7 +126,7 @@ export class ChatCoordinator {
   private readonly logger = inject(ErrorLogger).withTag('[ChatCoordinator]');
   private readonly chatCleaner = inject(ChatCleaner);
   private readonly usageTrackingService = inject(UsageTrackingService);
-  private readonly promptFactory = inject(ChatPromptFactoryService);
+  private readonly promptFactory = inject(ChatPromptFactory);
   private readonly errorPresenter = inject(ChatErrorFormatterService);
 
   /** Reactively mapped rendering pipeline execution milestones. */
@@ -159,6 +157,8 @@ export class ChatCoordinator {
       includeMultimodalGuidelines: hasImageAttachment,
     });
   });
+
+  private readonly mergedActiveCatalog = this.catalogManagement.mergedActiveCatalog;
 
   private activePromptId: string | null = null;
   private activeRequestId = 0;
@@ -767,6 +767,9 @@ export class ChatCoordinator {
    */
   private async processRawLlmPayload(rawText: string, promptId?: string): Promise<void> {
     if (promptId && this.activePromptId !== promptId) return;
+    const protocolVersion = this.catalogManagement.activeProtocolVersion();
+    const strategy = getPayloadStrategy(protocolVersion);
+
     // Stage 1: Parse and Syntax Healing
     let parsedBlocks: unknown[] = [];
     let componentCount = 0;
@@ -775,7 +778,7 @@ export class ChatCoordinator {
         this.chatState.setPipelineStatus(PipelineStatus.HEALING);
       }
       const cleanedText = this.chatCleaner.cleanPayload(rawText);
-      const parseResult = parseAndHealJsonLines(cleanedText);
+      const parseResult = parseAndHealJsonLines(cleanedText, strategy);
 
       if (parseResult.success && parseResult.isConversational) {
         this.finalizeStream(PipelineStatus.IDLE);
@@ -804,18 +807,24 @@ export class ChatCoordinator {
       throw err;
     }
 
-    // Stage 2: Schema Validation
+    // Stage 2: Schema Validation & Healing
     this.chatState.setPipelineStatus(PipelineStatus.VALIDATING);
     try {
-      // Verify basic schema envelopes using pre-existing CrossFrameValidator
-      const mockEnvMsg = {
-        type: PreviewBridgeMessageType.RENDER_A2UI,
-        payload: parsedBlocks,
-      };
+      // Step A: Catalog Component Schema Check & Name Typos / catalogId Healing
+      const wasHealed = strategy.runCatalogComponentSchemaCheck(
+        parsedBlocks,
+        this.mergedActiveCatalog() ?? undefined,
+        undefined,
+        this.catalogManagement.activeCatalogs(),
+      );
+      if (wasHealed) {
+        this.chatState.setPipelineStatus(PipelineStatus.HEALING);
+      }
 
+      // Step B: Outgoing message envelope validation
       const validationErrors: string[] = [];
-      const isValidEnvelope = CrossFrameValidator.validateOutgoingMessage(
-        mockEnvMsg,
+      const isValidEnvelope = strategy.validateOutgoingBlocks(
+        parsedBlocks,
         validationErrors,
         this.logger,
       );
@@ -824,15 +833,6 @@ export class ChatCoordinator {
         throw new Error(
           `Outgoing message envelope validation failed:\n${validationErrors.join('\n')}`,
         );
-      }
-
-      // Catalog Component Schema Check & Name Typos Healing
-      const wasHealed = runCatalogComponentSchemaCheck(
-        parsedBlocks,
-        this.catalogManagement.activeCatalog()?.components,
-      );
-      if (wasHealed) {
-        this.chatState.setPipelineStatus(PipelineStatus.HEALING);
       }
 
       // Validate surface references before replacing the editor. A delta must
@@ -959,6 +959,13 @@ export class ChatCoordinator {
         if (command === 'deleteSurface') {
           activeSurfaces.delete(id);
         }
+      }
+
+      const crfId = surfaceId(item, 'callRendererFunction');
+      if (crfId !== undefined && !activeSurfaces.has(crfId)) {
+        throw new Error(
+          `Surface validation failed: cannot apply callRendererFunction: surface "${crfId}" does not exist in the current draft. The draft was preserved.`,
+        );
       }
     }
     return [...base, ...updates];

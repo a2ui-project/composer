@@ -1,0 +1,156 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.rpc-form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--mat-sys-surface-container);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+.rpc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rpc-metadata {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface);
+}
+
+.rpc-remaining-time {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--mat-sys-tertiary);
+  font-weight: bold;
+}
+
+.rpc-status-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+
+  &.status-replied {
+    background-color: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+  }
+
+  &.status-rejected {
+    background-color: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+  }
+
+  &.status-timed_out {
+    background-color: var(--mat-sys-surface-variant);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.rpc-actions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rpc-value-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  textarea.rpc-value-input {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--mat-sys-outline);
+    background: var(--mat-sys-surface);
+    color: var(--mat-sys-on-surface);
+    resize: vertical;
+    min-height: 48px;
+  }
+}
+
+.rpc-error-row {
+  display: flex;
+  gap: 6px;
+
+  input {
+    font-size: 11px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--mat-sys-outline);
+    background: var(--mat-sys-surface);
+    color: var(--mat-sys-on-surface);
+
+    &.rpc-error-code-input {
+      width: 120px;
+    }
+
+    &.rpc-error-message-input {
+      flex: 1;
+    }
+  }
+}
+
+.rpc-button-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+
+  button {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: none;
+
+    &.rpc-reply-value-btn {
+      background: var(--mat-sys-primary);
+      color: var(--mat-sys-on-primary);
+    }
+
+    &.rpc-reply-error-btn {
+      background: var(--mat-sys-error);
+      color: var(--mat-sys-on-error);
+    }
+  }
+}
+
+.rpc-validation-error {
+  color: var(--mat-sys-error);
+  font-size: 11px;
+  margin-top: 2px;
+}

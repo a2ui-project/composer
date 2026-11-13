@@ -26,7 +26,7 @@ import {generateUuid} from '../../utils/uuid';
 import {
   CustomInstructionPreset,
   CustomInstructionsState,
-} from '../chat-prompt-factory/chat-prompt-factory.service';
+} from '../chat-prompt-factory/chat-prompt-factory';
 
 const NONE_OPTION = '__none__';
 const NEW_OPTION = '__new__';

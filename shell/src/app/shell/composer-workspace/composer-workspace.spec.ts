@@ -50,6 +50,7 @@ import {ChatPanel} from '../../chat/chat-panel/chat-panel';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {DataModel} from '../../debug/data-model/data-model';
+import {PendingRpcRegistry} from '../../debug/events/pending-rpc-registry';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -264,6 +265,219 @@ describe('ComposerWorkspace Dashboard', () => {
       fixture.detectChanges();
 
       expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+    });
+
+    it('increments Events unread count when callAgentFunction arrives from registered preview frame', () => {
+      const pendingRpcRegistry = TestBed.inject(PendingRpcRegistry);
+      const dummyWindow = {} as Window;
+      pendingRpcRegistry.registerFrame(dummyWindow);
+
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          callAgentFunction: {
+            surfaceId: 'surf-1',
+            functionCallId: 'call-1',
+            callFunction: {['@call']: 'calc'},
+          },
+        },
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+        sourceWindow: dummyWindow,
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(1);
+    });
+
+    it('does not increment Events unread count when callAgentFunction arrives from unregistered window', () => {
+      const unregisteredWindow = {} as Window;
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          callAgentFunction: {
+            surfaceId: 'surf-1',
+            functionCallId: 'call-2',
+            callFunction: {['@call']: 'calc'},
+          },
+        },
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+        sourceWindow: unregisteredWindow,
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+    });
+
+    it('increments Events unread count when rendererFunctionResponse arrives and Events tab is inactive', () => {
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          rendererFunctionResponse: {
+            surfaceId: 'surf-1',
+            functionCallId: 'call-1',
+            result: 'done',
+          },
+        },
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(1);
+    });
+
+    it('registers active preview window with PendingRpcRegistry and unregisters on destroy', () => {
+      const pendingRpcRegistry = TestBed.inject(PendingRpcRegistry);
+      const dummyPreviewWindow = {} as Window;
+
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+        sourceWindow: dummyPreviewWindow,
+      });
+      fixture.detectChanges();
+
+      expect(pendingRpcRegistry.isRegisteredFrame(dummyPreviewWindow)).toBe(true);
+
+      fixture.destroy();
+      expect(pendingRpcRegistry.isRegisteredFrame(dummyPreviewWindow)).toBe(false);
+    });
+
+    it('recognizes preview iframe that emits callAgentFunction without RENDERER_READY and increments unread count', () => {
+      const pendingRpcRegistry = TestBed.inject(PendingRpcRegistry);
+      const manager = fixture.componentRef.injector.get(ComposerDockview);
+      const renderedFrame = manager.getRenderedFrame();
+      expect(renderedFrame).toBeDefined();
+
+      const stubWindow = {} as Window;
+      vi.spyOn(renderedFrame!, 'contentWindow', 'get').mockReturnValue(stubWindow);
+
+      expect(pendingRpcRegistry.isRegisteredFrame(stubWindow)).toBe(true);
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          callAgentFunction: {
+            surfaceId: 'surf-stub',
+            functionCallId: 'call-stub-1',
+            callFunction: {['@call']: 'fetchData'},
+          },
+        },
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+        sourceWindow: stubWindow,
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(1);
+    });
+
+    it('unregisters preview window and cancels pending RPCs when preview panel is disposed in Dockview', () => {
+      const pendingRpcRegistry = TestBed.inject(PendingRpcRegistry);
+      const manager = fixture.componentRef.injector.get(ComposerDockview);
+      const renderedFrame = manager.getRenderedFrame();
+      expect(renderedFrame).toBeDefined();
+
+      const stubWindow = {} as Window;
+      vi.spyOn(renderedFrame!, 'contentWindow', 'get').mockReturnValue(stubWindow);
+
+      fixture.componentInstance['registerActivePreviewFrame'](stubWindow);
+      expect(pendingRpcRegistry.isRegisteredFrame(stubWindow)).toBe(true);
+
+      const entry = pendingRpcRegistry.registerRpc({
+        functionCallId: 'call-dockview-dispose',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'fetchData'},
+        sourceWindow: stubWindow,
+      });
+      expect(entry.status).toBe('pending');
+
+      const renderedPanel = manager.api.getGroupPanel(ComposerPanelId.Rendered);
+      expect(renderedPanel).toBeDefined();
+      manager.api.removePanel(renderedPanel!);
+
+      expect(pendingRpcRegistry.isRegisteredFrame(stubWindow)).toBe(false);
+      expect(entry.status).toBe('rejected');
+      expect(fixture.componentInstance['activeRegisteredPreviewWindow']).toBeNull();
+    });
+
+    it('unregisters old contentWindow and recognizes new contentWindow when preview switches', () => {
+      const pendingRpcRegistry = TestBed.inject(PendingRpcRegistry);
+      const manager = fixture.componentRef.injector.get(ComposerDockview);
+      const renderedFrame = manager.getRenderedFrame();
+      expect(renderedFrame).toBeDefined();
+
+      const oldWindow = {} as Window;
+      const newWindow = {} as Window;
+
+      const contentWindowSpy = vi
+        .spyOn(renderedFrame!, 'contentWindow', 'get')
+        .mockReturnValue(oldWindow);
+
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          callAgentFunction: {
+            surfaceId: 'surf-1',
+            functionCallId: 'call-old-1',
+            callFunction: {['@call']: 'oldAction'},
+          },
+        },
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+        sourceWindow: oldWindow,
+      });
+      fixture.detectChanges();
+
+      expect(pendingRpcRegistry.isRegisteredFrame(oldWindow)).toBe(true);
+      expect(pendingRpcRegistry.isRegisteredFrame(newWindow)).toBe(false);
+
+      contentWindowSpy.mockReturnValue(newWindow);
+
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          callAgentFunction: {
+            surfaceId: 'surf-1',
+            functionCallId: 'call-new-1',
+            callFunction: {['@call']: 'newAction'},
+          },
+        },
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+        sourceWindow: newWindow,
+      });
+      fixture.detectChanges();
+
+      expect(pendingRpcRegistry.isRegisteredFrame(newWindow)).toBe(true);
+      expect(pendingRpcRegistry.isRegisteredFrame(oldWindow)).toBe(false);
+    });
+
+    it('rejects non-workspace iframes (/agent-chat, /demos, /gallery)', () => {
+      const pendingRpcRegistry = TestBed.inject(PendingRpcRegistry);
+      const manager = fixture.componentRef.injector.get(ComposerDockview);
+      const renderedFrame = manager.getRenderedFrame();
+      const workspaceWindow = {} as Window;
+      vi.spyOn(renderedFrame!, 'contentWindow', 'get').mockReturnValue(workspaceWindow);
+
+      const agentChatWindow = {} as Window;
+      const demosWindow = {} as Window;
+      const galleryWindow = {} as Window;
+
+      expect(pendingRpcRegistry.isRegisteredFrame(workspaceWindow)).toBe(true);
+      expect(pendingRpcRegistry.isRegisteredFrame(agentChatWindow)).toBe(false);
+      expect(pendingRpcRegistry.isRegisteredFrame(demosWindow)).toBe(false);
+      expect(pendingRpcRegistry.isRegisteredFrame(galleryWindow)).toBe(false);
     });
 
     it('increments Errors unread count when a CONSOLE_LOG error arrives and Errors tab is inactive', () => {

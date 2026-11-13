@@ -26,13 +26,17 @@ import {
   MessageEnvelope,
   SendToServerEnvelope,
 } from '../shell/host-communication/host-communication';
+import type {
+  V10CallAgentFunctionPayload,
+  V10RendererFunctionResponsePayload,
+} from '../shell/cross-frame-validator/v1-0-wire-validator';
 import {
   AppConfigProvider,
   A2aBackendMode,
 } from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
 import {A2A_TRANSPORT} from '../chat/a2a/a2a-transport.token';
-import {A2aTransport} from '../chat/a2a/a2a-types';
+import {A2aMessage, A2aTransport} from '../chat/a2a/a2a-types';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {Catalog} from '../storage/models/catalog-storage.model';
@@ -45,20 +49,31 @@ describe('A2aChatView', () => {
   let mockA2aTransport: Partial<A2aTransport>;
   let mockAgentUrlSignal: WritableSignal<string>;
   let mockActiveCatalogSignal: WritableSignal<Catalog | null>;
+  let mockActiveProtocolVersionSignal: WritableSignal<'v0.9' | 'v1.0'>;
   let mockConfigProvider: Partial<AppConfigProvider>;
   let mockMessageStream$: Subject<MessageEnvelope | null>;
   let mockSendToServer$: Subject<SendToServerEnvelope>;
+  let mockCallAgentFunction$: Subject<
+    SendToServerEnvelope & {payload: {callAgentFunction: V10CallAgentFunctionPayload}}
+  >;
+  let mockRendererFunctionResponse$: Subject<
+    SendToServerEnvelope & {payload: {rendererFunctionResponse: V10RendererFunctionResponsePayload}}
+  >;
+  let mockHostCommunication: Record<string, unknown>;
 
   beforeEach(async () => {
     mockAgentUrlSignal = signal('http://localhost:8000');
     mockActiveCatalogSignal = signal<Catalog | null>(null);
+    mockActiveProtocolVersionSignal = signal<'v0.9' | 'v1.0'>('v0.9');
     mockMessageStream$ = new Subject<MessageEnvelope | null>();
     mockSendToServer$ = new Subject<SendToServerEnvelope>();
+    mockCallAgentFunction$ = new Subject();
+    mockRendererFunctionResponse$ = new Subject();
     mockMessageStream$.subscribe(envelope => {
       if (envelope?.type === PreviewBridgeMessageType.SEND_TO_SERVER) {
         mockSendToServer$.next({
           payload: envelope.payload as SendToServerEnvelope['payload'],
-          sourceWindow: null,
+          sourceWindow: envelope.sourceWindow ?? null,
           origin: envelope.origin ?? 'http://localhost:3000',
           timestamp: envelope.timestamp ?? Date.now(),
         });
@@ -95,6 +110,18 @@ describe('A2aChatView', () => {
       flushConfig: vi.fn(),
     };
 
+    mockHostCommunication = {
+      registerIframe: vi.fn(),
+      unregisterIframe: vi.fn(),
+      sendTheme: vi.fn(),
+      sendRenderA2UI: vi.fn(),
+      messageStream: signal(null),
+      messageStream$: mockMessageStream$.asObservable(),
+      sendToServer$: mockSendToServer$.asObservable(),
+      callAgentFunction$: mockCallAgentFunction$.asObservable(),
+      rendererFunctionResponse$: mockRendererFunctionResponse$.asObservable(),
+    };
+
     await TestBed.configureTestingModule({
       imports: [A2aChatView],
       providers: [
@@ -104,8 +131,8 @@ describe('A2aChatView', () => {
           provide: CatalogManagement,
           useValue: {
             activeCatalog: mockActiveCatalogSignal,
+            activeProtocolVersion: mockActiveProtocolVersionSignal,
             hasReceivedCatalogResponse: signal(true),
-            activeProtocolVersion: signal('v0.9'),
           },
         },
         {
@@ -114,15 +141,7 @@ describe('A2aChatView', () => {
         },
         {
           provide: HostCommunication,
-          useValue: {
-            registerIframe: vi.fn(),
-            unregisterIframe: vi.fn(),
-            sendTheme: vi.fn(),
-            sendRenderA2UI: vi.fn(),
-            messageStream: signal(null),
-            messageStream$: mockMessageStream$.asObservable(),
-            sendToServer$: mockSendToServer$.asObservable(),
-          },
+          useValue: mockHostCommunication,
         },
         {
           provide: ChatState,
@@ -139,7 +158,16 @@ describe('A2aChatView', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     fixture?.destroy();
+    harness?.cleanupAttachedIframes();
+    document.querySelectorAll('iframe').forEach(el => el.remove());
   });
+
+  function waitForAbort(signal?: AbortSignal): Promise<void> {
+    if (!signal || signal.aborted) return Promise.resolve();
+    return new Promise<void>(resolve =>
+      signal.addEventListener('abort', () => resolve(), {once: true}),
+    );
+  }
 
   it('auto-connects when stored URL is present', async () => {
     expect(mockA2aTransport.getAgentCard).toHaveBeenCalledWith('http://localhost:8000');
@@ -1560,5 +1588,688 @@ describe('A2aChatView', () => {
     );
     const freshHeader = await freshHarness.getHeader();
     expect(await freshHeader.getErrorsCountText()).toBe('3');
+  });
+
+  it('renders userMessage as user turn text and includes userMessage and metadata in outbound message when action carries userMessage', async () => {
+    const capturedMessages: A2aMessage[] = [];
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockImplementation(
+      async function* (_url: string, msg: A2aMessage) {
+        capturedMessages.push(msg);
+        yield {
+          taskId: 't-user-msg',
+          message: {role: 'agent', parts: [{text: 'Order received'}]},
+          final: true,
+        };
+      },
+    );
+
+    fixture.componentInstance['handleSendToServerAction']({
+      version: '1.0',
+      action: {name: 'bookCar'},
+      userMessage: 'Book standard sedan for tomorrow',
+      metadata: {correlationId: 'req-42'},
+    });
+    fixture.detectChanges();
+
+    const history = await harness.getHistory();
+    expect(await history.getMessageCount()).toBe(2);
+    expect(fixture.componentInstance['messages']()[0].text).toBe(
+      'Book standard sedan for tomorrow',
+    );
+    expect(capturedMessages.length).toBe(1);
+    const dataPart = capturedMessages[0].parts[1]?.data;
+    expect(dataPart?.['version']).toBe('1.0');
+    const action = dataPart?.['action'] as Record<string, unknown>;
+    expect(action?.['userMessage']).toBe('Book standard sedan for tomorrow');
+    expect(action?.['metadata']).toEqual({correlationId: 'req-42'});
+  });
+
+  it('handles concurrent callAgentFunction RPCs and delivers agentFunctionResponse strictly to originating sourceWindow', async () => {
+    const {iframe: iframeA, contentWindow: mockWindowA} = await harness.attachChildIframe();
+    const {iframe: iframeB, contentWindow: mockWindowB} = await harness.attachChildIframe();
+
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockImplementation(
+      async function* (_url: string, msg: A2aMessage) {
+        const call = msg.parts[0]?.data?.['callAgentFunction'] as
+          {functionCallId?: string} | undefined;
+        if (call?.functionCallId === 'call-a') {
+          yield {
+            taskId: 't-rpc-a',
+            message: {
+              role: 'agent',
+              parts: [
+                {
+                  data: {
+                    version: '1.0',
+                    agentFunctionResponse: {
+                      functionCallId: 'call-a',
+                      value: {resultA: 100},
+                    },
+                  },
+                },
+              ],
+            },
+            final: true,
+          };
+        } else if (call?.functionCallId === 'call-b') {
+          yield {
+            taskId: 't-rpc-b',
+            message: {
+              role: 'agent',
+              parts: [
+                {
+                  data: {
+                    version: '1.0',
+                    agentFunctionResponse: {
+                      functionCallId: 'call-b',
+                      value: {resultB: 200},
+                    },
+                  },
+                },
+              ],
+            },
+            final: true,
+          };
+        }
+      },
+    );
+
+    mockCallAgentFunction$.next({
+      sourceWindow: mockWindowA,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        callAgentFunction: {
+          surfaceId: 'surf-a',
+          functionCallId: 'call-a',
+          callFunction: {['@call']: 'funcA'},
+        },
+      },
+    });
+
+    mockCallAgentFunction$.next({
+      sourceWindow: mockWindowB,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        callAgentFunction: {
+          surfaceId: 'surf-b',
+          functionCallId: 'call-b',
+          callFunction: {['@call']: 'funcB'},
+        },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalled();
+    });
+
+    expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          version: '1.0',
+          agentFunctionResponse: expect.objectContaining({functionCallId: 'call-a'}),
+        }),
+      ],
+      mockWindowA,
+    );
+
+    expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          version: '1.0',
+          agentFunctionResponse: expect.objectContaining({functionCallId: 'call-b'}),
+        }),
+      ],
+      mockWindowB,
+    );
+
+    iframeA.remove();
+    iframeB.remove();
+  });
+
+  it('synthesizes AGENT_FUNCTION_ERROR response when agent function SSE stream fails', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockImplementation(
+      async function* () {
+        throw new Error('Connection reset');
+      },
+    );
+
+    mockCallAgentFunction$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        callAgentFunction: {
+          surfaceId: 'surf-err',
+          functionCallId: 'call-err',
+          callFunction: {['@call']: 'failFunc'},
+        },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalled();
+    });
+
+    expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalledWith(
+      [
+        {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId: 'call-err',
+            error: {
+              code: 'AGENT_FUNCTION_ERROR',
+              message: 'Connection reset',
+            },
+          },
+        },
+      ],
+      mockWindow,
+    );
+
+    iframe.remove();
+  });
+
+  it('aborts all pending function calls when cancelActiveGeneration is called', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+    let capturedSignal: AbortSignal | undefined;
+
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockImplementation(
+      async function* (_url: string, _msg: A2aMessage, opts?: {abortSignal?: AbortSignal}) {
+        capturedSignal = opts?.abortSignal;
+        await waitForAbort(opts?.abortSignal);
+      },
+    );
+
+    mockCallAgentFunction$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        callAgentFunction: {
+          surfaceId: 'surf-abort',
+          functionCallId: 'call-abort',
+          callFunction: {['@call']: 'longFunc'},
+        },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(capturedSignal).toBeDefined();
+    });
+    expect(capturedSignal?.aborted).toBe(false);
+
+    fixture.componentInstance['cancelActiveGeneration']();
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalledWith(
+      [
+        {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId: 'call-abort',
+            error: {
+              code: 'CANCELLED',
+              message: 'Agent function call cancelled',
+            },
+          },
+        },
+      ],
+      mockWindow,
+    );
+
+    iframe.remove();
+  });
+
+  it('forwards rendererFunctionResponse to agent and routes received callRendererFunction back to sourceWindow', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+    const capturedMessages: A2aMessage[] = [];
+
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockImplementation(
+      async function* (_url: string, msg: A2aMessage) {
+        capturedMessages.push(msg);
+        yield {
+          taskId: 't-resp',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                data: {
+                  version: '1.0',
+                  callRendererFunction: {
+                    callId: 'call-next',
+                    functionName: 'notifyUser',
+                    args: {text: 'Done!'},
+                  },
+                },
+              },
+            ],
+          },
+          final: true,
+        };
+      },
+    );
+
+    mockRendererFunctionResponse$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        rendererFunctionResponse: {
+          functionCallId: 'call-prev',
+          result: {success: true},
+        },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalled();
+    });
+
+    expect(capturedMessages.length).toBe(1);
+    const part = capturedMessages[0].parts[0]?.data;
+    expect(part?.['version']).toBe('1.0');
+    expect(part?.['rendererFunctionResponse']).toEqual({
+      functionCallId: 'call-prev',
+      result: {success: true},
+    });
+    expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalledWith(
+      [
+        {
+          version: '1.0',
+          callRendererFunction: {
+            callId: 'call-next',
+            functionName: 'notifyUser',
+            args: {text: 'Done!'},
+          },
+        },
+      ],
+      mockWindow,
+    );
+
+    iframe.remove();
+  });
+
+  it('stamps canonical version 1.0 on outbound user actions when activeProtocolVersion settles to v1.0 even if activeCatalog is null', async () => {
+    mockActiveCatalogSignal.set(null);
+    mockActiveProtocolVersionSignal.set('v1.0');
+    const capturedMessages: A2aMessage[] = [];
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockImplementation(
+      async function* (_url: string, msg: A2aMessage) {
+        capturedMessages.push(msg);
+        yield {
+          taskId: 't-empty-cat',
+          message: {role: 'agent', parts: [{text: 'Confirmed'}]},
+          final: true,
+        };
+      },
+    );
+
+    fixture.componentInstance['handleSendToServerAction']({
+      action: {name: 'confirmBooking'},
+    });
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      expect(capturedMessages.length).toBe(1);
+    });
+
+    expect(capturedMessages.length).toBe(1);
+    const dataPart = capturedMessages[0].parts[1]?.data;
+    expect(dataPart?.['version']).toBe('1.0');
+  });
+
+  it('aborts prior controller when duplicate functionCallId arrives', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+    const signals: AbortSignal[] = [];
+
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockImplementation(
+      async function* (_url: string, _msg: A2aMessage, opts?: {abortSignal?: AbortSignal}) {
+        if (opts?.abortSignal) {
+          signals.push(opts.abortSignal);
+        }
+        await waitForAbort(opts?.abortSignal);
+      },
+    );
+
+    mockCallAgentFunction$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        callAgentFunction: {
+          surfaceId: 'surf-dup',
+          functionCallId: 'call-dup',
+          callFunction: {['@call']: 'firstCall'},
+        },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(signals.length).toBe(1);
+    });
+    expect(signals[0].aborted).toBe(false);
+
+    // Second call with same functionCallId
+    mockCallAgentFunction$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        callAgentFunction: {
+          surfaceId: 'surf-dup',
+          functionCallId: 'call-dup',
+          callFunction: {['@call']: 'secondCall'},
+        },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(signals.length).toBe(2);
+    });
+    expect(signals.length).toBe(2);
+    expect(signals[0].aborted).toBe(true);
+    expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalledWith(
+      [
+        {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId: 'call-dup',
+            error: {
+              code: 'CANCELLED',
+              message: 'Duplicate functionCallId replaced',
+            },
+          },
+        },
+      ],
+      mockWindow,
+    );
+    expect(signals[1].aborted).toBe(false);
+
+    fixture.componentInstance['cancelActiveGeneration']();
+    expect(signals[1].aborted).toBe(true);
+
+    iframe.remove();
+  });
+
+  it('ignores valid v1.0 updateDataModel and error SEND_TO_SERVER envelopes from an owned iframe', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockClear();
+
+    const initialMessagesCount = fixture.componentInstance['messages']().length;
+
+    // 1. updateDataModel with path
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: '1.0',
+        updateDataModel: {surfaceId: 'surf-1', path: '/name', value: 'Ada'},
+      },
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    // 2. updateDataModel without path (root replacement)
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: '1.0',
+        updateDataModel: {surfaceId: 'surf-1', value: {user: {name: 'Ada'}}},
+      },
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    // 3. error payload
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: '1.0',
+        error: {message: 'Render failed'},
+      },
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    await fixture.whenStable();
+
+    const messages = fixture.componentInstance['messages']();
+    expect(messages.length).toBe(initialMessagesCount);
+    expect(mockA2aTransport.sendMessageStream).not.toHaveBeenCalled();
+
+    iframe.remove();
+  });
+
+  it('rejects malformed and prototype-polluted v1.0 SEND_TO_SERVER payloads from an owned iframe', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockClear();
+
+    const initialMessagesCount = fixture.componentInstance['messages']().length;
+
+    // 1. Empty action name
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: '1.0',
+        action: {name: '   '},
+      },
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    // 2. Prototype-polluted payload
+    const pollutedPayload = JSON.parse(
+      '{"version":"1.0","action":{"name":"submit","__proto__":{"polluted":true}}}',
+    );
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: pollutedPayload,
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    await fixture.whenStable();
+
+    const messages = fixture.componentInstance['messages']();
+    expect(messages.length).toBe(initialMessagesCount);
+    expect(mockA2aTransport.sendMessageStream).not.toHaveBeenCalled();
+
+    iframe.remove();
+  });
+
+  it('classifies action as v0.9 when activeProtocolVersion is v0.9 even if action carries userMessage', async () => {
+    mockActiveProtocolVersionSignal.set('v0.9');
+    const capturedMessages: A2aMessage[] = [];
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockImplementation(
+      async function* (_url: string, msg: A2aMessage) {
+        capturedMessages.push(msg);
+        yield {
+          taskId: 't-v09-msg',
+          message: {role: 'agent', parts: [{text: 'V0.9 response'}]},
+          final: true,
+        };
+      },
+    );
+
+    fixture.componentInstance['handleSendToServerAction']({
+      action: {name: 'submitV09'},
+      userMessage: 'Proceed with order',
+      metadata: {v09Tag: 'test'},
+    });
+    fixture.detectChanges();
+
+    await vi.waitFor(() => {
+      expect(capturedMessages.length).toBe(1);
+    });
+
+    const dataPart = capturedMessages[0].parts[1]?.data;
+    expect(dataPart?.['version']).toBe('v0.9');
+    expect(dataPart?.['action']).toEqual({name: 'submitV09'});
+  });
+
+  it('forwards UI updates and updates contextId/taskId in handleCallAgentFunction', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockImplementation(
+      async function* () {
+        yield {
+          contextId: 'ctx-new-123',
+          taskId: 'task-new-456',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                data: {
+                  version: '1.0',
+                  createSurface: {surfaceId: 'surf-rpc', catalogId: 'cat-1'},
+                },
+              },
+              {
+                data: {
+                  version: '1.0',
+                  updateDataModel: {surfaceId: 'surf-rpc', value: {progress: 50}},
+                },
+              },
+              {
+                data: {
+                  version: '1.0',
+                  agentFunctionResponse: {
+                    functionCallId: 'call-with-ui',
+                    value: {status: 'ok'},
+                  },
+                },
+              },
+            ],
+          },
+          final: true,
+        };
+      },
+    );
+
+    mockCallAgentFunction$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        callAgentFunction: {
+          surfaceId: 'surf-main',
+          functionCallId: 'call-with-ui',
+          callFunction: {['@call']: 'runProcess'},
+        },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalled();
+    });
+
+    expect(fixture.componentInstance['activeContextId']()).toBe('ctx-new-123');
+    expect(fixture.componentInstance['activeTaskId']()).toBe('task-new-456');
+
+    expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalledWith(
+      [
+        {
+          version: '1.0',
+          createSurface: {surfaceId: 'surf-rpc', catalogId: 'cat-1'},
+        },
+      ],
+      mockWindow,
+    );
+    expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalledWith(
+      [
+        {
+          version: '1.0',
+          updateDataModel: {surfaceId: 'surf-rpc', value: {progress: 50}},
+        },
+      ],
+      mockWindow,
+    );
+    expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalledWith(
+      [
+        {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId: 'call-with-ui',
+            value: {status: 'ok'},
+          },
+        },
+      ],
+      mockWindow,
+    );
+
+    iframe.remove();
+  });
+
+  it('tracks _activeRpcCount and forwards UI updates in handleRendererFunctionResponse', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+    let streamActive = false;
+
+    (mockA2aTransport.sendMessageStream as ReturnType<typeof vi.fn>).mockImplementation(
+      async function* () {
+        streamActive = true;
+        yield {
+          contextId: 'ctx-rf-789',
+          taskId: 'task-rf-012',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                data: {
+                  version: '1.0',
+                  createSurface: {surfaceId: 'surf-rf', catalogId: 'cat-rf'},
+                },
+              },
+            ],
+          },
+          final: true,
+        };
+      },
+    );
+
+    mockRendererFunctionResponse$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        rendererFunctionResponse: {
+          functionCallId: 'call-rf-done',
+          value: {completed: true},
+        },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(streamActive).toBe(true);
+      expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalled();
+    });
+
+    expect(fixture.componentInstance['activeContextId']()).toBe('ctx-rf-789');
+    expect(fixture.componentInstance['activeTaskId']()).toBe('task-rf-012');
+    expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalledWith(
+      [
+        {
+          version: '1.0',
+          createSurface: {surfaceId: 'surf-rf', catalogId: 'cat-rf'},
+        },
+      ],
+      mockWindow,
+    );
+
+    iframe.remove();
   });
 });

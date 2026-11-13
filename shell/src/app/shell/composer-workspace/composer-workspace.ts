@@ -21,6 +21,7 @@ import {
   inject,
   OnInit,
   AfterViewInit,
+  OnDestroy,
   signal,
   untracked,
   computed,
@@ -37,6 +38,7 @@ import {ComposerPanelId} from './composer-panel-id';
 import {ComposerDockview} from './composer-dockview.service';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {StateSync} from '../../chat/state-sync/state-sync';
+import {PendingRpcRegistry} from '../../debug/events/pending-rpc-registry';
 
 /** Internal interface mapping raw cross-frame workspace telemetry payloads */
 export declare interface WorkspaceMessagePayload {
@@ -55,7 +57,7 @@ export declare interface WorkspaceMessagePayload {
   templateUrl: './composer-workspace.ng.html',
   styleUrl: './composer-workspace.scss',
 })
-export class ComposerWorkspace implements OnInit, AfterViewInit {
+export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
   private readonly startupResolution = inject(StartupResolution);
   private readonly hostComm = inject(HostCommunication);
   private readonly configProvider = inject(AppConfigProvider);
@@ -63,7 +65,9 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   private readonly composerDockview = inject(ComposerDockview);
   private readonly usageTrackingService = inject(UsageTrackingService);
   private readonly stateSync = inject(StateSync);
+  private readonly pendingRpcRegistry = inject(PendingRpcRegistry);
   private lastHandledResetNonce = this.stateSync.sessionResetNonce();
+  private activeRegisteredPreviewWindow: Window | null = null;
 
   readonly dockviewRoot = viewChild.required<ElementRef<HTMLElement>>('dockviewRoot');
 
@@ -85,6 +89,12 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   }
 
   constructor() {
+    this.pendingRpcRegistry.setWorkspaceFrameResolver(() => {
+      const rendered = this.composerDockview.getRenderedFrame();
+      const liveWin = rendered?.contentWindow;
+      return [liveWin ?? this.activeRegisteredPreviewWindow];
+    });
+
     this.errorLogger.errorStream$.pipe(takeUntilDestroyed()).subscribe(log => {
       if (log.level === 'warn' || log.level === 'error') {
         if (!this.composerDockview.isPanelVisible(ComposerPanelId.Errors)) {
@@ -95,11 +105,32 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
       if (!envelope) return;
 
-      const payload = envelope.payload as WorkspaceMessagePayload | undefined;
+      this.syncRegisteredPreviewFrame();
 
-      if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.action) {
-        if (!this.composerDockview.isPanelVisible(ComposerPanelId.Events)) {
-          this.unreadEventsCount.update(count => count + 1);
+      if (envelope.type === PreviewBridgeMessageType.RENDERER_READY && envelope.sourceWindow) {
+        const rendered = this.composerDockview.getRenderedFrame();
+        if (
+          !rendered ||
+          rendered.contentWindow === envelope.sourceWindow ||
+          !this.activeRegisteredPreviewWindow
+        ) {
+          this.registerActivePreviewFrame(envelope.sourceWindow);
+        }
+      }
+
+      if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER) {
+        const p = envelope.payload as Record<string, unknown> | undefined;
+        const isAction = !!p && !!p['action'];
+        const isRegisteredCall =
+          !!p &&
+          !!p['callAgentFunction'] &&
+          this.pendingRpcRegistry.isRegisteredFrame(envelope.sourceWindow);
+        const isRendererResponse = !!p && !!p['rendererFunctionResponse'];
+
+        if (isAction || isRegisteredCall || isRendererResponse) {
+          if (!this.composerDockview.isPanelVisible(ComposerPanelId.Events)) {
+            this.unreadEventsCount.update(count => count + 1);
+          }
         }
       }
     });
@@ -157,10 +188,41 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
           this.usageTrackingService.trackDebugTabView({panelId: panelId as ComposerPanelId});
         }
       },
+      onPreviewPanelDisposed: () => {
+        if (this.activeRegisteredPreviewWindow) {
+          this.pendingRpcRegistry.unregisterFrame(this.activeRegisteredPreviewWindow);
+          this.activeRegisteredPreviewWindow = null;
+        }
+      },
     });
+    this.syncRegisteredPreviewFrame();
+  }
+
+  ngOnDestroy(): void {
+    this.pendingRpcRegistry.setWorkspaceFrameResolver(null);
+    if (this.activeRegisteredPreviewWindow) {
+      this.pendingRpcRegistry.unregisterFrame(this.activeRegisteredPreviewWindow);
+      this.activeRegisteredPreviewWindow = null;
+    }
   }
 
   clearAllLogs(): void {
     this.composerDockview.clearAllLogs();
+  }
+
+  private syncRegisteredPreviewFrame(): void {
+    const rendered = this.composerDockview.getRenderedFrame();
+    const win = rendered?.contentWindow ?? null;
+    if (win && win !== this.activeRegisteredPreviewWindow) {
+      this.registerActivePreviewFrame(win);
+    }
+  }
+
+  private registerActivePreviewFrame(win: Window): void {
+    if (this.activeRegisteredPreviewWindow && this.activeRegisteredPreviewWindow !== win) {
+      this.pendingRpcRegistry.unregisterFrame(this.activeRegisteredPreviewWindow);
+    }
+    this.activeRegisteredPreviewWindow = win;
+    this.pendingRpcRegistry.registerFrame(win);
   }
 }

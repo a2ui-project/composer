@@ -23,39 +23,71 @@ import {Subject} from 'rxjs';
 import {
   HostCommunication,
   MessageEnvelope,
+  SendToServerEnvelope,
 } from '../../shell/host-communication/host-communication';
+import type {
+  V10CallAgentFunctionPayload,
+  V10RendererFunctionResponsePayload,
+} from '../../shell/cross-frame-validator/v1-0-wire-validator';
 import {signal} from '@angular/core';
 import {MatTableModule} from '@angular/material/table';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
+import {PendingRpcRegistry} from './pending-rpc-registry';
+
+type CallAgentFunctionEnvelope = SendToServerEnvelope & {
+  payload: {callAgentFunction: V10CallAgentFunctionPayload};
+};
+type RendererFunctionResponseEnvelope = SendToServerEnvelope & {
+  payload: {rendererFunctionResponse: V10RendererFunctionResponsePayload};
+};
+
 describe('Events', () => {
   let fixture: ComponentFixture<Events>;
   let harness: EventsHarness;
+  let registry: PendingRpcRegistry;
   let mockMessageStream: ReturnType<typeof signal<MessageEnvelope | null>>;
   let mockHostComm: Partial<HostCommunication>;
 
   beforeEach(async () => {
     const messageStreamSubject = new Subject<MessageEnvelope>();
+    const callAgentFunctionSubject = new Subject<CallAgentFunctionEnvelope>();
+    const rendererFunctionResponseSubject = new Subject<RendererFunctionResponseEnvelope>();
     mockMessageStream = signal<MessageEnvelope | null>(null);
     const originalSet = mockMessageStream.set.bind(mockMessageStream);
     mockMessageStream.set = (val: MessageEnvelope | null) => {
       originalSet(val);
       if (val) {
         messageStreamSubject.next(val);
+        if (val.type === PreviewBridgeMessageType.SEND_TO_SERVER && val.payload) {
+          const p = val.payload as Record<string, unknown>;
+          if (p['callAgentFunction']) {
+            callAgentFunctionSubject.next(val as unknown as CallAgentFunctionEnvelope);
+          }
+          if (p['rendererFunctionResponse']) {
+            rendererFunctionResponseSubject.next(
+              val as unknown as RendererFunctionResponseEnvelope,
+            );
+          }
+        }
       }
     };
 
     mockHostComm = {
       messageStream: mockMessageStream.asReadonly(),
       messageStream$: messageStreamSubject.asObservable(),
+      callAgentFunction$: callAgentFunctionSubject.asObservable(),
+      rendererFunctionResponse$: rendererFunctionResponseSubject.asObservable(),
+      sendRenderA2UI: () => {},
       getEnvelopeHistory: () => [],
     };
 
     await TestBed.configureTestingModule({
       imports: [Events, MatTableModule],
-      providers: [{provide: HostCommunication, useValue: mockHostComm}],
+      providers: [PendingRpcRegistry, {provide: HostCommunication, useValue: mockHostComm}],
     }).compileComponents();
 
+    registry = TestBed.inject(PendingRpcRegistry);
     fixture = TestBed.createComponent(Events);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, EventsHarness);
@@ -371,5 +403,227 @@ describe('Events', () => {
     expect(row1.surface).toBe('surf-first');
     expect(row1.component).toBe('comp-first');
     expect(JSON.parse(row1.context)).toEqual({step: 1});
+  });
+
+  it('captures and displays callAgentFunction from registered frame with RpcReplyForm', async () => {
+    const dummyWindow = {} as Window;
+    registry.registerFrame(dummyWindow);
+
+    mockMessageStream.set({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        callAgentFunction: {
+          surfaceId: 'surf-1',
+          functionCallId: 'call-abc',
+          callFunction: {
+            ['@call']: 'submitForm',
+            ['@args']: {name: 'Alice'},
+          },
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: dummyWindow,
+    });
+    fixture.detectChanges();
+
+    expect(await harness.hasPlaceholder()).toBe(false);
+    expect(await harness.getRowsCount()).toBe(1);
+
+    const row = await harness.getRowValuesAt(0);
+    expect(row.action).toContain('submitForm');
+    expect(row.surface).toBe('surf-1');
+
+    const form = await harness.getRpcReplyFormAt(0);
+    expect(form).not.toBeNull();
+    expect(await form!.isPending()).toBe(true);
+
+    await form!.setValueInput('{"status": "ok"}');
+    await form!.clickReplyValue();
+    fixture.detectChanges();
+
+    expect(registry.getRpc('call-abc')?.status).toBe('replied');
+    expect(await form!.getStatusBadge()).toBe('Replied');
+  });
+
+  it('ignores callAgentFunction from unregistered window', async () => {
+    const otherWindow = {} as Window;
+
+    mockMessageStream.set({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        callAgentFunction: {
+          surfaceId: 'surf-1',
+          functionCallId: 'call-unregistered',
+          callFunction: {['@call']: 'unregisteredFunc'},
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: otherWindow,
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getRowsCount()).toBe(0);
+    expect(await harness.hasPlaceholder()).toBe(true);
+  });
+
+  it('captures and displays rendererFunctionResponse events', async () => {
+    mockMessageStream.set({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        rendererFunctionResponse: {
+          surfaceId: 'surf-renderer',
+          functionCallId: 'func-123',
+          result: {success: true},
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getRowsCount()).toBe(1);
+    const row = await harness.getRowValuesAt(0);
+    expect(row.action).toBe('rendererFunctionResponse');
+    expect(row.surface).toBe('surf-renderer');
+    expect(JSON.parse(row.context)).toEqual({success: true});
+  });
+
+  it('evicts pending RPC and cancels timer when rows exceed 100', async () => {
+    const dummyWindow = {} as Window;
+    registry.registerFrame(dummyWindow);
+
+    mockMessageStream.set({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        callAgentFunction: {
+          surfaceId: 'surf-evict',
+          functionCallId: 'call-to-evict',
+          callFunction: {['@call']: 'evictMe'},
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: dummyWindow,
+    });
+    fixture.detectChanges();
+
+    expect(registry.getRpc('call-to-evict')?.status).toBe('pending');
+
+    for (let i = 0; i < 100; i++) {
+      mockMessageStream.set({
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          action: {
+            name: `action-push-${i}`,
+            timestamp: Date.now() + i + 1,
+          },
+        },
+        origin: 'http://localhost',
+        timestamp: Date.now() + i + 1,
+      });
+      fixture.detectChanges();
+    }
+
+    expect(await harness.getRowsCount()).toBe(100);
+    expect(registry.getRpc('call-to-evict')).toBeUndefined();
+  });
+
+  it('cancels all pending RPCs when clearLogs() is called', async () => {
+    const dummyWindow = {} as Window;
+    registry.registerFrame(dummyWindow);
+
+    mockMessageStream.set({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        callAgentFunction: {
+          surfaceId: 'surf-1',
+          functionCallId: 'call-clear',
+          callFunction: {['@call']: 'clearMe'},
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: dummyWindow,
+    });
+    fixture.detectChanges();
+
+    expect(registry.getRpc('call-clear')?.status).toBe('pending');
+
+    fixture.componentInstance.clearLogs();
+    fixture.detectChanges();
+
+    expect(await harness.getRowsCount()).toBe(0);
+    expect(registry.getRpc('call-clear')).toBeUndefined();
+  });
+
+  it('hydrates eventsLog with historical callAgentFunction and rendererFunctionResponse envelopes', async () => {
+    const dummyWindow = {} as Window;
+    const historicalTime = Date.now() - 5000;
+
+    const historicalEnvelopes: MessageEnvelope[] = [
+      {
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          callAgentFunction: {
+            surfaceId: 'surf-hist',
+            functionCallId: 'hist-rpc-1',
+            callFunction: {['@call']: 'historicalCall'},
+          },
+        },
+        origin: 'http://localhost',
+        timestamp: historicalTime,
+        sourceWindow: dummyWindow,
+      },
+      {
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          rendererFunctionResponse: {
+            surfaceId: 'surf-hist',
+            functionCallId: 'hist-func-2',
+            result: {hydrated: true},
+          },
+        },
+        origin: 'http://localhost',
+        timestamp: historicalTime + 1000,
+      },
+    ];
+
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [Events, MatTableModule],
+      providers: [
+        PendingRpcRegistry,
+        {
+          provide: HostCommunication,
+          useValue: {
+            messageStream: signal<MessageEnvelope | null>(null).asReadonly(),
+            messageStream$: new Subject<MessageEnvelope>().asObservable(),
+            sendRenderA2UI: () => {},
+            getEnvelopeHistory: () => historicalEnvelopes,
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const localRegistry = TestBed.inject(PendingRpcRegistry);
+    localRegistry.registerFrame(dummyWindow);
+
+    const hydratedFixture = TestBed.createComponent(Events);
+    hydratedFixture.detectChanges();
+    const hydratedHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      hydratedFixture,
+      EventsHarness,
+    );
+
+    expect(await hydratedHarness.getRowsCount()).toBe(2);
+    const row0 = await hydratedHarness.getRowValuesAt(0);
+    expect(row0.action).toBe('rendererFunctionResponse');
+
+    const row1 = await hydratedHarness.getRowValuesAt(1);
+    expect(row1.action).toContain('historicalCall');
+    const form = await hydratedHarness.getRpcReplyFormAt(1);
+    expect(form).not.toBeNull();
   });
 });

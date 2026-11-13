@@ -239,7 +239,9 @@ export const sseHotelResponseBody = [
  * JSON-RPC request body; returning `undefined` falls back to the built-in
  * keyword routing (flights, hotels, seasons).
  */
-export type MockA2aResponder = (postData: string) => string | undefined;
+export type MockA2aResponder = (
+  postData: string,
+) => Promise<string | undefined> | string | undefined;
 
 /** Builds one complete SSE `message` event from an A2A streaming response. */
 export function sseEvent(event: Record<string, unknown>): string {
@@ -262,7 +264,7 @@ export async function setupMockA2aRoutes(
       });
     } else {
       const postData = route.request().postData() || '';
-      let body = respond?.(postData);
+      let body = await Promise.resolve(respond?.(postData));
       if (body === undefined) {
         body = sseFlightBody;
         if (postData.includes('hotel') || postData.includes('stay') || postData.includes('area')) {

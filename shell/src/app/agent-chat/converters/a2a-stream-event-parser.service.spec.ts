@@ -190,7 +190,7 @@ describe('A2aStreamEventParser', () => {
     expect(warn).toHaveBeenCalledOnce();
     expect(warn).toHaveBeenCalledWith(
       {
-        message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9.',
+        message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9 or 1.0.',
         sourceTag: '[A2UI]',
       },
       legacyPayload,
@@ -853,6 +853,89 @@ describe('A2aStreamEventParser', () => {
       };
       const parsed = parser.parse(event);
       expect(parsed.a2uiItems.length).toBe(1);
+    });
+
+    it('classifies agentFunctionResponse and callRendererFunction as A2UI items without extracting tool calls', () => {
+      const event: TaskStatusUpdateEvent = {
+        taskId: 'task-rpc-inbound',
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              data: {
+                version: '1.0',
+                callRendererFunction: {
+                  surfaceId: 'surf_v1',
+                  functionCallId: 'call_render_1',
+                  callFunction: {
+                    catalogId: 'https://a2ui.org/specification/v1_0/basic_catalog.json',
+                    ['@call']: 'focusInput',
+                  },
+                },
+              },
+            },
+            {
+              data: {
+                version: '1.0',
+                agentFunctionResponse: {
+                  functionCallId: 'call_agent_1',
+                  value: {status: 'success'},
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      const parsed = parser.parse(event);
+      expect(parsed.a2uiItems.length).toBe(2);
+      expect(parsed.a2uiItems[0].version).toBe('1.0');
+      expect(parsed.a2uiItems[0].callRendererFunction?.functionCallId).toBe('call_render_1');
+      expect(parsed.a2uiItems[1].version).toBe('1.0');
+      expect(parsed.a2uiItems[1].agentFunctionResponse?.functionCallId).toBe('call_agent_1');
+      expect(parsed.toolCalls).toBeUndefined();
+      expect(parsed.textChunk).toBeUndefined();
+    });
+
+    it('filters out echoed client-to-agent RPCs (callAgentFunction, rendererFunctionResponse)', () => {
+      const event: TaskStatusUpdateEvent = {
+        taskId: 'task-rpc-echo',
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              data: {
+                version: '1.0',
+                callAgentFunction: {
+                  functionCallId: 'call_1',
+                  callFunction: {['@call']: 'queryData'},
+                },
+              },
+            },
+            {
+              data: {
+                version: '1.0',
+                rendererFunctionResponse: {
+                  functionCallId: 'call_2',
+                  value: {width: 500},
+                },
+              },
+            },
+            {
+              text: 'Here is the result.',
+            },
+          ],
+        },
+      };
+
+      const parsed = parser.parse(event);
+      expect(parsed.a2uiItems.length).toBe(0);
+      expect(parsed.toolCalls).toBeUndefined();
+      expect(parsed.textChunk).toBe('Here is the result.');
+      // Ensure echoed RPCs were not dumped into textChunk as JSON code blocks
+      expect(parsed.textChunk).not.toContain('```json');
+      expect(parsed.textChunk).not.toContain('callAgentFunction');
+      expect(parsed.textChunk).not.toContain('rendererFunctionResponse');
     });
   });
 });

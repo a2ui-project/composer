@@ -20,7 +20,7 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {CustomInstructionsDialog} from './custom-instructions-dialog';
 import {CustomInstructionsDialogHarness} from './test/custom-instructions-dialog.harness';
-import {CustomInstructionsState} from '../chat-prompt-factory/chat-prompt-factory.service';
+import {CustomInstructionsState} from '../chat-prompt-factory/chat-prompt-factory';
 
 describe('CustomInstructionsDialog', () => {
   let fixture: ComponentFixture<CustomInstructionsDialog>;
