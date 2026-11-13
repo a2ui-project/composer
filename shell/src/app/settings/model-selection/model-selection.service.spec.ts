@@ -17,7 +17,7 @@
 import {signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {ThinkingLevel} from '@google/genai';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {beforeEach, describe, expect, it} from 'vitest';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
@@ -180,7 +180,12 @@ describe('ModelSelectionService', () => {
 
   it('logs a warning via ErrorLogger when unmapped thinking levels are configured in model options', () => {
     const service = setup();
-    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const streamCalls = signal(0);
+    const sub = errorLogger.errorStream$.subscribe(() => {
+      streamCalls.update(n => n + 1);
+    });
+
     configState.setModels([
       {
         model: 'gemini-test',
@@ -188,14 +193,22 @@ describe('ModelSelectionService', () => {
         defaultThinkingLevel: 'xhigh',
       },
     ]);
+    TestBed.flushEffects();
+
     expect(service.models()[0].thinkingLevels).toEqual([ThinkingLevel.LOW]);
-    expect(warnSpy).toHaveBeenCalledWith(
+    const history = errorLogger.getHistory();
+    expect(history.map(h => h.message)).toEqual([
       'Unrecognized thinking level "xhigh" for model "gemini-test"',
-    );
-    expect(warnSpy).toHaveBeenCalledWith(
       'Unrecognized default thinking level "xhigh" for model "gemini-test"',
-    );
-    warnSpy.mockRestore();
+    ]);
+    expect(streamCalls()).toBe(2);
+
+    // Changing authType must not re-emit warnings or re-run warning logging
+    authType.set(AuthType.FIRST_PARTY);
+    TestBed.flushEffects();
+    expect(errorLogger.getHistory().length).toBe(2);
+
+    sub.unsubscribe();
   });
 
   it('only offers models matching the active auth type', () => {

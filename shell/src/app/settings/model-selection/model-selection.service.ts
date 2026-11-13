@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, Signal, computed, inject, signal} from '@angular/core';
+import {Injectable, Signal, computed, effect, inject, signal, untracked} from '@angular/core';
 import {ThinkingLevel} from '@google/genai';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
@@ -90,19 +90,30 @@ export class ModelSelectionService {
     parseThinkingLevel(this.storage.getItem(LocalStorageKey.SELECTED_THINKING_LEVEL)),
   );
 
+  private readonly parsedStartupModels = computed<ParsedStartupModels>(() =>
+    parseModelConfigs(this.startupConfigState.models()),
+  );
+
+  constructor() {
+    effect(() => {
+      const warnings = this.parsedStartupModels().warnings;
+      untracked(() => {
+        for (const warning of warnings) {
+          this.errorLogger.warn(warning);
+        }
+      });
+    });
+  }
+
   /**
    * Models the user may choose from in the active authentication mode, in
    * config order.
    */
   readonly models: Signal<readonly LlmModelOption[]> = computed(() => {
     const authType = this.configProvider.authType();
-    return this.startupConfigState
-      .models()
-      .map(config => toModelOption(config, this.errorLogger))
-      .filter(
-        (option): option is LlmModelOption =>
-          option !== null && (option.authType === undefined || option.authType === authType),
-      );
+    return this.parsedStartupModels().options.filter(
+      option => option.authType === undefined || option.authType === authType,
+    );
   });
 
   /** Whether the deployment declares any selectable models. */
@@ -169,7 +180,30 @@ export class ModelSelectionService {
   }
 }
 
-function toModelOption(config: unknown, errorLogger: ErrorLogger): LlmModelOption | null {
+interface ParsedModelResult {
+  readonly option: LlmModelOption;
+  readonly warnings: readonly string[];
+}
+
+interface ParsedStartupModels {
+  readonly options: readonly LlmModelOption[];
+  readonly warnings: readonly string[];
+}
+
+function parseModelConfigs(configs: readonly unknown[]): ParsedStartupModels {
+  const options: LlmModelOption[] = [];
+  const warnings: string[] = [];
+  for (const config of configs) {
+    const parsed = toModelOption(config);
+    if (parsed) {
+      options.push(parsed.option);
+      warnings.push(...parsed.warnings);
+    }
+  }
+  return {options, warnings};
+}
+
+function toModelOption(config: unknown): ParsedModelResult | null {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     return null;
   }
@@ -184,6 +218,7 @@ function toModelOption(config: unknown, errorLogger: ErrorLogger): LlmModelOptio
   if (!model) {
     return null;
   }
+  const warnings: string[] = [];
   const thinkingLevels: SupportedThinkingLevel[] = [];
   if (Array.isArray(raw.thinkingLevels)) {
     for (const item of raw.thinkingLevels) {
@@ -191,7 +226,7 @@ function toModelOption(config: unknown, errorLogger: ErrorLogger): LlmModelOptio
       if (parsed) {
         thinkingLevels.push(parsed);
       } else if (item !== undefined && item !== null && item !== '') {
-        errorLogger.warn(`Unrecognized thinking level "${item}" for model "${model}"`);
+        warnings.push(`Unrecognized thinking level "${item}" for model "${model}"`);
       }
     }
   }
@@ -202,18 +237,21 @@ function toModelOption(config: unknown, errorLogger: ErrorLogger): LlmModelOptio
     raw.defaultThinkingLevel !== '' &&
     !defaultLevel
   ) {
-    errorLogger.warn(
+    warnings.push(
       `Unrecognized default thinking level "${raw.defaultThinkingLevel}" for model "${model}"`,
     );
   }
   return {
-    id: model,
-    name: typeof raw.displayName === 'string' && raw.displayName.trim() ? raw.displayName : model,
-    model,
-    thinkingLevels: [...new Set(thinkingLevels)],
-    defaultThinkingLevel:
-      defaultLevel && thinkingLevels.includes(defaultLevel) ? defaultLevel : undefined,
-    authType: parseAuthType(raw.authType),
+    option: {
+      id: model,
+      name: typeof raw.displayName === 'string' && raw.displayName.trim() ? raw.displayName : model,
+      model,
+      thinkingLevels: [...new Set(thinkingLevels)],
+      defaultThinkingLevel:
+        defaultLevel && thinkingLevels.includes(defaultLevel) ? defaultLevel : undefined,
+      authType: parseAuthType(raw.authType),
+    },
+    warnings,
   };
 }
 
