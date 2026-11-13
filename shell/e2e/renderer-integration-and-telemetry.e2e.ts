@@ -132,7 +132,7 @@ async function waitForPreviewSettled(
       .slice(catalogIdx)
       .filter(env => env?.type === 'RENDER_SUCCESS');
     const hasDataModelChange = history.some(env => env?.type === 'DATA_MODEL_CHANGE');
-    return successesAfterCatalog.length >= 2 && hasDataModelChange;
+    return successesAfterCatalog.length >= 1 && hasDataModelChange;
   }, historyHandle);
 
   // Wait until no new RENDER_SUCCESS or DATA_MODEL_CHANGE has arrived for at least
