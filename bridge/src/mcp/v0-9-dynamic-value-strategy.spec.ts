@@ -15,7 +15,13 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {V09DynamicValueStrategy, v09DynamicValueStrategy} from './v0-9-dynamic-value-strategy.js';
+import {
+  V09DynamicValueStrategy,
+  v09DynamicValueStrategy,
+  isDataBinding,
+  isFunctionCall,
+  resolveDynamicValueDeep,
+} from './v0-9-dynamic-value-strategy.js';
 import type {DynamicValueContext} from './dynamic-value-strategy.js';
 
 describe('V09DynamicValueStrategy', () => {
@@ -34,6 +40,9 @@ describe('V09DynamicValueStrategy', () => {
 
     it('rejects bindings with extra properties or incorrect path types', () => {
       expect(strategy.isDataBinding({path: '/user', extra: true})).toBe(false);
+      expect(strategy.isDataBinding({path: '/foo', extra: 1})).toBe(false);
+      expect(isDataBinding({path: '/foo', extra: 1})).toBe(false);
+      expect(isDataBinding({path: '/foo'})).toBe(true);
       expect(strategy.isDataBinding({path: 123})).toBe(false);
       expect(strategy.isDataBinding({'@path': '/user'})).toBe(false);
       expect(strategy.isDataBinding(null)).toBe(false);
@@ -56,9 +65,12 @@ describe('V09DynamicValueStrategy', () => {
 
     it('rejects invalid function calls', () => {
       expect(strategy.isFunctionCall({'@call': 'formatString'})).toBe(false);
+      expect(isFunctionCall({'@call': 'formatString'})).toBe(false);
       expect(strategy.isFunctionCall({call: 123})).toBe(false);
       expect(strategy.isFunctionCall({call: 'fn', args: 'invalid'})).toBe(false);
+      expect(isFunctionCall({call: 'fn', args: 'invalid'})).toBe(false);
       expect(strategy.isFunctionCall({call: 'fn', returnType: 123})).toBe(false);
+      expect(isFunctionCall({call: 'fn', returnType: 123})).toBe(false);
       expect(strategy.isFunctionCall(null)).toBe(false);
     });
   });
@@ -96,6 +108,7 @@ describe('V09DynamicValueStrategy', () => {
     it('deeply resolves bindings and calls within objects and arrays', () => {
       const input = {
         title: {path: '/title'},
+        unbound: {path: '/foo', extra: 1},
         list: [{call: 'fn1'}, {path: '/item'}],
         nested: {
           inner: {call: 'fn2', args: {x: 1}},
@@ -105,11 +118,15 @@ describe('V09DynamicValueStrategy', () => {
       const resolved = strategy.resolveDynamicValueDeep(input, mockContext);
       expect(resolved).toEqual({
         title: 'resolved:/title',
+        unbound: {path: '/foo', extra: 1},
         list: ['called:fn1', 'resolved:/item'],
         nested: {
           inner: 'called:fn2',
         },
       });
+
+      const standaloneResolved = resolveDynamicValueDeep({path: '/foo', extra: 1}, mockContext);
+      expect(standaloneResolved).toEqual({path: '/foo', extra: 1});
     });
 
     it('sanitizes prototype pollution keys during record resolution', () => {

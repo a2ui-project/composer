@@ -33,6 +33,24 @@ describe('V10BridgeProtocolStrategy', () => {
     expect(strategy.version).toBe('v1.0');
   });
 
+  describe('normalizeIncomingMessages', () => {
+    it('normalizes various v1 version formats to canonical 1.0', () => {
+      const messages = [
+        {version: 'v1.0', createSurface: {surfaceId: 's1'}},
+        {version: '1.0', createSurface: {surfaceId: 's2'}},
+        {version: 'v1.1', createSurface: {surfaceId: 's3'}},
+        {version: '1.2', createSurface: {surfaceId: 's4'}},
+        {version: 'v0.9', createSurface: {surfaceId: 's5'}},
+      ];
+      strategy.normalizeIncomingMessages(messages);
+      expect(messages[0].version).toBe('1.0');
+      expect(messages[1].version).toBe('1.0');
+      expect(messages[2].version).toBe('1.0');
+      expect(messages[3].version).toBe('1.0');
+      expect(messages[4].version).toBe('v0.9');
+    });
+  });
+
   describe('extractSurfaceIdsToReset', () => {
     it('extracts unique surfaceIds from createSurface commands with 1.0 and v1.0', () => {
       const messages = [

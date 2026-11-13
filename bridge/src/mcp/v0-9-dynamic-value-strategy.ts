@@ -49,17 +49,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Checks whether `value` is an A2UI `DataBinding` (an object with a string `path` property).
+ * Checks whether `value` is an A2UI `DataBinding` (an object with a single string `path` property).
  */
 export function isDataBinding(value: unknown): value is DataBinding {
-  return isRecord(value) && typeof value['path'] === 'string';
+  return isRecord(value) && typeof value['path'] === 'string' && Object.keys(value).length === 1;
 }
 
 /**
  * Checks whether `value` is an A2UI `FunctionCall` (an object with a string `call` property).
  */
 export function isFunctionCall(value: unknown): value is FunctionCall {
-  return isRecord(value) && typeof value['call'] === 'string';
+  if (!isRecord(value) || typeof value['call'] !== 'string') {
+    return false;
+  }
+  const args = value['args'];
+  const returnType = value['returnType'];
+  return (
+    (args === undefined || isRecord(args)) &&
+    (returnType === undefined || typeof returnType === 'string')
+  );
 }
 
 /**
@@ -124,19 +132,11 @@ export class V09DynamicValueStrategy implements DynamicValueStrategy<
   readonly version = 'v0.9' as const;
 
   isDataBinding(value: unknown): value is DataBinding {
-    return isDataBinding(value) && Object.keys(value).length === 1;
+    return isDataBinding(value);
   }
 
   isFunctionCall(value: unknown): value is FunctionCall {
-    if (!isFunctionCall(value)) {
-      return false;
-    }
-    const args = value['args'];
-    const returnType = value['returnType'];
-    return (
-      (args === undefined || isRecord(args)) &&
-      (returnType === undefined || typeof returnType === 'string')
-    );
+    return isFunctionCall(value);
   }
 
   normalizeFunctionCall(call: FunctionCall): FunctionCall {

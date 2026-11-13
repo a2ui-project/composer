@@ -25,7 +25,11 @@ import {
 } from '@a2ui/web_core/v0_9';
 import {z} from 'zod/v3';
 
-import {isPrototypePollutionKey, resolveDynamicValueDeep} from '../dynamic-value-strategy.js';
+import {
+  type DynamicValueStrategy,
+  isPrototypePollutionKey,
+  resolveDynamicValueDeep,
+} from '../dynamic-value-strategy.js';
 import {asyncable, type FunctionApiDefinition, withSettledArgs} from './common.js';
 
 /** Function API definition for `updateDataModel`. */
@@ -49,37 +53,47 @@ export const UpdateDataModelApi: FunctionApiDefinition = {
  *
  * @throws A2uiExpressionError if `updates` is not a plain object, `null`, or `undefined`.
  */
-export const UpdateDataModelImplementation: FunctionImplementation = createFunctionImplementation(
-  UpdateDataModelApi as Parameters<typeof createFunctionImplementation>[0],
-  (args, context) => {
-    const requested = resolveDynamicValueDeep<unknown>(args['updates'], context);
-    // Computed keys keep these argument names stable under Closure Compiler property renaming.
-    const unsettled = {['updates']: requested};
-    return withSettledArgs(unsettled, settled => {
-      const updates = settled['updates'];
-      if (updates === null || updates === undefined) {
-        return;
-      }
-      if (typeof updates !== 'object' || Array.isArray(updates)) {
-        const kind = Array.isArray(updates) ? 'an array' : `a ${typeof updates}`;
-        throw new A2uiExpressionError(
-          `updateDataModel expects an object of data model paths, got ${kind}.`,
-          'updateDataModel',
-        );
-      }
-      for (const [path, value] of Object.entries(updates as Record<string, unknown>)) {
-        if (
-          isPrototypePollutionKey(path) ||
-          path.split('/').some(segment => isPrototypePollutionKey(segment))
-        ) {
-          continue;
+/**
+ * Creates an updateDataModel function implementation optionally bound to a specific DynamicValueStrategy.
+ */
+export function createUpdateDataModelImplementation(
+  strategy?: DynamicValueStrategy,
+): FunctionImplementation {
+  return createFunctionImplementation(
+    UpdateDataModelApi as Parameters<typeof createFunctionImplementation>[0],
+    (args, context) => {
+      const requested = resolveDynamicValueDeep<unknown>(args['updates'], context, 0, strategy);
+      // Computed keys keep these argument names stable under Closure Compiler property renaming.
+      const unsettled = {['updates']: requested};
+      return withSettledArgs(unsettled, settled => {
+        const updates = settled['updates'];
+        if (updates === null || updates === undefined) {
+          return;
         }
-        // Clone objects and arrays to prevent mutations from affecting cached tool results.
-        context.set(
-          path,
-          typeof value === 'object' && value !== null ? structuredClone(value) : value,
-        );
-      }
-    });
-  },
-);
+        if (typeof updates !== 'object' || Array.isArray(updates)) {
+          const kind = Array.isArray(updates) ? 'an array' : `a ${typeof updates}`;
+          throw new A2uiExpressionError(
+            `updateDataModel expects an object of data model paths, got ${kind}.`,
+            'updateDataModel',
+          );
+        }
+        for (const [path, value] of Object.entries(updates as Record<string, unknown>)) {
+          if (
+            isPrototypePollutionKey(path) ||
+            path.split('/').some(segment => isPrototypePollutionKey(segment))
+          ) {
+            continue;
+          }
+          // Clone objects and arrays to prevent mutations from affecting cached tool results.
+          context.set(
+            path,
+            typeof value === 'object' && value !== null ? structuredClone(value) : value,
+          );
+        }
+      });
+    },
+  );
+}
+
+export const UpdateDataModelImplementation: FunctionImplementation =
+  createUpdateDataModelImplementation();

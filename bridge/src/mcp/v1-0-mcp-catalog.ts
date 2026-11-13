@@ -28,11 +28,12 @@ import {
   type McpMessageProcessor,
   type McpToolClient,
 } from './functions/callMcpTool.js';
-import {JmespathImplementation} from './functions/jmespath.js';
+import {createJmespathImplementation} from './functions/jmespath.js';
 import {RegexCaptureImplementation} from './functions/regexCapture.js';
 import {RegexReplaceImplementation} from './functions/regexReplace.js';
 import {SplitImplementation} from './functions/split.js';
-import {UpdateDataModelImplementation} from './functions/updateDataModel.js';
+import {createUpdateDataModelImplementation} from './functions/updateDataModel.js';
+import {v10DynamicValueStrategy} from './v1-0-dynamic-value-strategy.js';
 
 /** Identifier of the MCP and utility functions catalog for A2UI v1.0. */
 export const MCP_FUNCTIONS_CATALOG_ID =
@@ -41,37 +42,35 @@ export const MCP_FUNCTIONS_CATALOG_ID =
 /** Dynamic string parameter schema for v1.0 function schemas using zod/v3. */
 function dynamicStringParam(description: string) {
   return z
-    .union([z.string(), z.null(), z.undefined(), z.record(z.any())])
+    .union([z.string(), z.null(), z.record(z.any())])
     .describe(`REF:#/$defs/DynamicString|${description}`);
 }
 
 /** Dynamic value parameter schema for v1.0 function schemas using zod/v3. */
 function dynamicValueParam(description: string) {
   return z
-    .union([
-      z.string(),
-      z.number(),
-      z.boolean(),
-      z.null(),
-      z.undefined(),
-      z.array(z.any()),
-      z.record(z.any()),
-    ])
+    .union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.any()), z.record(z.any())])
     .describe(`REF:#/$defs/DynamicValue|${description}`);
 }
 
 /**
  * Creates an object schema requiring explicit presence of specified keys,
- * allowing null or undefined values to pass without validation errors.
+ * allowing null or undefined values to pass at runtime by mapping undefined to null via preprocess.
  */
 function requireKeys<T extends z.ZodRawShape>(shape: T, requiredKeys: readonly (keyof T)[]) {
-  return z.object(shape).superRefine((val, ctx) => {
-    for (const key of requiredKeys) {
-      if (!(key in val)) {
-        ctx.addIssue({code: z.ZodIssueCode.custom, path: [key as string], message: 'Required'});
+  const baseObject = z.object(shape);
+  return z.preprocess(val => {
+    if (typeof val === 'object' && val !== null) {
+      const copy = {...val} as Record<string, unknown>;
+      for (const key of requiredKeys) {
+        if (key in copy && copy[key as string] === undefined) {
+          copy[key as string] = null;
+        }
       }
+      return copy;
     }
-  });
+    return val;
+  }, baseObject);
 }
 
 /** Structural interface for accessing global preview bridge without static import. */
@@ -132,11 +131,16 @@ export function createMcpFunctionsCatalog(
     },
   };
 
-  const baseCallMcpToolImpl = createCallMcpToolImplementation(getMcpClientForTool, processor);
+  const baseCallMcpToolImpl = createCallMcpToolImplementation(
+    getMcpClientForTool,
+    processor,
+    v10DynamicValueStrategy,
+  );
   const callMcpToolImpl: FunctionImplementation = createFunctionImplementation(
     {
       name: 'callMcpTool',
       returnType: 'any',
+      allowedCallers: 'rendererOnly',
       schema: requireKeys(
         {
           ['name']: dynamicStringParam('The name of the MCP tool to execute.'),
@@ -152,10 +156,12 @@ export function createMcpFunctionsCatalog(
     baseCallMcpToolImpl.execute,
   );
 
+  const baseJmespathImpl = createJmespathImplementation(v10DynamicValueStrategy);
   const jmespathImpl: FunctionImplementation = createFunctionImplementation(
     {
       name: 'jmespath',
       returnType: 'any',
+      allowedCallers: 'rendererOrAgent',
       schema: requireKeys(
         {
           ['expression']: dynamicStringParam(
@@ -166,13 +172,14 @@ export function createMcpFunctionsCatalog(
         ['expression', 'data'],
       ) as unknown as FunctionImplementation['schema'],
     },
-    JmespathImplementation.execute,
+    baseJmespathImpl.execute,
   );
 
   const regexCaptureImpl: FunctionImplementation = createFunctionImplementation(
     {
       name: 'regexCapture',
       returnType: 'any',
+      allowedCallers: 'rendererOrAgent',
       schema: requireKeys(
         {
           ['value']: dynamicValueParam('The string or array of strings to match against.'),
@@ -190,6 +197,7 @@ export function createMcpFunctionsCatalog(
     {
       name: 'regexReplace',
       returnType: 'any',
+      allowedCallers: 'rendererOrAgent',
       schema: requireKeys(
         {
           ['value']: dynamicValueParam(
@@ -212,6 +220,7 @@ export function createMcpFunctionsCatalog(
     {
       name: 'split',
       returnType: 'any',
+      allowedCallers: 'rendererOrAgent',
       schema: requireKeys(
         {
           ['value']: dynamicValueParam('The string or array of strings to split.'),
@@ -225,10 +234,12 @@ export function createMcpFunctionsCatalog(
     SplitImplementation.execute,
   );
 
+  const baseUpdateDataModelImpl = createUpdateDataModelImplementation(v10DynamicValueStrategy);
   const updateDataModelImpl: FunctionImplementation = createFunctionImplementation(
     {
       name: 'updateDataModel',
       returnType: 'any',
+      allowedCallers: 'rendererOnly',
       schema: requireKeys(
         {
           ['updates']: dynamicValueParam(
@@ -238,7 +249,7 @@ export function createMcpFunctionsCatalog(
         ['updates'],
       ) as unknown as FunctionImplementation['schema'],
     },
-    UpdateDataModelImplementation.execute,
+    baseUpdateDataModelImpl.execute,
   );
 
   return new Catalog<ComponentApi, FunctionImplementation>(

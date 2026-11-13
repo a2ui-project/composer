@@ -591,6 +591,33 @@ describe('Angular Sandbox Connection Spec', () => {
     expect(Boolean(config.useUniversalComponents)).toBe(false);
   });
 
+  it('detects UniversalOnlyComponent by identity even if component name is minified', async () => {
+    const {UniversalOnlyComponent} = await import('@a2ui/angular/v0_9');
+    const minifiedCatalog = {
+      id: 'minified-cat',
+      components: new Map([['text', {tagName: 'a2ui-text', component: UniversalOnlyComponent}]]),
+    };
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideA2uiSandbox([minifiedCatalog]),
+        {provide: A2uiRendererService, useValue: mockRendererService},
+      ],
+    });
+
+    const config = TestBed.inject(A2UI_RENDERER_CONFIG) as {
+      catalogs: unknown[];
+      useUniversalComponents?: boolean;
+    };
+    expect(config.useUniversalComponents).toBe(true);
+  });
+
   it('forwards callAgentFunction on the attached processor to rendererService.callAgentFunction', async () => {
     const mockCallAgentFunction = vi.fn().mockResolvedValue({result: 'ok'});
     const mockRendererService = {
@@ -613,6 +640,7 @@ describe('Angular Sandbox Connection Spec', () => {
 
     const activeProcessor = a2uiBridge.getActiveProcessor();
     expect(activeProcessor?.callAgentFunction).toBeDefined();
+    expect(activeProcessor?.model).toBe(TestBed.inject(A2uiRendererService).surfaceGroup);
 
     const response = await activeProcessor!.callAgentFunction!(
       'test-surface',

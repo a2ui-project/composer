@@ -157,6 +157,20 @@ describe('MCP Bridge & Catalog Functions', () => {
         '42',
       ]);
       expect(captureFn.execute({value: 'no-match', pattern: 'user-(\\d+)'}, mockCtx)).toBeNull();
+      // Verifies advanced RE2 pattern constructs (named groups, case-insensitivity, nested repetition)
+      expect(
+        captureFn.execute(
+          {
+            value: '2026-11-13',
+            pattern: '(?P<year>\\d{4})-(?P<month>\\d{2})-(?P<day>\\d{2})',
+          },
+          mockCtx,
+        ),
+      ).toEqual(['2026', '11', '13']);
+      expect(captureFn.execute({value: 'HELLO world', pattern: '(?i)(hello)'}, mockCtx)).toEqual([
+        'HELLO',
+      ]);
+      expect(captureFn.execute({value: 'aaaaab', pattern: '(a+)+b'}, mockCtx)).toEqual(['aaaaa']);
       expect(
         replaceFn.execute({value: 'hello world', pattern: 'world', replacement: 'MCP'}, mockCtx),
       ).toBe('hello MCP');

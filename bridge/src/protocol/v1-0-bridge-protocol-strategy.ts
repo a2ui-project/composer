@@ -32,15 +32,22 @@ export class V10BridgeProtocolStrategy extends BaseBridgeProtocolStrategy {
   }
 
   /**
-   * Normalizes version: 'v1.0' -> '1.0' for canonical v1.0 message processor.
+   * Normalizes any accepted v1 version string ('v1.0', '1.0', '1.x', 'v1.x') to
+   * canonical '1.0' for the v1.0 message processor.
    *
    * @param messages Incoming layout command messages.
    * @returns Normalized messages array.
    */
   override normalizeIncomingMessages(messages: unknown[]): unknown[] {
     for (const item of messages) {
-      if (item && typeof item === 'object' && (item as {version?: unknown}).version === 'v1.0') {
-        (item as {version: string}).version = '1.0';
+      if (item && typeof item === 'object') {
+        const version = (item as Record<string, unknown>)['version'];
+        if (typeof version === 'string') {
+          const v = version.trim();
+          if (v === 'v1.0' || v === '1.0' || v.startsWith('1.') || v.startsWith('v1.')) {
+            (item as Record<string, unknown>)['version'] = '1.0';
+          }
+        }
       }
     }
     return messages;

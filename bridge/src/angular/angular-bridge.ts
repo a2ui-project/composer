@@ -32,6 +32,7 @@ import {
   A2UI_RENDERER_CONFIG,
   MarkdownRenderer,
   provideMarkdownRenderer,
+  UniversalOnlyComponent,
 } from '@a2ui/angular/v0_9';
 import {
   a2uiBridge,
@@ -78,7 +79,7 @@ function catalogRequiresUniversalComponents(catalog: unknown): boolean {
     for (const entry of record.components.values()) {
       if (entry && typeof entry === 'object' && 'tagName' in entry) {
         const comp = (entry as {component?: {name?: string}}).component;
-        if (!comp || comp.name === 'UniversalOnlyComponent') {
+        if (!comp || comp === UniversalOnlyComponent || comp.name === 'UniversalOnlyComponent') {
           return true;
         }
       }
@@ -173,7 +174,11 @@ export class A2uiSandboxConnection implements OnDestroy {
    *     and the callbacks for component usages, theme changes, and demos.
    */
   constructor(options: AngularSandboxOptions = {}) {
+    const rendererService = this.rendererService;
     const processor: RendererProcessor = {
+      get model() {
+        return rendererService.surfaceGroup;
+      },
       processMessages: payload =>
         (this.rendererService as unknown as RendererProcessor).processMessages(payload),
       callAgentFunction: (surfaceId, call, opts) => {
@@ -270,7 +275,7 @@ export function provideA2uiSandbox(
     {
       provide: A2UI_RENDERER_CONFIG,
       useFactory: () => {
-        const resolvedCatalogs = (catalogs ?? []).map(entry =>
+        const resolvedCatalogs = catalogs.map(entry =>
           typeof entry === 'function' ? inject(entry as Type<unknown>) : entry,
         );
         const useUniversalComponents =
