@@ -35,6 +35,7 @@ import {DataModel} from '../../debug/data-model/data-model';
 import {Events} from '../../debug/events/events';
 import {Errors} from '../../debug/errors/errors';
 import {RawMessages} from '../../debug/raw-messages/raw-messages';
+import {ComponentTree} from '../../debug/component-tree/component-tree';
 import {ComposerPanelId} from './composer-panel-id';
 
 /**
@@ -375,6 +376,9 @@ export class ComposerDockview {
       case ComposerPanelId.RawMessages:
         type = RawMessages;
         break;
+      case ComposerPanelId.ComponentTree:
+        type = ComponentTree;
+        break;
     }
 
     if (!type) {
@@ -501,11 +505,21 @@ export class ComposerDockview {
         minimumHeight: PREVIEW_PANEL_MIN_HEIGHT,
       });
 
-      // 3. Raw JSON editor tabbed within Rendered preview group
+      // 3. Raw JSON editor and Component Tree tabbed within Rendered preview group
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Raw,
         component: ComposerPanelId.Raw,
         title: 'A2UI JSON Editor',
+        position: {
+          direction: 'within',
+          referencePanel: ComposerPanelId.Rendered,
+        },
+        inactive: true,
+      });
+      this.dockviewApi.addPanel({
+        id: ComposerPanelId.ComponentTree,
+        component: ComposerPanelId.ComponentTree,
+        title: 'Component Tree',
         position: {
           direction: 'within',
           referencePanel: ComposerPanelId.Rendered,
