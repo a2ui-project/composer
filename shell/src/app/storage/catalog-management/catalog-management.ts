@@ -379,6 +379,7 @@ export class CatalogManagement {
       : catalogs;
     const mergedComponents: Record<string, CatalogComponentSchema> = {};
     const mergedFunctions: Record<string, Record<string, unknown>> = {};
+    const mergedDefs: Record<string, Record<string, unknown>> = {};
     let firstCatalogId: string | undefined;
 
     for (const cat of ordered) {
@@ -398,6 +399,19 @@ export class CatalogManagement {
           mergedFunctions[key] = schema;
         }
       }
+      const catDefs = (cat as Record<string, unknown>)['$defs'];
+      if (catDefs && typeof catDefs === 'object' && !Array.isArray(catDefs)) {
+        for (const [key, schema] of Object.entries(catDefs as Record<string, unknown>)) {
+          if (
+            !Object.hasOwn(mergedDefs, key) &&
+            schema &&
+            typeof schema === 'object' &&
+            !Array.isArray(schema)
+          ) {
+            mergedDefs[key] = schema as Record<string, unknown>;
+          }
+        }
+      }
     }
 
     const base = primary ?? ordered[0] ?? {};
@@ -406,6 +420,7 @@ export class CatalogManagement {
       catalogId: primary?.catalogId ?? firstCatalogId,
       components: mergedComponents,
       functions: mergedFunctions,
+      ...(Object.keys(mergedDefs).length > 0 ? {$defs: mergedDefs} : {}),
     });
   });
 
@@ -523,10 +538,8 @@ export class CatalogManagement {
             }
 
             let catalogObj: Catalog;
-            let catalogString: string;
             try {
               catalogObj = sanitizeCatalog(primary as Catalog);
-              catalogString = stableStringify(catalogObj);
             } catch (err: unknown) {
               const errorMsg = 'Failed to clone or serialize catalog payload.';
               this._catalogError.set(errorMsg);
@@ -551,6 +564,18 @@ export class CatalogManagement {
               );
             } else {
               catalogsArr = [catalogObj];
+            }
+
+            let catalogString: string;
+            try {
+              catalogString =
+                catalogsArr.length > 1 ? stableStringify(catalogsArr) : stableStringify(catalogObj);
+            } catch (err: unknown) {
+              const errorMsg = 'Failed to clone or serialize catalog payload.';
+              this._catalogError.set(errorMsg);
+              this.logger.error(errorMsg, err);
+              this._isHandshakeInProgress.set(false);
+              return of(null);
             }
 
             const orderedCatalogs: Catalog[] = [

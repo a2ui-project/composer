@@ -649,6 +649,31 @@ describe('CrossFrameValidator', () => {
       ).toBe(true);
     });
 
+    it('accepts GuestFrame NO_AGENT_CONNECTED rejection payload using agentFunctionResponse', () => {
+      const payload = [
+        {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId: 'call-1',
+            error: {
+              code: 'NO_AGENT_CONNECTED',
+              message: 'No agent is connected to handle agent function calls.',
+            },
+          },
+        },
+      ];
+      expect(
+        CrossFrameValidator.validateOutgoingMessage(
+          {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(true);
+    });
+
     it('rejects RENDER_A2UI when an item lacks any update property', () => {
       expect(
         CrossFrameValidator.validateOutgoingMessage(

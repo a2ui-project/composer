@@ -1230,5 +1230,48 @@ describe('StateSync Autosave Draft Integrations', () => {
 
       expect(service.activeDraft()).toBe(CAR_BOOKING);
     });
+
+    it('returns starter draft for alternate v0.9 basic catalog URI', () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+      });
+      catalogManagementMock.activeProtocolVersion.set('v0.9');
+      TestBed.tick();
+
+      expect(service.activeDraft()).toBe(CAR_BOOKING);
+    });
+
+    it('does not misroute a v0.9 layout containing "1.0" in text property to v10 sanitizeLayout', () => {
+      catalogManagementMock.activeProtocolVersion.set('v0.9');
+      const v09LayoutWithVersionText = JSON.stringify([
+        {
+          createSurface: {
+            surfaceId: 'main',
+            catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+          },
+        },
+        {
+          updateComponents: {
+            surfaceId: 'main',
+            components: [
+              {
+                id: 'txt1',
+                component: 'Text',
+                text: 'Version 1.0 is officially released!',
+              },
+            ],
+          },
+        },
+      ]);
+
+      service.updateDraft(v09LayoutWithVersionText);
+      vi.advanceTimersByTime(300);
+
+      const history = chatStateMock.chatHistory();
+      const lastMessage = history[history.length - 1];
+      expect(lastMessage).toBeDefined();
+      expect(lastMessage.content).toContain('Version 1.0 is officially released!');
+      expect(lastMessage.content).toContain('"component":"Text"');
+    });
   });
 });

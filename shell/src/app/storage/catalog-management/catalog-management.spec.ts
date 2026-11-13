@@ -28,6 +28,7 @@ import {Subject} from 'rxjs';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {Catalog} from '../models/catalog-storage.model';
+import {stableStringify} from '../stable-stringify/stable-stringify';
 
 describe('CatalogManagement', () => {
   let service: CatalogManagement;
@@ -1104,6 +1105,132 @@ describe('CatalogManagement', () => {
       );
 
       warnSpy.mockRestore();
+    });
+
+    it('merges $defs primary-first across all catalogs in activeCatalogs without overwriting primary $defs keys', async () => {
+      const primaryCat = {
+        $id: 'https://example.com/primary.json',
+        components: {Btn: {type: 'object'}},
+        $defs: {
+          SharedType: {type: 'string', description: 'Primary SharedType'},
+          PrimaryOnlyType: {type: 'number'},
+        },
+      };
+      const secondaryCat = {
+        $id: 'https://example.com/secondary.json',
+        components: {Card: {type: 'object'}},
+        $defs: {
+          SharedType: {type: 'boolean', description: 'Secondary Colliding SharedType'},
+          SecondaryOnlyType: {type: 'array'},
+        },
+      };
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalog: primaryCat,
+          catalogs: [primaryCat, secondaryCat],
+        },
+        timestamp: 4030,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      const merged = service.mergedActiveCatalog();
+      expect(merged).not.toBeNull();
+      const defs = (merged as Record<string, unknown>)['$defs'] as Record<string, unknown>;
+      expect(defs).toBeDefined();
+      expect((defs['SharedType'] as Record<string, unknown>)['description']).toBe(
+        'Primary SharedType',
+      );
+      expect(defs['PrimaryOnlyType']).toBeDefined();
+      expect(defs['SecondaryOnlyType']).toBeDefined();
+    });
+
+    it('produces a catalogString and checksumHash delta when only a secondary catalog changes while keeping single-catalog serialization identical', async () => {
+      vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (_algo, data) => {
+        const input = new Uint8Array(data as ArrayBuffer);
+        const out = new Uint8Array(32);
+        for (let i = 0; i < input.length; i++) {
+          out[i % 32] = (out[i % 32] * 31 + input[i]) % 256;
+        }
+        return out.buffer;
+      });
+
+      const singleCat = {
+        catalogId: 'cat-single',
+        title: 'Single',
+        components: {Btn: {type: 'object'}},
+      };
+
+      // 1. Single catalog emission
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: singleCat,
+        timestamp: 4040,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      const singleCatalogString = service.lastCatalogString();
+      const singleHash = service.lastChecksumHash();
+      expect(singleCatalogString).toBe(stableStringify(singleCat));
+      expect(singleHash).toBeTruthy();
+
+      // 2. Multi-catalog emission (primary + secondary v1)
+      const primaryCat = {
+        catalogId: 'cat-multi-primary',
+        title: 'Primary',
+        components: {Btn: {type: 'object'}},
+      };
+      const secondaryCatV1 = {
+        catalogId: 'cat-multi-secondary',
+        title: 'Secondary v1',
+        components: {Card: {type: 'object'}},
+      };
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalog: primaryCat,
+          catalogs: [primaryCat, secondaryCatV1],
+        },
+        timestamp: 4041,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      const multiV1String = service.lastCatalogString();
+      const multiV1Hash = service.lastChecksumHash();
+      expect(multiV1String).toBe(stableStringify([primaryCat, secondaryCatV1]));
+
+      // 3. Multi-catalog emission with change ONLY in secondary catalog
+      const secondaryCatV2 = {
+        catalogId: 'cat-multi-secondary',
+        title: 'Secondary v2 Modified',
+        components: {Card: {type: 'object', description: 'Updated'}},
+      };
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalog: primaryCat,
+          catalogs: [primaryCat, secondaryCatV2],
+        },
+        timestamp: 4042,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      const multiV2String = service.lastCatalogString();
+      const multiV2Hash = service.lastChecksumHash();
+      expect(multiV2String).toBe(stableStringify([primaryCat, secondaryCatV2]));
+      expect(multiV2String).not.toBe(multiV1String);
+      expect(multiV2Hash).not.toBe(multiV1Hash);
     });
   });
 });

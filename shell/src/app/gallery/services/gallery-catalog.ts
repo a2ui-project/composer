@@ -30,6 +30,9 @@ import {
 import {V09GalleryStrategy} from '../protocol/v0-9-gallery-strategy';
 import {V10GalleryStrategy} from '../protocol/v1-0-gallery-strategy';
 
+const defaultV09GalleryStrategy = new V09GalleryStrategy();
+const defaultV10GalleryStrategy = new V10GalleryStrategy();
+
 /**
  * Represents components grouped under a specific category name.
  */
@@ -169,7 +172,7 @@ export class GalleryCatalog {
    */
   readonly galleryStrategy = computed<GalleryProtocolStrategy>(() => {
     const version = this.catalogManagement.activeProtocolVersion();
-    return version === 'v1.0' ? new V10GalleryStrategy() : new V09GalleryStrategy();
+    return version === 'v1.0' ? defaultV10GalleryStrategy : defaultV09GalleryStrategy;
   });
 
   /**

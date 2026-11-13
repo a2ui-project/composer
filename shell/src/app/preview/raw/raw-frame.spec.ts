@@ -703,6 +703,7 @@ describe('RawFrame JSON Source Editor View', () => {
     expect(sendRenderA2UIMock).not.toHaveBeenCalled();
 
     component.TEST_ONLY.layoutJson().set('   ');
+    stateSyncMock.activeDraftSignal.set('   ');
     mockActiveCatalog.set({title: 'Sample Catalog'});
     mockHasReceivedCatalogResponse.set(true);
     fixture.detectChanges();
@@ -1601,6 +1602,29 @@ describe('RawFrame JSON Source Editor View', () => {
       mockActiveProtocolVersion.set('v1.0');
       fixture.detectChanges();
       expect(sendRenderA2UIMock).toHaveBeenCalledWith(validV10);
+    });
+
+    it('skips dispatching stale layoutJson when layoutJson !== stateSync.activeDraft() during catalog/protocol version changes', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      mockActiveProtocolVersion.set('v0.9');
+
+      const {fixture} = await setup(false);
+      sendRenderA2UIMock.mockClear();
+      errorLoggerMock.error.mockClear();
+
+      const v10Draft = JSON.stringify([
+        {version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'c1', components: []}},
+      ]);
+      stateSyncMock.activeDraftSignal.set(v10Draft);
+
+      mockActiveProtocolVersion.set('v1.0');
+      fixture.detectChanges();
+
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+      expect(errorLoggerMock.error).not.toHaveBeenCalledWith(
+        expect.objectContaining({code: 'PROTOCOL_VERSION_MISMATCH'}),
+      );
     });
   });
 });

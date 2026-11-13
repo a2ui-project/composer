@@ -16,6 +16,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach, type Mock} from 'vitest';
 import {V10WireValidator} from './v1-0-wire-validator';
+import {hasPrototypePollution} from './wire-version-validator';
 
 describe('V10WireValidator', () => {
   let validator: V10WireValidator;
@@ -581,6 +582,159 @@ describe('V10WireValidator', () => {
         },
       };
       expect(validator.validateRenderItem(item, undefined, mockLogger)).toBe(true);
+    });
+
+    it('accepts v1.0 createSurface without catalogId', () => {
+      const item = {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 'surf-1',
+        },
+      };
+      expect(validator.validateRenderItem(item, undefined, mockLogger)).toBe(true);
+    });
+
+    it('rejects v1.0 createSurface with empty string catalogId', () => {
+      const item = {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 'surf-1',
+          catalogId: '   ',
+        },
+      };
+      const errors: string[] = [];
+      expect(validator.validateRenderItem(item, errors, mockLogger)).toBe(false);
+      expect(errors).toContain(
+        'Malformed v1.0 createSurface: catalogId must be a non-empty string when provided.',
+      );
+    });
+
+    it('accepts v1.0 callRendererFunction without surfaceId', () => {
+      const item = {
+        version: '1.0',
+        callRendererFunction: {
+          functionCallId: 'fn-123',
+          call: 'myFunc',
+        },
+      };
+      expect(validator.validateRenderItem(item, undefined, mockLogger)).toBe(true);
+    });
+
+    it('rejects v1.0 callRendererFunction with empty string surfaceId', () => {
+      const item = {
+        version: '1.0',
+        callRendererFunction: {
+          surfaceId: '  ',
+          functionCallId: 'fn-123',
+          call: 'myFunc',
+        },
+      };
+      const errors: string[] = [];
+      expect(validator.validateRenderItem(item, errors, mockLogger)).toBe(false);
+      expect(errors).toContain(
+        'Malformed v1.0 callRendererFunction: surfaceId must be a non-empty string when provided.',
+      );
+    });
+
+    it('accepts v1.0 callRendererFunction with callFunction object specifying @call or call', () => {
+      const itemAtCall = {
+        version: '1.0',
+        callRendererFunction: {
+          functionCallId: 'fn-123',
+          callFunction: {'@call': 'myFunc', '@args': {x: 1}},
+        },
+      };
+      expect(validator.validateRenderItem(itemAtCall, undefined, mockLogger)).toBe(true);
+
+      const itemCall = {
+        version: '1.0',
+        callRendererFunction: {
+          functionCallId: 'fn-123',
+          callFunction: {call: 'myFunc', args: {x: 1}},
+        },
+      };
+      expect(validator.validateRenderItem(itemCall, undefined, mockLogger)).toBe(true);
+    });
+
+    it('rejects v1.0 callRendererFunction with array or empty callFunction', () => {
+      const itemArray = {
+        version: '1.0',
+        callRendererFunction: {
+          functionCallId: 'fn-123',
+          callFunction: [],
+        },
+      };
+      const errorsArray: string[] = [];
+      expect(validator.validateRenderItem(itemArray, errorsArray, mockLogger)).toBe(false);
+      expect(errorsArray).toContain(
+        'Malformed v1.0 callRendererFunction: must specify function details via call or callFunction.',
+      );
+
+      const itemEmpty = {
+        version: '1.0',
+        callRendererFunction: {
+          functionCallId: 'fn-123',
+          callFunction: {},
+        },
+      };
+      const errorsEmpty: string[] = [];
+      expect(validator.validateRenderItem(itemEmpty, errorsEmpty, mockLogger)).toBe(false);
+      expect(errorsEmpty).toContain(
+        'Malformed v1.0 callRendererFunction: must specify function details via call or callFunction.',
+      );
+    });
+
+    it('rejects v1.0 updateComponents with empty components array', () => {
+      const item = {
+        version: '1.0',
+        updateComponents: {
+          surfaceId: 'surf-1',
+          components: [],
+        },
+      };
+      const errors: string[] = [];
+      expect(validator.validateRenderItem(item, errors, mockLogger)).toBe(false);
+      expect(errors).toContain(
+        'Malformed v1.0 updateComponents: components must be an Array with at least one element.',
+      );
+    });
+
+    it('accepts valid v1.0 agentFunctionResponse with error', () => {
+      const item = {
+        version: '1.0',
+        agentFunctionResponse: {
+          functionCallId: 'call-1',
+          error: {
+            code: 'NO_AGENT_CONNECTED',
+            message: 'No agent is connected to handle agent function calls.',
+          },
+        },
+      };
+      expect(validator.validateRenderItem(item, undefined, mockLogger)).toBe(true);
+    });
+  });
+
+  describe('hasPrototypePollution', () => {
+    it('allows nesting up to depth 64', () => {
+      let nested: Record<string, unknown> = {val: 1};
+      for (let i = 0; i < 60; i++) {
+        nested = {nested};
+      }
+      expect(hasPrototypePollution(nested)).toBe(false);
+    });
+
+    it('fails closed when maxDepth is exceeded', () => {
+      let nested: Record<string, unknown> = {val: 1};
+      for (let i = 0; i < 70; i++) {
+        nested = {nested};
+      }
+      expect(hasPrototypePollution(nested)).toBe(true);
+    });
+
+    it('returns true when maxDepth <= 0 on object', () => {
+      expect(hasPrototypePollution({a: 1}, 0)).toBe(true);
+      expect(hasPrototypePollution({a: 1}, -1)).toBe(true);
+      expect(hasPrototypePollution('primitive', 0)).toBe(false);
     });
   });
 });

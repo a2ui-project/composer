@@ -70,9 +70,6 @@ import {GalleryLauncher} from './gallery-launcher';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
 import {MonacoEditor} from '../shared/monaco-editor/monaco-editor';
 import {validatePayloadProtocolVersion} from '../preview/protocol-version-mismatch';
-import {type GalleryProtocolStrategy} from './protocol/gallery-protocol-strategy';
-import {V09GalleryStrategy} from './protocol/v0-9-gallery-strategy';
-import {V10GalleryStrategy} from './protocol/v1-0-gallery-strategy';
 
 type PropertyPath = ReadonlyArray<string | number>;
 
@@ -152,10 +149,7 @@ export class Gallery implements OnInit, OnDestroy {
   protected readonly rendererUrl: Signal<string | null> = this.startupResolution.resolvedUrl;
   readonly renderedFrame = viewChild(RenderedFrame);
 
-  protected readonly galleryStrategy = computed<GalleryProtocolStrategy>(() => {
-    const version = this.catalogManagement.activeProtocolVersion();
-    return version === 'v1.0' ? new V10GalleryStrategy() : new V09GalleryStrategy();
-  });
+  protected readonly galleryStrategy = this.catalogService.galleryStrategy;
 
   protected selectPlaygroundTab(tab: 'preview' | 'json'): void {
     this.activePlaygroundTab.set(tab);

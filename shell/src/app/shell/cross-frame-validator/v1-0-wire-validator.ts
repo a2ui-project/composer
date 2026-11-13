@@ -21,6 +21,10 @@ import {
   type A2uiWireVersionValidator,
 } from './wire-version-validator';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 /**
  * Valid action payload structure for v1.0 SEND_TO_SERVER messages.
  */
@@ -478,12 +482,13 @@ export class V10WireValidator implements A2uiWireVersionValidator {
       'deleteSurface',
       'callRendererFunction',
       'callAgentFunctionResponse',
+      'agentFunctionResponse',
     ];
     const presentKeys = validKeys.filter(key => key in itemObj && itemObj[key] !== undefined);
 
     if (presentKeys.length === 0) {
       recordError(
-        'Malformed v1.0 RENDER_A2UI item: item must contain an operation property (createSurface, updateComponents, updateDataModel, deleteSurface, callRendererFunction, or callAgentFunctionResponse).',
+        'Malformed v1.0 RENDER_A2UI item: item must contain an operation property (createSurface, updateComponents, updateDataModel, deleteSurface, callRendererFunction, callAgentFunctionResponse, or agentFunctionResponse).',
         errors,
         logger,
       );
@@ -521,9 +526,12 @@ export class V10WireValidator implements A2uiWireVersionValidator {
         );
         return false;
       }
-      if (typeof opRecord['catalogId'] !== 'string' || !opRecord['catalogId'].trim()) {
+      if (
+        opRecord['catalogId'] !== undefined &&
+        (typeof opRecord['catalogId'] !== 'string' || !opRecord['catalogId'].trim())
+      ) {
         recordError(
-          'Malformed v1.0 createSurface: must contain a non-empty string catalogId.',
+          'Malformed v1.0 createSurface: catalogId must be a non-empty string when provided.',
           errors,
           logger,
         );
@@ -541,9 +549,12 @@ export class V10WireValidator implements A2uiWireVersionValidator {
     }
 
     if (opType === 'callRendererFunction') {
-      if (typeof opRecord['surfaceId'] !== 'string' || !opRecord['surfaceId'].trim()) {
+      if (
+        opRecord['surfaceId'] !== undefined &&
+        (typeof opRecord['surfaceId'] !== 'string' || !opRecord['surfaceId'].trim())
+      ) {
         recordError(
-          'Malformed v1.0 callRendererFunction: must contain a non-empty string surfaceId.',
+          'Malformed v1.0 callRendererFunction: surfaceId must be a non-empty string when provided.',
           errors,
           logger,
         );
@@ -557,9 +568,13 @@ export class V10WireValidator implements A2uiWireVersionValidator {
         );
         return false;
       }
+      const cf = opRecord['callFunction'];
+      const hasValidCallFunction =
+        isRecord(cf) &&
+        ((typeof cf['@call'] === 'string' && !!cf['@call'].trim()) ||
+          (typeof cf['call'] === 'string' && !!cf['call'].trim()));
       const hasCall =
-        (typeof opRecord['call'] === 'string' && !!opRecord['call'].trim()) ||
-        (opRecord['callFunction'] && typeof opRecord['callFunction'] === 'object');
+        (typeof opRecord['call'] === 'string' && !!opRecord['call'].trim()) || hasValidCallFunction;
       if (!hasCall) {
         recordError(
           'Malformed v1.0 callRendererFunction: must specify function details via call or callFunction.',
@@ -571,28 +586,34 @@ export class V10WireValidator implements A2uiWireVersionValidator {
       return true;
     }
 
-    if (opType === 'callAgentFunctionResponse') {
-      if (typeof opRecord['functionCallId'] !== 'string' || !opRecord['functionCallId'].trim()) {
+    if (opType === 'callAgentFunctionResponse' || opType === 'agentFunctionResponse') {
+      const responseRecord = (itemObj['agentFunctionResponse'] ??
+        itemObj['callAgentFunctionResponse'] ??
+        opRecord) as Record<string, unknown>;
+      if (
+        typeof responseRecord['functionCallId'] !== 'string' ||
+        !responseRecord['functionCallId'].trim()
+      ) {
         recordError(
-          'Malformed v1.0 callAgentFunctionResponse: must contain a non-empty string functionCallId.',
+          `Malformed v1.0 ${opType}: must contain a non-empty string functionCallId.`,
           errors,
           logger,
         );
         return false;
       }
-      if ('result' in opRecord) {
+      if ('result' in responseRecord) {
         recordError(
-          'Malformed v1.0 callAgentFunctionResponse: legacy result field is not permitted in v1.0 (use value or error).',
+          `Malformed v1.0 ${opType}: legacy result field is not permitted in v1.0 (use value or error).`,
           errors,
           logger,
         );
         return false;
       }
-      const hasValue = opRecord['value'] !== undefined;
-      const hasErr = opRecord['error'] !== undefined;
+      const hasValue = responseRecord['value'] !== undefined;
+      const hasErr = responseRecord['error'] !== undefined;
       if ((hasValue && hasErr) || (!hasValue && !hasErr)) {
         recordError(
-          'Malformed v1.0 callAgentFunctionResponse: must specify exactly one of value or error.',
+          `Malformed v1.0 ${opType}: must specify exactly one of value or error.`,
           errors,
           logger,
         );
@@ -600,15 +621,11 @@ export class V10WireValidator implements A2uiWireVersionValidator {
       }
       if (
         hasErr &&
-        (!opRecord['error'] ||
-          typeof opRecord['error'] !== 'object' ||
-          Array.isArray(opRecord['error']))
+        (!responseRecord['error'] ||
+          typeof responseRecord['error'] !== 'object' ||
+          Array.isArray(responseRecord['error']))
       ) {
-        recordError(
-          'Malformed v1.0 callAgentFunctionResponse: error must be an object.',
-          errors,
-          logger,
-        );
+        recordError(`Malformed v1.0 ${opType}: error must be an object.`, errors, logger);
         return false;
       }
       return true;
@@ -662,9 +679,9 @@ export class V10WireValidator implements A2uiWireVersionValidator {
         );
         return false;
       }
-      if (!Array.isArray(opRecord['components'])) {
+      if (!Array.isArray(opRecord['components']) || opRecord['components'].length === 0) {
         recordError(
-          'Malformed v1.0 updateComponents: components must be an Array.',
+          'Malformed v1.0 updateComponents: components must be an Array with at least one element.',
           errors,
           logger,
         );

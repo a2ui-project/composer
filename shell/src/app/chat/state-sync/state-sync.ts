@@ -30,10 +30,11 @@ import {
 import {V09DraftStrategy} from '../chat-service/v0-9-draft-strategy';
 import {V10DraftStrategy} from '../chat-service/v1-0-draft-strategy';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import type {A2uiProtocolVersion} from 'a2ui-bridge';
+import {detectProtocolVersion, type A2uiProtocolVersion} from 'a2ui-bridge';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {getCatalogId} from '../../storage/models/catalog-storage.model';
+import {tryParseJsonArray} from '../../utils/json';
 
 /**
  * Manages in-memory volatile autosave draft layouts and bidirectionally
@@ -319,7 +320,7 @@ export class StateSync {
     if (
       catalogId === BASIC_CATALOG_ID_V0_9 ||
       catalogId === BASIC_CATALOG_ID_V1_0 ||
-      catalogId === 'https://a2ui.org/specification/v0_9/basic_catalog.json'
+      catalogId === 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json'
     ) {
       return strategy.getStarterDraft(catalogId);
     }
@@ -395,7 +396,12 @@ export class StateSync {
     if (!trimmed) {
       return '';
     }
-    if (trimmed.includes('"v1.0"') || trimmed.includes('"1.0"')) {
+    const parsed = tryParseJsonArray(trimmed);
+    const isV10 = parsed.success
+      ? detectProtocolVersion(parsed.data) === 'v1.0'
+      : /"version"\s*:\s*"v?1\.0"/i.test(trimmed);
+
+    if (isV10) {
       const sanitized = this.v10Strategy.sanitizeLayout(trimmed);
       if (!sanitized) {
         this.logger.warn(

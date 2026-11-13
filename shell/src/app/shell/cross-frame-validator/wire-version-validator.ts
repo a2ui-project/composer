@@ -62,9 +62,12 @@ export interface A2uiWireVersionValidator {
  * @param maxDepth Maximum recursion depth to prevent stack overflows.
  * @returns `true` if prototype pollution is detected, `false` otherwise.
  */
-export function hasPrototypePollution(val: unknown, maxDepth = 10): boolean {
-  if (!val || typeof val !== 'object' || maxDepth <= 0) {
+export function hasPrototypePollution(val: unknown, maxDepth = 64): boolean {
+  if (!val || typeof val !== 'object') {
     return false;
+  }
+  if (maxDepth <= 0) {
+    return true;
   }
   if (Array.isArray(val)) {
     for (const item of val) {

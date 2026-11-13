@@ -21,7 +21,11 @@ import {Subject} from 'rxjs';
 import {PreviewBridgeMessageType, RenderA2uiItem, ThemePreference} from 'a2ui-bridge';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
-import {HostCommunication, MessageEnvelope} from '../shell/host-communication/host-communication';
+import {
+  HostCommunication,
+  MessageEnvelope,
+  SendToServerEnvelope,
+} from '../shell/host-communication/host-communication';
 import {
   AppConfigProvider,
   A2aBackendMode,
@@ -43,11 +47,23 @@ describe('A2aChatView', () => {
   let mockActiveCatalogSignal: WritableSignal<Catalog | null>;
   let mockConfigProvider: Partial<AppConfigProvider>;
   let mockMessageStream$: Subject<MessageEnvelope | null>;
+  let mockSendToServer$: Subject<SendToServerEnvelope>;
 
   beforeEach(async () => {
     mockAgentUrlSignal = signal('http://localhost:8000');
     mockActiveCatalogSignal = signal<Catalog | null>(null);
     mockMessageStream$ = new Subject<MessageEnvelope | null>();
+    mockSendToServer$ = new Subject<SendToServerEnvelope>();
+    mockMessageStream$.subscribe(envelope => {
+      if (envelope?.type === PreviewBridgeMessageType.SEND_TO_SERVER) {
+        mockSendToServer$.next({
+          payload: envelope.payload as SendToServerEnvelope['payload'],
+          sourceWindow: null,
+          origin: envelope.origin ?? 'http://localhost:3000',
+          timestamp: envelope.timestamp ?? Date.now(),
+        });
+      }
+    });
     mockA2aTransport = {
       getAgentCard: vi.fn().mockResolvedValue({
         name: 'Mock Test Agent',
@@ -105,6 +121,7 @@ describe('A2aChatView', () => {
             sendRenderA2UI: vi.fn(),
             messageStream: signal(null),
             messageStream$: mockMessageStream$.asObservable(),
+            sendToServer$: mockSendToServer$.asObservable(),
           },
         },
         {
