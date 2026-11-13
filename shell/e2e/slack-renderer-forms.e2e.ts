@@ -210,7 +210,7 @@ test.describe('Slack native booking form', () => {
     if (!update || !('updateComponents' in update)) {
       throw new Error('Booking components missing');
     }
-    const root = update.updateComponents.components.find(component => component.id === 'root');
+    const root = update.updateComponents.components.find(component => component['id'] === 'root');
     if (!root || !Array.isArray(root['children'])) {
       throw new Error('Booking root missing');
     }

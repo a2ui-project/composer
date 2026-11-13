@@ -140,9 +140,11 @@ describe('AppRoot Lit Element', () => {
     );
     const surfaceEl = element.shadowRoot?.querySelector('a2ui-surface');
     await (surfaceEl as unknown as {updateComplete: Promise<void>})?.updateComplete;
-    const textEl = surfaceEl?.shadowRoot?.querySelector('a2ui-basic-text');
+    const textEl =
+      surfaceEl?.querySelector('a2ui-basic-text') ??
+      surfaceEl?.shadowRoot?.querySelector('a2ui-basic-text');
     await (textEl as unknown as {updateComplete: Promise<void>})?.updateComplete;
-    expect(textEl?.shadowRoot?.innerHTML).toContain('<strong>bold text</strong>');
+    expect(textEl?.innerHTML).toContain('<strong>bold text</strong>');
   });
 
   it('slots an empty loading element when surface has no root component', async () => {

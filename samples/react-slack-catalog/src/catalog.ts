@@ -226,14 +226,14 @@ const buttonProps = ButtonApi.schema.shape;
 /**
  * The basic catalog's Button, limited to what a Slack button can do: it requires
  * an action, which the preview runs when the button is clicked; it takes no
- * checks (`checks`, `isValid` and `validationErrors`), the rules that disable a
- * basic catalog Button, since a Slack button can't be disabled; and its variant
- * is `default` or `primary`, the two styles Slack draws.
+ * `checks`, the rules that disable a basic catalog Button, since a Slack
+ * button can't be disabled; and its variant is `default` or `primary`, the two
+ * styles Slack draws.
  */
 const SlackButtonApi: ComponentApi = {
   name: ButtonApi.name,
   schema: ButtonApi.schema
-    .omit({checks: true, isValid: true, validationErrors: true})
+    .omit({checks: true})
     .extend({
       variant: buttonProps.variant
         .unwrap()
@@ -244,7 +244,6 @@ const SlackButtonApi: ComponentApi = {
           "A hint for the button style. 'primary' marks the main call to action and becomes Slack's primary button; 'default' is a plain Slack button.",
         )
         .optional(),
-      action: buttonProps.action.unwrap(),
     })
     .strict()
     .describe(
@@ -385,14 +384,23 @@ function publishedSchemaFor(jsonSchema: unknown, def: unknown): unknown {
   return jsonSchema;
 }
 
-function processRefs(node: unknown): void {
+function processRefs(node: unknown, localDefs?: Record<string, unknown>): void {
   if (typeof node !== 'object' || node === null) {
     return;
   }
 
   const record = node as Record<string, unknown>;
   if (typeof record.description === 'string' && record.description.startsWith('REF:')) {
-    const [ref, description = ''] = record.description.substring(4).split('|');
+    const [rawRef, description = ''] = record.description.substring(4).split('|');
+    let ref = rawRef;
+    if (rawRef.startsWith('#/$defs/')) {
+      const defKey = rawRef.slice('#/$defs/'.length);
+      // The Slack catalog defines no local $defs, so standard A2UI $defs
+      // resolve against common_types.json unless present in local $defs.
+      if (!localDefs || !(defKey in localDefs)) {
+        ref = `common_types.json${rawRef}`;
+      }
+    }
     for (const key of Object.keys(record)) {
       delete record[key];
     }
@@ -404,17 +412,17 @@ function processRefs(node: unknown): void {
   }
 
   for (const child of Array.isArray(node) ? node : Object.values(record)) {
-    processRefs(child);
+    processRefs(child, localDefs);
   }
 }
 
-function schemaJsonFor(schema: unknown): JsonSchemaObject {
+function schemaJsonFor(schema: unknown, localDefs?: Record<string, unknown>): JsonSchemaObject {
   const jsonSchema = toJsonSchema(schema, {
     target: 'jsonSchema2019-09',
     $refStrategy: 'none',
     postProcess: publishedSchemaFor,
   }) as JsonSchemaObject;
-  processRefs(jsonSchema);
+  processRefs(jsonSchema, localDefs);
   return jsonSchema;
 }
 
@@ -444,7 +452,7 @@ function functionSchemaFor(
 ): NonNullable<SlackCatalogJson['functions']>[number] {
   return {
     name: api.name,
-    description: api.schema.description,
+    description: api.description ?? api.schema.description,
     returnType: api.returnType,
     parameters: schemaJsonFor(api.schema),
   };

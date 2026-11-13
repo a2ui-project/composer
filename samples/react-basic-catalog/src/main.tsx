@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-import '@a2ui/react/v0_9/styles.css';
+import {injectBasicCatalogStyles} from '@a2ui/web_core/v0_9/basic_catalog';
 import '../../shared/basic-catalog.css';
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {App} from './App';
+
+injectBasicCatalogStyles();
 
 const rootElement = document.getElementById('app-root');
 if (rootElement) {

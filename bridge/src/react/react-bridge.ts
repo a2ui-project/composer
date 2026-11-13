@@ -111,7 +111,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
         }
       },
       onSurfaceReady: surfaceId => {
-        const nextSurface = processor.model.getSurface(surfaceId);
+        const nextSurface = processor.model.getSurface(surfaceId) as SurfaceModel<C> | undefined;
         setSurface(nextSurface);
         // Synchronously align hasRoot with surface to prevent a single-frame "[Loading root...]" flash before the [surface] effect runs.
         setHasRoot(Boolean(nextSurface?.componentsModel.get('root')));

@@ -507,8 +507,7 @@ describe('createSlackPreviewSession', () => {
             functionCall: {
               call: 'formatString',
               args: {
-                value: 'Ready for ${name}',
-                name: 'Slack',
+                value: 'Ready for Slack',
               },
               returnType: 'string',
             },
