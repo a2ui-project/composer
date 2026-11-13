@@ -237,7 +237,7 @@ describe('attachCatalogSchema', () => {
       },
     };
 
-    attachCatalogSchema(target, {});
+    attachCatalogSchema(target);
     expect(dynamicCount).toBe(0);
 
     const firstRead = target.catalogSchema as {title: string};
@@ -264,12 +264,12 @@ describe('attachCatalogSchema', () => {
       enumerable: true,
     });
 
-    attachCatalogSchema(target, {});
+    attachCatalogSchema(target);
     const schema = target.catalogSchema as {title: string};
     expect(schema.title).toBe('Instance Title');
   });
 
-  it('replaces component examples cleanly and avoids stacking wrapper getters when called twice on the same instance', () => {
+  it('avoids stacking wrapper getters when called twice on the same instance', () => {
     let dynamicCount = 0;
     const target = {
       components: new Map(),
@@ -282,18 +282,18 @@ describe('attachCatalogSchema', () => {
       },
     };
 
-    attachCatalogSchema(target, {Button: {component: 'Button'}} as never);
-    attachCatalogSchema(target, {Card: {component: 'Card'}} as never);
+    attachCatalogSchema(target);
+    attachCatalogSchema(target);
     expect(dynamicCount).toBe(0);
 
-    const schema = target.catalogSchema as {
+    const schema = target.catalogSchema as unknown as {
       title: string;
-      components: Record<string, {examples?: unknown[]}>;
+      description: string;
+      components: Record<string, unknown>;
     };
     expect(schema.title).toBe('Dynamic Title 1');
+    expect(schema.description).toBe('Unified catalog of basic A2UI components and functions.');
     expect(dynamicCount).toBe(1);
-    expect(schema.components['Card'].examples).toBeDefined();
-    expect(schema.components['Button'].examples).toBeUndefined();
   });
 
   it('gracefully handles frozen catalog and component objects without throwing', () => {
@@ -304,7 +304,7 @@ describe('attachCatalogSchema', () => {
     });
 
     expect(() => {
-      attachCatalogSchema(frozenCatalog, {Text: {component: 'Text'}} as never);
+      attachCatalogSchema(frozenCatalog);
     }).not.toThrow();
 
     const nonConfigurableCatalog = {};
@@ -314,7 +314,7 @@ describe('attachCatalogSchema', () => {
       writable: false,
     });
     expect(() => {
-      attachCatalogSchema(nonConfigurableCatalog, {});
+      attachCatalogSchema(nonConfigurableCatalog);
     }).not.toThrow();
   });
 });

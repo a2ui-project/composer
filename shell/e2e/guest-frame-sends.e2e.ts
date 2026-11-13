@@ -116,14 +116,11 @@ function formPayload(): unknown[] {
           },
           {
             id: 'canvas',
-            component: {
-              Canvas: {
-                cardTitle: 'Form details',
-                cardIcon: 'dashboard',
-                autoOpen: false,
-                children: ['canvas_text'],
-              },
-            },
+            component: 'Canvas',
+            cardTitle: 'Form details',
+            cardIcon: 'dashboard',
+            autoOpen: false,
+            children: ['canvas_text'],
           },
           {id: 'canvas_text', component: 'Text', text: '### CANVAS FORM DETAILS'},
         ],

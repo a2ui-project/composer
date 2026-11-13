@@ -16,8 +16,8 @@
 
 import {expect} from 'vitest';
 import {CreateSurfaceMessageSchema} from '@a2ui/web_core/v1_0';
-import {BASIC_COMPONENTS} from '@a2ui/web_core/catalogs/basic/v1';
 import type {ComponentUsages} from 'a2ui-bridge';
+import {validateV10Components} from './validate-components.js';
 
 /**
  * Asserts that all component usage examples in a component usages dictionary
@@ -29,22 +29,10 @@ import type {ComponentUsages} from 'a2ui-bridge';
 export function assertValidV10ComponentUsages(
   usages: ComponentUsages | ReadonlyArray<Record<string, unknown>>,
 ): void {
-  const basicComponentsMap = new Map(BASIC_COMPONENTS.map(c => [c.name, c]));
-
   if (Array.isArray(usages)) {
-    for (const compDef of usages) {
-      const compName = (compDef as Record<string, unknown>)['component'] as string;
-      const compId = (compDef as Record<string, unknown>)['id'] as string;
-      const compApi = basicComponentsMap.get(compName);
-      expect(compApi, `Component "${compName}" is not a valid v1.0 Basic component`).toBeDefined();
-
-      const {id: _id, component: _component, ...props} = compDef as Record<string, unknown>;
-      const compResult = compApi!.schema.safeParse(props);
-      expect(
-        compResult.success,
-        `Component "${compName}" (id: "${compId}") failed schema validation: ${compResult.error?.message}`,
-      ).toBe(true);
-    }
+    validateV10Components(usages as Array<Record<string, unknown>>, 'components', {
+      requireRoot: false,
+    });
     return;
   }
 
@@ -68,21 +56,6 @@ export function assertValidV10ComponentUsages(
       `Usage envelope failed CreateSurfaceMessageSchema for ${componentName}: ${messageResult.error?.message}`,
     ).toBe(true);
 
-    for (const compDef of usageEntry.usage) {
-      const compName = (compDef as Record<string, unknown>)['component'] as string;
-      const compId = (compDef as Record<string, unknown>)['id'] as string;
-      const compApi = basicComponentsMap.get(compName);
-      expect(
-        compApi,
-        `Component "${compName}" in ${componentName} is not a valid v1.0 Basic component`,
-      ).toBeDefined();
-
-      const {id: _id, component: _component, ...props} = compDef as Record<string, unknown>;
-      const compResult = compApi!.schema.safeParse(props);
-      expect(
-        compResult.success,
-        `Component "${compName}" (id: "${compId}") in ${componentName} failed schema validation: ${compResult.error?.message}`,
-      ).toBe(true);
-    }
+    validateV10Components(usageEntry.usage as Array<Record<string, unknown>>, componentName);
   }
 }
