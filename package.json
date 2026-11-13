@@ -23,7 +23,8 @@
   },
   "resolutions": {
     "@a2ui/web_core": "0.10.7",
-    "@google/genai": "2.11.0"
+    "@google/genai": "2.11.0",
+    "slack-blocks-to-jsx": "1.1.2"
   },
   "packageManager": "yarn@4.5.0",
   "engines": {

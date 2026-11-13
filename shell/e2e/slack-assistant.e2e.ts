@@ -78,6 +78,33 @@ const TABLE_MESSAGES: RenderA2uiItem[] = [
   },
 ];
 
+/** The assistant's possession pie chart, from which the chart tests start. */
+const CHART_MESSAGES: RenderA2uiItem[] = [
+  {version: 'v0.9', createSurface: {surfaceId: 'possession', catalogId: SLACK_CATALOG_ID}},
+  {
+    version: 'v0.9',
+    updateComponents: {
+      surfaceId: 'possession',
+      components: [
+        {id: 'root', component: 'Column', children: ['title', 'possession-chart']},
+        {id: 'title', component: 'Text', variant: 'h1', text: 'Possession'},
+        {
+          id: 'possession-chart',
+          component: 'Chart',
+          type: 'pie',
+          title: 'Possession split',
+          data: [
+            {label: 'Team A', value: 70},
+            {label: 'Team B', value: 30},
+          ],
+        },
+      ],
+    },
+  },
+];
+/** The alt text the renderer generates for the possession chart. */
+const CHART_ALT = 'Pie chart, Possession split: Team A 70, Team B 30';
+
 test.describe('Slack assistant browser journey', () => {
   test.beforeEach(async ({page}) => {
     await installGeminiFixture(page);
@@ -214,6 +241,24 @@ test.describe('Slack assistant browser journey', () => {
     expect(await getBlockKitTextMatches(page, ['Argentina win on penalties'])).toEqual([
       'Argentina win on penalties',
     ]);
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('draws a requested pie chart as an image', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await generatePossessionChart(page);
+    const chart = slackPreviewSurface(page).getByRole('img', {name: CHART_ALT});
+    await expect(chart).toHaveAttribute('src', /^blob:/);
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('tells the model that charts are drawn and sent as images', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await generatePossessionChart(page);
+    const request = (await getCapturedGeminiRequests(page))[0];
+    expect(JSON.stringify(request.body)).toContain(
+      'native Slack chart block cannot express every chart this catalog allows',
+    );
     expect(unexpectedErrors).toEqual([]);
   });
 
@@ -436,6 +481,14 @@ async function openSlackAssistant(page: Page): Promise<void> {
   await openComposerWithSlackRenderer(page, {rendererId: 'slack', forceAuthMode: '3p'});
   await addFakeGeminiApiKeyThroughSettings(page);
   await page.getByRole('link', {name: 'Composer Workspace'}).click();
+}
+
+/** Has the assistant generate the possession pie chart and waits for it to render. */
+async function generatePossessionChart(page: Page): Promise<void> {
+  await openSlackAssistant(page);
+  await setGeminiScenarios(page, [{chunks: splitTextIntoGeminiChunks(toJsonl(CHART_MESSAGES))}]);
+  await submitPrompt(page, 'Now generate a 70/30 pie chart.');
+  await expect(slackPreviewSurface(page).getByRole('img', {name: CHART_ALT})).toBeVisible();
 }
 
 /** Has the assistant generate the World Cup score table and waits for it to render. */

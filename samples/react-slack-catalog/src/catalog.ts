@@ -31,6 +31,7 @@ import {
 import {z} from 'zod/v3';
 import {zodToJsonSchema} from 'zod-to-json-schema';
 import {SLACK_LIMITS} from '@copilotkit/channels-slack/render';
+import {ChartType, PIE_CHART_MAX_SLICES} from './chart-image';
 import {InputComponentType, InputKind} from './form-input';
 import {HTTP_URL_PATTERN} from './http-url';
 import {
@@ -47,7 +48,7 @@ export const SLACK_CATALOG_ID = 'https://a2ui-project.github.io/composer/catalog
 const SLACK_CATALOG_SCHEMA = 'https://json-schema.org/draft/2019-09/schema';
 const SLACK_CATALOG_TITLE = 'Slack Preview Renderer Catalog';
 const SLACK_CATALOG_DESCRIPTION =
-  'A2UI catalog for Slack Block Kit preview messages. TextField and date-only DateTimeInput provide editable forms with writable data bindings. Use Table for aligned tabular data such as scores or comparisons. Row and Column flatten their children into sequential Slack blocks; they do not preserve horizontal alignment. MarketSnapshot provides a specialized market summary.';
+  'A2UI catalog for Slack Block Kit preview messages. TextField and date-only DateTimeInput provide editable forms with writable data bindings. Use Table for aligned tabular data such as scores or comparisons. Use Chart for bar, line, pie, or donut charts; the native Slack chart block cannot express every chart this catalog allows, so the renderer draws the chart and sends it as an image. Use Scorecard to show one match result; Slack has no block for it, so the renderer draws it and sends it as an uploaded image. Row and Column flatten their children into sequential Slack blocks; they do not preserve horizontal alignment. MarketSnapshot provides a specialized market summary.';
 
 /**
  * Pairs a component name with its props schema. web_core types `ComponentApi`
@@ -83,16 +84,18 @@ const StringFunctionCallSchema = z
   .strict();
 
 /**
- * How the published catalog checks a `StringFunctionCallSchema`: the
- * function-call member of `common_types.json`'s `DynamicString`. Its
- * `FunctionCall` takes only a call to one of this catalog's functions, as listed
- * in `$defs.anyFunction`.
+ * How the published catalog checks a `StringFunctionCallSchema` or a
+ * `NumberFunctionCallSchema`: the function-call member of `common_types.json`'s
+ * `DynamicString` or `DynamicNumber`. Its `FunctionCall` takes only a call to one
+ * of this catalog's functions, as listed in `$defs.anyFunction`.
+ *
+ * @param returnType What the call must return: the prop's type.
  */
-function stringFunctionCallJsonSchema(): Record<string, unknown> {
+function functionCallJsonSchema(returnType: 'string' | 'number'): Record<string, unknown> {
   return {
     allOf: [
       {$ref: 'common_types.json#/$defs/FunctionCall'},
-      {properties: {returnType: {const: 'string'}}},
+      {properties: {returnType: {const: returnType}}},
     ],
   };
 }
@@ -108,6 +111,33 @@ function dynamicString(description?: string) {
   return z
     .union([z.string(), DataBindingSchema, StringFunctionCallSchema])
     .describe(`REF:common_types.json#/$defs/DynamicString${description ? `|${description}` : ''}`);
+}
+
+/**
+ * A call to one of the catalog's functions, for a number prop. `returnType`,
+ * when given, must be `number`. The published catalog also checks the function
+ * name and its arguments (see `publishedSchemaFor`).
+ */
+const NumberFunctionCallSchema = z
+  .object({
+    call: z.string(),
+    args: z.record(z.unknown()),
+    returnType: z.literal('number').optional(),
+  })
+  .strict();
+
+/**
+ * A number prop's schema: a literal number, a data binding, or a call to one of
+ * the catalog's functions that returns a number. The published catalog refers to
+ * `common_types.json`'s `DynamicNumber` for it, as `dynamicString` does for
+ * strings.
+ *
+ * @param description What the prop is for, published with the reference.
+ */
+function dynamicNumber(description?: string) {
+  return z
+    .union([z.number(), DataBindingSchema, NumberFunctionCallSchema])
+    .describe(`REF:common_types.json#/$defs/DynamicNumber${description ? `|${description}` : ''}`);
 }
 
 /**
@@ -282,6 +312,88 @@ const TableSchema = z
 
 const TableApi = slackComponentApi('Table', TableSchema);
 
+/**
+ * The most points a Chart can have. It is this catalog's own limit, not Slack's: Slack
+ * gets only the drawn image, never the points. It matches the most points a series can
+ * have in Slack's native chart block, `data_visualization`.
+ */
+export const CHART_MAX_POINTS = 20;
+
+const ChartSchema = z
+  .object({
+    ...CommonProps,
+    type: z
+      .nativeEnum(ChartType)
+      .optional()
+      .describe(
+        `Chart kind. Defaults to verticalBar. Use pie or donut for shares of a whole, with at most ${PIE_CHART_MAX_SLICES} slices, line for trends, and bars to compare categories.`,
+      ),
+    title: dynamicString('Title drawn above the chart.').optional(),
+    xAxisTitle: dynamicString(
+      'Axis title under bar and line charts. Ignored for pie and donut.',
+    ).optional(),
+    yAxisTitle: dynamicString(
+      'Axis title beside bar and line charts. Ignored for pie and donut.',
+    ).optional(),
+    data: z
+      .array(
+        z
+          .object({
+            label: dynamicString('Category, slice name, or x value.'),
+            value: dynamicNumber('Number or binding. Pie and donut values must be zero or more.'),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(CHART_MAX_POINTS)
+      .describe(
+        `One entry per category, slice, or point, in display order: 1 to ${CHART_MAX_POINTS}, or 1 to ${PIE_CHART_MAX_SLICES} for pie and donut.`,
+      ),
+  })
+  .strict()
+  .describe(
+    'A bar, line, pie, or donut chart drawn from labeled values. The native Slack chart block cannot express every chart this catalog allows, so the Slack renderer draws the chart and sends it as an image. Give the numbers, not an image URL.',
+  );
+
+const ChartApi = slackComponentApi('Chart', ChartSchema);
+
+/**
+ * A score: anything a DynamicNumber or a DynamicString accepts, such as 3, "3 (4)" or a
+ * binding. It lists the members of both in one union, because web_core resolves a binding
+ * only in a union that holds the binding itself, or in one published as a `Dynamic` type.
+ */
+const DynamicScoreSchema = z.union([
+  z.number(),
+  z.string(),
+  DataBindingSchema,
+  NumberFunctionCallSchema,
+  StringFunctionCallSchema,
+]);
+
+const ScorecardTeamSchema = z
+  .object({
+    name: dynamicString('Team or player name.'),
+    score: DynamicScoreSchema.describe(
+      'Score as a number, as text such as "3 (4)" for a penalty shootout, or a binding.',
+    ),
+  })
+  .strict();
+
+const ScorecardSchema = z
+  .object({
+    ...CommonProps,
+    home: ScorecardTeamSchema.describe('The home team and its score, drawn on the left.'),
+    away: ScorecardTeamSchema.describe('The away team and its score, drawn on the right.'),
+    status: dynamicString('Where the match stands, such as "Full time" or "72\'".').optional(),
+    competition: dynamicString('Competition or stage, such as "World Cup, Group C".').optional(),
+  })
+  .strict()
+  .describe(
+    "A match result card: two teams with their scores, plus an optional status and competition. Use it to show one game's score at a glance, and Table to list several results. Slack has no block for a scorecard, so the Slack renderer draws it and sends it as an uploaded image. Give the teams and scores, not an image URL.",
+  );
+
+const ScorecardApi = slackComponentApi('Scorecard', ScorecardSchema);
+
 const slackBasicComponents: ComponentApi[] = [
   TextApi,
   SlackImageApi,
@@ -301,6 +413,8 @@ const slackBasicFunctions = BASIC_FUNCTIONS.filter(({name}) => name !== 'openUrl
 const slackComponents = [
   ...slackBasicComponents,
   TableApi,
+  ChartApi,
+  ScorecardApi,
   slackComponentApi('MarketSnapshot', MarketSnapshotSchema),
 ];
 
@@ -370,9 +484,9 @@ const PUBLISHED_PATTERNS = new Map<unknown, string>([
 /**
  * Called by zod-to-json-schema with each zod schema (`def`) and the JSON
  * Schema it made from it. Adds the pattern from `PUBLISHED_PATTERNS`, replaces
- * the JSON Schema made from `StringFunctionCallSchema` with
- * `stringFunctionCallJsonSchema`, and returns every other JSON Schema
- * unchanged.
+ * the JSON Schema made from `StringFunctionCallSchema` or
+ * `NumberFunctionCallSchema` with `functionCallJsonSchema`, and returns every
+ * other JSON Schema unchanged.
  */
 function publishedSchemaFor(jsonSchema: unknown, def: unknown): unknown {
   const pattern = PUBLISHED_PATTERNS.get(def);
@@ -380,7 +494,10 @@ function publishedSchemaFor(jsonSchema: unknown, def: unknown): unknown {
     return {...(jsonSchema as Record<string, unknown>), pattern};
   }
   if (def === StringFunctionCallSchema._def) {
-    return stringFunctionCallJsonSchema();
+    return functionCallJsonSchema('string');
+  }
+  if (def === NumberFunctionCallSchema._def) {
+    return functionCallJsonSchema('number');
   }
   return jsonSchema;
 }

@@ -26,6 +26,7 @@ const readySnapshot = (blocks: PreviewSnapshot['blocks']): PreviewSnapshot => ({
   surfaceId: 'surface-1',
   status: PreviewStatus.READY,
   blocks,
+  exportBlocks: blocks,
   diagnostics: [],
 });
 
@@ -63,6 +64,18 @@ describe('BlockKitExport', () => {
     });
   };
 
+  it('shows the export blocks, not the preview blocks', () => {
+    renderExport({
+      ...readySnapshot([{type: 'image', image_url: 'blob:chart-1', alt_text: 'Pie chart'}]),
+      exportBlocks: [{type: 'image', slack_file: {id: 'RENDERED_AT_SEND'}, alt_text: 'Pie chart'}],
+    });
+
+    expect(blockKitJson(container)).toEqual({
+      blocks: [{type: 'image', slack_file: {id: 'RENDERED_AT_SEND'}, alt_text: 'Pie chart'}],
+    });
+    expect(container.textContent).not.toContain('blob:chart-1');
+  });
+
   it('renders collapsed readable JSON for only the current snapshot blocks', () => {
     const blocks: PreviewSnapshot['blocks'] = [
       {
@@ -87,18 +100,20 @@ describe('BlockKitExport', () => {
   it.each([PreviewStatus.EMPTY, PreviewStatus.WAITING, PreviewStatus.ERROR])(
     'disables copy while the snapshot is %s',
     status => {
+      const staleBlocks: PreviewSnapshot['blocks'] = [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: 'Stale block',
+          },
+        },
+      ];
       renderExport({
         revision: 3,
         status,
-        blocks: [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: 'Stale block',
-            },
-          },
-        ],
+        blocks: staleBlocks,
+        exportBlocks: staleBlocks,
         diagnostics: [],
       });
 

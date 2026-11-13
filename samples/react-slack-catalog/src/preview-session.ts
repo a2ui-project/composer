@@ -29,6 +29,8 @@ import {
   type ActionDispatchEntry,
 } from './action-dispatch';
 import {slackCatalog, slackCatalogJson} from './catalog';
+import {imageUrls} from './drawn-image-blocks';
+import {createBlobImageStore} from './drawn-image-store';
 import {SLACK_COMPONENT_USAGES} from './examples';
 import {readFormInputValue, updateFormInput, type InputDispatchEntry} from './form-input';
 import {dispatchReadOnlyLocalFunctionAction} from './local-function-dispatch';
@@ -94,6 +96,7 @@ interface SlackPreviewBridgeOptions {
 export function createSlackPreviewSession(
   actionHandler?: (action: A2uiClientAction) => void | Promise<void>,
 ): PreviewSession {
+  const drawnImages = createBlobImageStore();
   let processor = new MessageProcessor([slackCatalog], actionHandler);
   let inputResetKey = 0;
   let snapshot: PreviewSnapshot = freezeSnapshot({...createEmptySnapshot(0), inputResetKey});
@@ -115,6 +118,8 @@ export function createSlackPreviewSession(
     snapshot = freezeSnapshot({...next, inputResetKey});
     actions = nextActions;
     inputs = nextInputs;
+    // Keep only the drawn images this snapshot, or the one before it, shows.
+    drawnImages.release(imageUrls(snapshot.blocks));
     for (const listener of listeners) {
       listener();
     }
@@ -199,7 +204,7 @@ export function createSlackPreviewSession(
       publish(createEmptySnapshot(revision));
       return;
     }
-    const lowered = lowerSurface(surface, revision);
+    const lowered = lowerSurface(surface, revision, drawnImages);
     publish(lowered.snapshot, lowered.actions, lowered.inputs);
   };
 
@@ -225,6 +230,7 @@ export function createSlackPreviewSession(
           revision,
           status: PreviewStatus.ERROR,
           blocks: [],
+          exportBlocks: [],
           diagnostics: [
             {
               level: DiagnosticLevel.ERROR,
@@ -364,6 +370,7 @@ export function createSlackPreviewSession(
       surfaceCreatedListeners.clear();
       actions.clear();
       inputs.clear();
+      drawnImages.dispose();
       snapshot = freezeSnapshot({...createEmptySnapshot(revision), inputResetKey});
     },
   };

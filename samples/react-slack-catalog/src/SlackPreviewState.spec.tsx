@@ -43,12 +43,13 @@ describe('SlackPreviewState', () => {
   });
 
   it.each<PreviewSnapshot>([
-    {revision: 0, status: PreviewStatus.EMPTY, blocks: [], diagnostics: []},
+    {revision: 0, status: PreviewStatus.EMPTY, blocks: [], exportBlocks: [], diagnostics: []},
     {
       revision: 1,
       surfaceId: 'surface-1',
       status: PreviewStatus.EMPTY,
       blocks: [],
+      exportBlocks: [],
       diagnostics: [],
     },
   ])('shows a quiet empty state for an untouched $status canvas', snapshot => {
@@ -72,6 +73,7 @@ describe('SlackPreviewState', () => {
       revision: 1,
       status: PreviewStatus.WAITING,
       blocks: [],
+      exportBlocks: [],
       diagnostics: [
         {
           level: DiagnosticLevel.WARNING,
@@ -100,6 +102,7 @@ describe('SlackPreviewState', () => {
       surfaceId: 'surface-1',
       status: PreviewStatus.WAITING,
       blocks: [],
+      exportBlocks: [],
       diagnostics: [
         {
           level: DiagnosticLevel.INFO,
@@ -129,6 +132,7 @@ describe('SlackPreviewState', () => {
       surfaceId: 'surface-1',
       status: PreviewStatus.ERROR,
       blocks: [],
+      exportBlocks: [],
       diagnostics: [
         {
           level: DiagnosticLevel.ERROR,
@@ -190,19 +194,21 @@ describe('SlackPreviewState', () => {
 });
 
 function readySnapshot(revision: number, text: string): PreviewSnapshot {
+  const blocks: PreviewSnapshot['blocks'] = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text,
+      },
+    },
+  ];
   return {
     revision,
     surfaceId: 'surface-1',
     status: PreviewStatus.READY,
-    blocks: [
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text,
-        },
-      },
-    ],
+    blocks,
+    exportBlocks: blocks,
     diagnostics: [],
   };
 }

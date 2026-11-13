@@ -193,6 +193,32 @@ export const SLACK_COMPONENT_USAGES = {
       },
     ],
   },
+  Chart: {
+    usage: [
+      {
+        id: 'root',
+        component: 'Chart',
+        type: 'pie',
+        title: 'Illustrative possession split',
+        data: [
+          {label: 'Argentina', value: 70},
+          {label: 'Mexico', value: 30},
+        ],
+      },
+    ],
+  },
+  Scorecard: {
+    usage: [
+      {
+        id: 'root',
+        component: 'Scorecard',
+        home: {name: 'Argentina', score: 2},
+        away: {name: 'Mexico', score: 0},
+        status: 'Full time',
+        competition: 'World Cup, Group C',
+      },
+    ],
+  },
   MarketSnapshot: {
     usage: [
       {

@@ -33,12 +33,14 @@ import {getMonacoContent, waitForMonacoEditor} from './helpers';
 const EXPECTED_COMPONENTS = [
   'Button',
   'Card',
+  'Chart',
   'Column',
   'DateTimeInput',
   'Divider',
   'Image',
   'MarketSnapshot',
   'Row',
+  'Scorecard',
   'Table',
   'Text',
   'TextField',
@@ -150,6 +152,21 @@ test.describe('Slack renderer in the Components Gallery', () => {
     await expect(scoreTable.getByText('Argentina', {exact: true})).toBeVisible();
     await expect(scoreTable.getByText('Won on penalties', {exact: true})).toBeVisible();
     await expectExampleJson(page, ['"component": "Table"']);
+
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('renders the Chart usage as an image', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackGallery(page);
+
+    await selectGalleryComponent(page, 'Chart');
+    const galleryChart = slackPreviewSurface(page).getByRole('img', {
+      name: 'Pie chart, Illustrative possession split: Argentina 70, Mexico 30',
+    });
+    await expect(galleryChart).toBeVisible();
+    await expect(galleryChart).toHaveAttribute('src', /^blob:/);
+    await expectExampleJson(page, ['"component": "Chart"', '"type": "pie"']);
 
     expect(unexpectedErrors).toEqual([]);
   });

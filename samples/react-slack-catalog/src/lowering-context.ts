@@ -14,20 +14,30 @@
  * limitations under the License.
  */
 
-import {type Renderable} from '@copilotkit/channels-ui';
+import {type ChannelNode, type Renderable} from '@copilotkit/channels-ui';
 import {type ActionDispatchEntry} from './action-dispatch';
+import {type DrawnComponent, type DrawnImage} from './drawn-image-blocks';
+import {type DrawnImageStore} from './drawn-image-store';
 import {type InputComponentType, type InputDispatchEntry} from './form-input';
 import {type PreviewDiagnostic} from './preview-snapshot';
 
 /**
  * What lowering one surface collects while it walks the components: the
- * diagnostics, and the Slack buttons and inputs it drew, by `action_id`.
+ * diagnostics, the Slack buttons and inputs it drew, by `action_id`, and the
+ * images it drew.
  */
 export interface LoweringState {
   readonly revision: number;
   readonly diagnostics: PreviewDiagnostic[];
   readonly actions: Map<string, ActionDispatchEntry>;
   readonly inputs: Map<string, InputDispatchEntry>;
+  /**
+   * Serves the images drawn in this render, and tells the Generated Block Kit export which
+   * image blocks show one, so it can swap them for uploaded files.
+   */
+  readonly drawnImages: DrawnImageStore;
+  /** The components drawn as images in this render, in document order. */
+  readonly drawnComponents: DrawnComponent[];
   nextActionOrdinal: number;
 }
 
@@ -40,4 +50,9 @@ export interface LowerComponentContext {
   readonly dispatch: (action: unknown) => string;
   readonly input: (type: InputComponentType) => InputDispatchEntry;
   readonly diagnostics: PreviewDiagnostic[];
+  /**
+   * Serves an image drawn for this component while lowering and returns the Channels UI
+   * `Image` that shows it.
+   */
+  readonly placeDrawnImage: (image: DrawnImage) => ChannelNode;
 }
