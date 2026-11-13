@@ -127,10 +127,7 @@ describe('PropertyEditor Component', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [PropertyEditor],
-      providers: [
-        {provide: CatalogManagement, useClass: MockCatalogManagement},
-        ErrorLogger,
-      ],
+      providers: [{provide: CatalogManagement, useClass: MockCatalogManagement}, ErrorLogger],
     }).compileComponents();
 
     fixture = TestBed.createComponent(PropertyEditor);
