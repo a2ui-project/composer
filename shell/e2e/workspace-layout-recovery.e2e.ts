@@ -68,7 +68,7 @@ for (const invalidState of ['retired panel', 'mismatched panel ID']) {
 
     await page.goto(`/?renderer=${rendererUrl}`);
     await expect(page.locator('.workspace-container')).toBeVisible();
-    await expect(page.locator('.dv-tab')).toHaveCount(8);
+    await expect(page.locator('.dv-tab')).toHaveCount(9);
     await expect(page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/})).toBeVisible();
 
     const preview = previewFrame(page);
@@ -139,8 +139,8 @@ test('resets modified dockview layout back to default when clicking Reset Layout
     );
     await expect(page.locator('.dv-tab', {hasText: /^Data Model/})).toHaveClass(/dv-active-tab/);
 
-    // Verify all 8 tabs are present
-    await expect(page.locator('.dv-tab')).toHaveCount(8);
+    // Verify all 9 tabs are present
+    await expect(page.locator('.dv-tab')).toHaveCount(9);
 
     // Verify DOCKVIEW_LAYOUT was cleared from localStorage
     const savedLayout = await page.evaluate(

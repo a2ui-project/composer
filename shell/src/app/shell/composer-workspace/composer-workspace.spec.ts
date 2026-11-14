@@ -52,6 +52,8 @@ import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {DataModel} from '../../debug/data-model/data-model';
 import {ComponentTree} from '../../debug/component-tree/component-tree';
+import {ComponentTreeNode} from '../../debug/component-tree/component-tree-builder';
+import {PropertyEditor} from '../../shared/property-editor/property-editor';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -157,13 +159,14 @@ describe('ComposerWorkspace Dashboard', () => {
     // so we verify they were instantiated by the Angular view container.
     const manager = fixture.debugElement.injector.get(ComposerDockview);
     const refs = manager.dynamicComponentRefs;
-    expect(refs.length).toBe(8);
+    expect(refs.length).toBe(9);
     const types = refs.map(r => r.componentType);
     expect(types).toContain(ChatPanel);
     expect(types).toContain(RenderedFrame);
     expect(types).toContain(RawFrame);
     expect(types).toContain(ComponentTree);
     expect(types).toContain(DataModel);
+    expect(types).toContain(PropertyEditor);
   });
 
   it('sizes the docked Rendered panel frame to fill its panel and replace the default target', () => {
@@ -737,6 +740,7 @@ describe('ComposerWorkspace Dashboard', () => {
           ComposerPanelId.Events,
           ComposerPanelId.Errors,
           ComposerPanelId.RawMessages,
+          ComposerPanelId.PropertyEditor,
         ]);
         expect(debugGroup.activePanel?.id).toBe(ComposerPanelId.DataModel);
       });
@@ -855,7 +859,7 @@ describe('ComposerWorkspace Dashboard', () => {
         expect(dataModelPanel!.group.activePanel?.id).toBe(ComposerPanelId.DataModel);
         expect(chatPanel!.group.activePanel?.id).toBe(ComposerPanelId.Chat);
 
-        // Check all 7 panels exist
+        // Check all 9 default panels exist
         expect(manager.api.panels.map(p => p.id).sort()).toEqual(
           Object.values(ComposerPanelId).sort(),
         );
@@ -863,6 +867,85 @@ describe('ComposerWorkspace Dashboard', () => {
         // Check proportions
         expect(chatPanel!.group.width).toBeLessThanOrEqual(Math.ceil(DEFAULT_CONTAINER_WIDTH / 3));
         expect(dataModelPanel!.group.height).toBeLessThan(renderedPanel!.group.height);
+      });
+    });
+
+    describe('Property Editor Panel', () => {
+      const TITLE_NODE: ComponentTreeNode = {
+        key: 'root/0:title',
+        id: 'title',
+        type: 'Text',
+        via: 'children',
+        status: 'ok',
+        shared: false,
+        template: null,
+        children: [],
+      };
+
+      let stateSync: MockStateSync;
+      let manager: ComposerDockview;
+      let componentTree: ComponentTree;
+      let propertyEditor: PropertyEditor;
+
+      beforeEach(() => {
+        stateSync = TestBed.inject(StateSync) as unknown as MockStateSync;
+        stateSync.activeDraftSignal.set(
+          JSON.stringify([
+            {version: 'v0.9', createSurface: {surfaceId: 's', catalogId: 'basic'}},
+            {
+              version: 'v0.9',
+              updateComponents: {
+                surfaceId: 's',
+                components: [
+                  {id: 'root', component: 'Column', children: ['title']},
+                  {id: 'title', component: 'Text', text: 'Hello'},
+                ],
+              },
+            },
+          ]),
+        );
+        fixture.detectChanges();
+
+        manager = fixture.debugElement.injector.get(ComposerDockview);
+        componentTree = manager.dynamicComponentRefs.find(
+          ref => ref.componentType === ComponentTree,
+        )!.instance as ComponentTree;
+        propertyEditor = manager.dynamicComponentRefs.find(
+          ref => ref.componentType === PropertyEditor,
+        )!.instance as PropertyEditor;
+      });
+
+      it('activates the Property Editor panel and binds the selected component when a tree node is selected', () => {
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+
+        const propertyEditorPanel = manager.api.getGroupPanel(ComposerPanelId.PropertyEditor);
+        expect(propertyEditorPanel?.group.activePanel?.id).toBe(ComposerPanelId.PropertyEditor);
+        expect(propertyEditor.resetKey()).toBe('s');
+        expect(propertyEditor.component()).toEqual({
+          id: 'title',
+          component: 'Text',
+          text: 'Hello',
+        });
+      });
+
+      it('updates the active draft when Property Editor emits componentChange', () => {
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+
+        propertyEditor.componentChange.emit({
+          id: 'title',
+          component: 'Text',
+          text: 'Updated',
+        });
+        fixture.detectChanges();
+
+        const updatedDraft = JSON.parse(stateSync.activeDraft());
+        expect(updatedDraft[1].updateComponents.components[1]).toEqual({
+          id: 'title',
+          component: 'Text',
+          text: 'Updated',
+        });
       });
     });
   });

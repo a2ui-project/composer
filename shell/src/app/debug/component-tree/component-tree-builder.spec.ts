@@ -16,7 +16,12 @@
 
 import {describe, it, expect} from 'vitest';
 import {Catalog} from '../../storage/models/catalog-storage.model';
-import {ComponentTreeNode, buildComponentTrees} from './component-tree-builder';
+import {
+  ComponentTreeNode,
+  buildComponentTrees,
+  getSurfaceComponent,
+  updateSurfaceComponent,
+} from './component-tree-builder';
 
 const COMMON = 'https://a2ui.org/specification/v0_9/common_types.json#/$defs';
 
@@ -196,5 +201,74 @@ describe('buildComponentTrees', () => {
       '    child:Text#label',
     ]);
     expect(tree.unreachable).toEqual([]);
+  });
+});
+
+describe('getSurfaceComponent', () => {
+  it('returns the target component from the latest updateComponents message for the surface', () => {
+    const messages = [
+      {version: 'v0.9', createSurface: {surfaceId: 's', catalogId: 'test'}},
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's',
+          components: [{id: 'title', component: 'Text', text: 'Old'}],
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's',
+          components: [{id: 'title', component: 'Text', text: 'Latest'}],
+        },
+      },
+    ];
+
+    expect(getSurfaceComponent(messages, 's', 'title')).toEqual({
+      id: 'title',
+      component: 'Text',
+      text: 'Latest',
+    });
+  });
+
+  it('returns null when the surface or component does not exist', () => {
+    const messages = surface([{id: 'root', component: 'Column', children: []}]);
+
+    expect(getSurfaceComponent(messages, 'missing-surface', 'root')).toBeNull();
+    expect(getSurfaceComponent(messages, 's', 'missing-component')).toBeNull();
+  });
+});
+
+describe('updateSurfaceComponent', () => {
+  it('replaces the target component in the latest updateComponents message for the surface', () => {
+    const messages = surface([
+      {id: 'root', component: 'Column', children: ['title']},
+      {id: 'title', component: 'Text', text: 'Hi'},
+    ]);
+
+    const updatedMessages = updateSurfaceComponent(messages, 's', 'title', {
+      id: 'title',
+      component: 'Text',
+      text: 'Hello',
+    });
+
+    expect(updatedMessages).toEqual(
+      surface([
+        {id: 'root', component: 'Column', children: ['title']},
+        {id: 'title', component: 'Text', text: 'Hello'},
+      ]),
+    );
+  });
+
+  it('leaves messages unchanged when the component is not found', () => {
+    const messages = surface([{id: 'root', component: 'Column', children: []}]);
+
+    const updatedMessages = updateSurfaceComponent(messages, 's', 'missing', {
+      id: 'missing',
+      component: 'Text',
+      text: 'No-op',
+    });
+
+    expect(updatedMessages).toEqual(messages);
   });
 });

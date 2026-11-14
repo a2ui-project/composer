@@ -26,6 +26,7 @@ export enum ComposerPanelId {
   Errors = 'errors',
   RawMessages = 'rawMessages',
   ComponentTree = 'componentTree',
+  PropertyEditor = 'propertyEditor',
 }
 
 /**

@@ -21,7 +21,11 @@ import {
   ComponentRef,
   Type,
   ChangeDetectorRef,
+  Binding,
   inject,
+  inputBinding,
+  outputBinding,
+  signal,
 } from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {DockviewComponent} from 'dockview-core';
@@ -36,6 +40,7 @@ import {Events} from '../../debug/events/events';
 import {Errors} from '../../debug/errors/errors';
 import {RawMessages} from '../../debug/raw-messages/raw-messages';
 import {ComponentTree} from '../../debug/component-tree/component-tree';
+import {PropertyEditor} from '../../shared/property-editor/property-editor';
 import {ComposerPanelId} from './composer-panel-id';
 
 /**
@@ -101,12 +106,12 @@ export interface DockviewManagerInitOptions {
  *
  * Layout Architecture:
  * - **Gemini Assistant (Chat)**: Left vertical panel, constrained initially to <= 1/3 viewport width.
- * - **Rendered A2UI Preview & A2UI JSON Editor**: Central workspace area split to the right of Chat.
- *   Both panels share the same tab group (`direction: 'within'`), with "Rendered A2UI Preview"
- *   active by default and "A2UI JSON Editor" tabbed behind it (`inactive: true`).
+ * - **Rendered A2UI Preview, A2UI JSON Editor & Component Tree**: Central workspace area split to the
+ *   right of Chat. All three panels share the same tab group (`direction: 'within'`), with
+ *   "Rendered A2UI Preview" active by default and the others tabbed behind it (`inactive: true`).
  * - **Debug Drawer**: Bottom drawer positioned below the Preview (`direction: 'below'`), occupying ~28%
- *   of container height. Combines "Data Model" (initially active), "Events", "Errors", and "Raw Messages"
- *   in a single tabbed group (`direction: 'within'`, `inactive: true`).
+ *   of container height. Combines "Data Model" (initially active), "Events", "Errors", "Raw Messages",
+ *   and "Property Editor" in a single tabbed group (`direction: 'within'`, `inactive: true`).
  */
 @Injectable()
 export class ComposerDockview {
@@ -125,6 +130,7 @@ export class ComposerDockview {
   private rawMessagesInstance?: RawMessages;
   private eventsInstance?: Events;
   private errorsInstance?: Errors;
+  private readonly componentTreeInstance = signal<ComponentTree | undefined>(undefined);
 
   private resizeObserver?: ResizeObserver;
   private animationFrameId?: number;
@@ -354,6 +360,7 @@ export class ComposerDockview {
    */
   private createPanelComponent(panelId: ComposerPanelId) {
     let type: Type<unknown> | undefined;
+    let bindings: Binding[] | undefined;
     switch (panelId) {
       case ComposerPanelId.Chat:
         type = this.chatPanelComponent;
@@ -379,6 +386,10 @@ export class ComposerDockview {
       case ComposerPanelId.ComponentTree:
         type = ComponentTree;
         break;
+      case ComposerPanelId.PropertyEditor:
+        type = PropertyEditor;
+        bindings = this.getPropertyEditorBindings();
+        break;
     }
 
     if (!type) {
@@ -389,7 +400,7 @@ export class ComposerDockview {
       };
     }
 
-    const componentRef = this.viewContainerRef.createComponent(type);
+    const componentRef = this.viewContainerRef.createComponent(type, {bindings});
     this.componentRefs.push(componentRef);
 
     // A docked preview fills its panel and the guest scrolls inside it. Dockview
@@ -404,6 +415,9 @@ export class ComposerDockview {
     if (type === RawMessages) this.rawMessagesInstance = componentRef.instance as RawMessages;
     if (type === Events) this.eventsInstance = componentRef.instance as Events;
     if (type === Errors) this.errorsInstance = componentRef.instance as Errors;
+    if (type === ComponentTree) {
+      this.componentTreeInstance.set(componentRef.instance as ComponentTree);
+    }
 
     return {
       element: componentRef.location.nativeElement,
@@ -423,10 +437,28 @@ export class ComposerDockview {
         if (componentRef.instance === this.errorsInstance) {
           this.errorsInstance = undefined;
         }
+        if (componentRef.instance === this.componentTreeInstance()) {
+          this.componentTreeInstance.set(undefined);
+        }
         componentRef.destroy();
         this.componentRefs = this.componentRefs.filter(r => r !== componentRef);
       },
     };
+  }
+
+  private getPropertyEditorBindings(): Binding[] {
+    return [
+      inputBinding('component', () => this.componentTreeInstance()?.selectedComponent() ?? null),
+      inputBinding('resetKey', () => this.componentTreeInstance()?.selected()?.surfaceId ?? null),
+      outputBinding<Record<string, unknown>>('componentChange', updatedComponent => {
+        this.componentTreeInstance()?.updateSelectedComponent(updatedComponent);
+      }),
+      outputBinding<string>('statusMessage', message => {
+        if (message) {
+          this.logger.warn(message);
+        }
+      }),
+    ];
   }
 
   /**
@@ -434,10 +466,11 @@ export class ComposerDockview {
    *
    * Layout Design:
    * 1. **Chat Panel (Gemini Assistant)**: Anchored left. Width <= 1/3 viewport (`chatWidth`).
-   * 2. **Rendered A2UI Preview & A2UI JSON Editor**: Placed right of Chat. Both are tabbed together
-   *    (`direction: 'within'`), with Rendered active and JSON Editor `inactive: true`.
+   * 2. **Rendered A2UI Preview, A2UI JSON Editor & Component Tree**: Placed right of Chat. Tabbed
+   *    together (`direction: 'within'`), with Rendered active and the others `inactive: true`.
    * 3. **Debug Drawer Group**: Placed below Rendered Preview (`direction: 'below'`), sized to ~28%
-   *    container height. Houses Data Model (active), Events, Errors, and Raw Messages (`inactive: true`).
+   *    container height. Houses Data Model (active), Events, Errors, Raw Messages, and Property Editor
+   *    (`inactive: true`).
    *
    * @param width Viewport width in pixels.
    * @param height Viewport height in pixels.
@@ -565,6 +598,16 @@ export class ComposerDockview {
         id: ComposerPanelId.RawMessages,
         component: ComposerPanelId.RawMessages,
         title: 'Raw Messages',
+        position: {
+          direction: 'within',
+          referencePanel: ComposerPanelId.DataModel,
+        },
+        inactive: true,
+      });
+      this.dockviewApi.addPanel({
+        id: ComposerPanelId.PropertyEditor,
+        component: ComposerPanelId.PropertyEditor,
+        title: 'Property Editor',
         position: {
           direction: 'within',
           referencePanel: ComposerPanelId.DataModel,

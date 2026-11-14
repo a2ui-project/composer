@@ -381,3 +381,59 @@ function buildSurfaceTree(
     truncated,
   };
 }
+
+/**
+ * Returns the definition of component [componentId] in [surfaceId] from [messages], or null.
+ */
+export function getSurfaceComponent(
+  messages: readonly unknown[],
+  surfaceId: string,
+  componentId: string,
+): Record<string, unknown> | null {
+  return collectSurfaces(messages).get(surfaceId)?.components.get(componentId) ?? null;
+}
+
+/**
+ * Returns a copy of [messages] with component [componentId] in [surfaceId]
+ * replaced by [updatedComponent] in its latest `updateComponents` message.
+ */
+export function updateSurfaceComponent(
+  messages: readonly unknown[],
+  surfaceId: string,
+  componentId: string,
+  updatedComponent: Record<string, unknown>,
+): unknown[] {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+    const record = asRecord(messages[messageIndex]);
+    if (!record) continue;
+    const deleteSurface = asRecord(record['deleteSurface']);
+    if (deleteSurface && deleteSurface['surfaceId'] === surfaceId) break;
+    const updateComponents = asRecord(record['updateComponents']);
+    if (
+      updateComponents &&
+      updateComponents['surfaceId'] === surfaceId &&
+      Array.isArray(updateComponents['components'])
+    ) {
+      const components = updateComponents['components'];
+      for (let componentIndex = components.length - 1; componentIndex >= 0; componentIndex--) {
+        const component = asRecord(components[componentIndex]);
+        if (component && component['id'] === componentId) {
+          const nextComponents = [...components];
+          nextComponents[componentIndex] = updatedComponent;
+          const nextMessages = [...messages];
+          nextMessages[messageIndex] = {
+            ...record,
+            updateComponents: {
+              ...updateComponents,
+              components: nextComponents,
+            },
+          };
+          return nextMessages;
+        }
+      }
+    }
+    const createSurface = asRecord(record['createSurface']);
+    if (createSurface && createSurface['surfaceId'] === surfaceId) break;
+  }
+  return [...messages];
+}

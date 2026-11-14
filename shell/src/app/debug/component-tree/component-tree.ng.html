@@ -34,7 +34,7 @@
       @if (tree.root; as root) {
         <ng-container
           [ngTemplateOutlet]="nodeTemplate"
-          [ngTemplateOutletContext]="{$implicit: root, depth: 0}"
+          [ngTemplateOutletContext]="{$implicit: root, surfaceId: tree.surfaceId, depth: 0}"
         ></ng-container>
       } @else {
         <div class="tree-message">No <code>root</code> component.</div>
@@ -45,7 +45,7 @@
         @for (node of tree.unreachable; track node.key) {
           <ng-container
             [ngTemplateOutlet]="nodeTemplate"
-            [ngTemplateOutletContext]="{$implicit: node, depth: 0}"
+            [ngTemplateOutletContext]="{$implicit: node, surfaceId: tree.surfaceId, depth: 0}"
           ></ng-container>
         }
       }
@@ -53,11 +53,22 @@
   }
 </div>
 
-<ng-template #nodeTemplate let-node let-depth="depth">
+<ng-template
+  #nodeTemplate
+  let-node
+  let-surfaceId="surfaceId"
+  let-depth="depth"
+  let-parentRow="parentRow"
+>
   <div
+    #row
     class="tree-row"
     role="treeitem"
+    [attr.aria-level]="depth + 1"
+    [tabindex]="tabIndexFor(surfaceId, node)"
     [attr.aria-expanded]="node.children.length > 0 ? isExpanded(node) : null"
+    [attr.aria-selected]="isSelected(surfaceId, node)"
+    [class.selected]="isSelected(surfaceId, node)"
     [class.missing]="node.status === 'missing'"
     [class.cycle]="node.status === 'cycle'"
     [style.padding-left.px]="8 + depth * 16"
@@ -65,11 +76,20 @@
     matTooltipPosition="above"
     matTooltipClass="component-tree-tooltip"
     [matTooltipShowDelay]="250"
+    (focus)="onFocus(surfaceId, node)"
+    (click)="selectNode(surfaceId, node, $event)"
+    (keydown.enter)="selectNode(surfaceId, node, $event)"
+    (keydown.space)="selectNode(surfaceId, node, $event)"
+    (keydown.arrowDown)="focusNextNode($event)"
+    (keydown.arrowUp)="focusPreviousNode($event)"
+    (keydown.arrowLeft)="collapseNode(node, parentRow, $event)"
+    (keydown.arrowRight)="expandNode(node, $event)"
   >
     @if (node.children.length > 0) {
       <button
         type="button"
         class="toggle"
+        tabindex="-1"
         [attr.aria-label]="isExpanded(node) ? 'Collapse' : 'Expand'"
         (click)="toggle(node, $event)"
       >
@@ -100,7 +120,12 @@
     @for (child of node.children; track child.key) {
       <ng-container
         [ngTemplateOutlet]="nodeTemplate"
-        [ngTemplateOutletContext]="{$implicit: child, depth: depth + 1}"
+        [ngTemplateOutletContext]="{
+          $implicit: child,
+          surfaceId: surfaceId,
+          depth: depth + 1,
+          parentRow: row,
+        }"
       ></ng-container>
     }
   }
