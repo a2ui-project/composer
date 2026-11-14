@@ -51,6 +51,7 @@ import {ChatPanel} from '../../chat/chat-panel/chat-panel';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {DataModel} from '../../debug/data-model/data-model';
+import {ComponentTree} from '../../debug/component-tree/component-tree';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -156,11 +157,12 @@ describe('ComposerWorkspace Dashboard', () => {
     // so we verify they were instantiated by the Angular view container.
     const manager = fixture.debugElement.injector.get(ComposerDockview);
     const refs = manager.dynamicComponentRefs;
-    expect(refs.length).toBe(7);
+    expect(refs.length).toBe(8);
     const types = refs.map(r => r.componentType);
     expect(types).toContain(ChatPanel);
     expect(types).toContain(RenderedFrame);
     expect(types).toContain(RawFrame);
+    expect(types).toContain(ComponentTree);
     expect(types).toContain(DataModel);
   });
 
