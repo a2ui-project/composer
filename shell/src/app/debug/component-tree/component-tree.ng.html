@@ -57,6 +57,7 @@
   <div
     class="tree-row"
     role="treeitem"
+    [attr.aria-level]="depth + 1"
     [attr.aria-expanded]="node.children.length > 0 ? isExpanded(node) : null"
     [class.missing]="node.status === 'missing'"
     [class.cycle]="node.status === 'cycle'"
