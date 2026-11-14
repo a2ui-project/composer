@@ -1,0 +1,212 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+  min-width: 0;
+}
+
+// One property per row: property name stacked on top of its UI control.
+.property-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 20px;
+}
+
+.property-section-heading {
+  margin: 16px 0 4px;
+  font: var(--mat-sys-title-small);
+  letter-spacing: var(--mat-sys-title-small-tracking);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.property-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 6px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.property-name {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-label-large);
+  letter-spacing: var(--mat-sys-label-large-tracking);
+}
+
+.required-marker {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: var(--mat-sys-label-small-tracking);
+}
+
+.property-control {
+  grid-column: 1;
+  display: flex;
+  min-width: 0;
+
+  input:not([type='checkbox']),
+  select,
+  textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--mat-sys-surface);
+    color: var(--mat-sys-on-surface);
+    font: var(--mat-sys-body-small);
+    letter-spacing: var(--mat-sys-body-small-tracking);
+  }
+
+  .property-json {
+    min-height: 88px;
+    resize: vertical;
+    font-family: 'Spline Sans Mono', monospace;
+  }
+}
+
+.json-control-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.array-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.array-item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.array-item-control {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.delete-array-item {
+  flex-shrink: 0;
+  color: var(--mat-sys-error);
+  --mat-icon-button-state-layer-size: 40px;
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+}
+
+.add-array-item {
+  align-self: flex-start;
+}
+
+.object-control {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-lowest, transparent);
+}
+
+.object-property-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.object-property-label {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 6px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+  letter-spacing: var(--mat-sys-label-medium-tracking);
+}
+
+.remove-property {
+  grid-column: 2;
+  color: var(--mat-sys-on-surface-variant);
+  --mat-icon-button-state-layer-size: 40px;
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+}
+
+.property-row-multiline {
+  align-items: start;
+}
+
+.property-note {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+}
+
+.property-missing {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+}
+
+.property-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+}
+
+.property-control input:focus-visible,
+.property-control select:focus-visible,
+.property-control textarea:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
