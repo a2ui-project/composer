@@ -1,0 +1,132 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div class="component-tree-container" role="tree" aria-label="A2UI component tree">
+  @if (parseError(); as error) {
+    <div class="tree-message error">The A2UI JSON is invalid: {{ error }}</div>
+  } @else if (trees().length === 0) {
+    <div class="tree-message">No surfaces.</div>
+  }
+
+  @for (tree of trees(); track tree.surfaceId) {
+    <section class="surface">
+      <div class="surface-header">
+        Surface <code>{{ tree.surfaceId }}</code>
+        <span class="muted">· {{ tree.componentCount }} components</span>
+        @if (tree.truncated) {
+          <span class="badge warn">truncated</span>
+        }
+      </div>
+
+      @if (tree.root; as root) {
+        <ng-container
+          [ngTemplateOutlet]="nodeTemplate"
+          [ngTemplateOutletContext]="{$implicit: root, surfaceId: tree.surfaceId, depth: 0}"
+        ></ng-container>
+      } @else {
+        <div class="tree-message">No <code>root</code> component.</div>
+      }
+
+      @if (tree.unreachable.length > 0) {
+        <div class="unreachable-header">Not reachable from <code>root</code></div>
+        @for (node of tree.unreachable; track node.key) {
+          <ng-container
+            [ngTemplateOutlet]="nodeTemplate"
+            [ngTemplateOutletContext]="{$implicit: node, surfaceId: tree.surfaceId, depth: 0}"
+          ></ng-container>
+        }
+      }
+    </section>
+  }
+</div>
+
+<ng-template
+  #nodeTemplate
+  let-node
+  let-surfaceId="surfaceId"
+  let-depth="depth"
+  let-parentRow="parentRow"
+>
+  <div
+    #row
+    class="tree-row"
+    role="treeitem"
+    [attr.aria-level]="depth + 1"
+    [tabindex]="tabIndexFor(surfaceId, node)"
+    [attr.aria-expanded]="node.children.length > 0 ? isExpanded(node) : null"
+    [attr.aria-selected]="isSelected(surfaceId, node)"
+    [class.selected]="isSelected(surfaceId, node)"
+    [class.missing]="node.status === 'missing'"
+    [class.cycle]="node.status === 'cycle'"
+    [style.padding-left.px]="8 + depth * 16"
+    [matTooltip]="tooltipFor(node)"
+    matTooltipPosition="above"
+    matTooltipClass="component-tree-tooltip"
+    [matTooltipShowDelay]="250"
+    (focus)="onFocus(surfaceId, node)"
+    (click)="selectNode(surfaceId, node, $event)"
+    (keydown.enter)="selectNode(surfaceId, node, $event)"
+    (keydown.space)="selectNode(surfaceId, node, $event)"
+    (keydown.arrowDown)="focusNextNode($event)"
+    (keydown.arrowUp)="focusPreviousNode($event)"
+    (keydown.arrowLeft)="collapseNode(node, parentRow, $event)"
+    (keydown.arrowRight)="expandNode(node, $event)"
+  >
+    @if (node.children.length > 0) {
+      <button
+        type="button"
+        class="toggle"
+        tabindex="-1"
+        [attr.aria-label]="isExpanded(node) ? 'Collapse' : 'Expand'"
+        (click)="toggle(node, $event)"
+      >
+        {{ isExpanded(node) ? '▾' : '▸' }}
+      </button>
+    } @else {
+      <span class="toggle-spacer"></span>
+    }
+    @if (node.via) {
+      <span class="via">{{ node.via }}:</span>
+    }
+    <span class="type">{{ node.type ?? '?' }}</span>
+    <span class="id">#{{ node.id }}</span>
+    @if (node.template !== null) {
+      <span class="badge">each {{ node.template }}</span>
+    }
+    @if (node.shared) {
+      <span class="badge">shared</span>
+    }
+    @if (node.status === 'missing') {
+      <span class="badge error">missing</span>
+    }
+    @if (node.status === 'cycle') {
+      <span class="badge error">cycle</span>
+    }
+  </div>
+  @if (isExpanded(node)) {
+    @for (child of node.children; track child.key) {
+      <ng-container
+        [ngTemplateOutlet]="nodeTemplate"
+        [ngTemplateOutletContext]="{
+          $implicit: child,
+          surfaceId: surfaceId,
+          depth: depth + 1,
+          parentRow: row,
+        }"
+      ></ng-container>
+    }
+  }
+</ng-template>
