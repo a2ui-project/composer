@@ -1,0 +1,65 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "data-bound-action",
+      "catalogId": "https://a2ui-project.github.io/composer/catalogs/slack/v1"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateDataModel": {
+      "surfaceId": "data-bound-action",
+      "path": "/",
+      "value": {
+        "greeting": "Ready for review",
+        "record": {
+          "id": "example-42"
+        }
+      }
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "data-bound-action",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["bound-greeting", "acknowledge-button"],
+          "justify": "start",
+          "align": "stretch"
+        },
+        {
+          "id": "bound-greeting",
+          "component": "Text",
+          "text": {
+            "path": "/greeting"
+          }
+        },
+        {
+          "id": "acknowledge-button",
+          "component": "Button",
+          "child": "button-label",
+          "variant": "primary",
+          "action": {
+            "event": {
+              "name": "acknowledge",
+              "context": {
+                "recordId": {
+                  "path": "/record/id"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "button-label",
+          "component": "Text",
+          "text": "Acknowledge"
+        }
+      ]
+    }
+  }
+]
