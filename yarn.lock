@@ -3719,7 +3719,7 @@ __metadata:
     vitest: "npm:4.1.11"
     zod: "npm:4.6.5"
   peerDependencies:
-    "@a2ui/angular": 0.15.0
+    "@a2ui/angular": 0.14.0
     "@a2ui/lit": 0.15.0
     "@angular/core": 22.2.3
     lit: 3.3.3

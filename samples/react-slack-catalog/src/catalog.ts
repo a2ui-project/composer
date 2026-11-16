@@ -384,7 +384,7 @@ function publishedSchemaFor(jsonSchema: unknown, def: unknown): unknown {
   return jsonSchema;
 }
 
-function processRefs(node: unknown, localDefs?: Record<string, unknown>): void {
+function processRefs(node: unknown): void {
   if (typeof node !== 'object' || node === null) {
     return;
   }
@@ -392,15 +392,11 @@ function processRefs(node: unknown, localDefs?: Record<string, unknown>): void {
   const record = node as Record<string, unknown>;
   if (typeof record.description === 'string' && record.description.startsWith('REF:')) {
     const [rawRef, description = ''] = record.description.substring(4).split('|');
-    let ref = rawRef;
-    if (rawRef.startsWith('#/$defs/')) {
-      const defKey = rawRef.slice('#/$defs/'.length);
-      // The Slack catalog defines no local $defs, so standard A2UI $defs
-      // resolve against common_types.json unless present in local $defs.
-      if (!localDefs || !(defKey in localDefs)) {
-        ref = `common_types.json${rawRef}`;
-      }
-    }
+    // Every `REF:#/$defs/*` marker emitted by @a2ui/web_core's basic catalog
+    // schemas targets `common_types.json`, so rewrite them unconditionally.
+    // Catalog-local `$defs` (`anyComponent` / `anyFunction`) are constructed
+    // directly on the outer envelope in `createSlackCatalogJson`.
+    const ref = rawRef.startsWith('#/$defs/') ? `common_types.json${rawRef}` : rawRef;
     for (const key of Object.keys(record)) {
       delete record[key];
     }
@@ -412,17 +408,17 @@ function processRefs(node: unknown, localDefs?: Record<string, unknown>): void {
   }
 
   for (const child of Array.isArray(node) ? node : Object.values(record)) {
-    processRefs(child, localDefs);
+    processRefs(child);
   }
 }
 
-function schemaJsonFor(schema: unknown, localDefs?: Record<string, unknown>): JsonSchemaObject {
+function schemaJsonFor(schema: unknown): JsonSchemaObject {
   const jsonSchema = toJsonSchema(schema, {
     target: 'jsonSchema2019-09',
     $refStrategy: 'none',
     postProcess: publishedSchemaFor,
   }) as JsonSchemaObject;
-  processRefs(jsonSchema, localDefs);
+  processRefs(jsonSchema);
   return jsonSchema;
 }
 
