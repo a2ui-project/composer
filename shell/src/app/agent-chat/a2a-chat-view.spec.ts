@@ -2272,4 +2272,570 @@ describe('A2aChatView', () => {
 
     iframe.remove();
   });
+
+  it('omits taskId and forwards contextId in handleCallAgentFunction and handleRendererFunctionResponse', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+    fixture.componentInstance['activeContextId'].set('ctx-live');
+    fixture.componentInstance['activeTaskId'].set('task-terminal');
+
+    const streamSpy = vi
+      .mocked(mockA2aTransport.sendMessageStream!)
+      .mockImplementation(async function* (_url, msg) {
+        if (msg.parts.some(p => p.data?.['callAgentFunction'])) {
+          yield {
+            final: true,
+            message: {
+              role: 'agent',
+              parts: [
+                {
+                  data: {
+                    version: '1.0',
+                    agentFunctionResponse: {functionCallId: 'call-no-task', value: {ok: true}},
+                  },
+                },
+              ],
+            },
+          };
+        }
+      });
+
+    mockCallAgentFunction$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        callAgentFunction: {
+          surfaceId: 's1',
+          functionCallId: 'call-no-task',
+          callFunction: {['@call']: 'ping'},
+        },
+      },
+    });
+
+    await vi.waitFor(() => expect(streamSpy).toHaveBeenCalledTimes(1));
+    const [callUrl, callMsg, callOpts] = streamSpy.mock.calls[0];
+    expect(callUrl).toBe('http://localhost:8000');
+    expect(callMsg.contextId).toBe('ctx-live');
+    expect(callMsg.taskId).toBeUndefined();
+    expect(callOpts?.contextId).toBe('ctx-live');
+    expect(callOpts?.taskId).toBeUndefined();
+
+    mockRendererFunctionResponse$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        rendererFunctionResponse: {
+          functionCallId: 'rf-no-task',
+          value: {done: true},
+        },
+      },
+    });
+
+    await vi.waitFor(() => expect(streamSpy).toHaveBeenCalledTimes(2));
+    const [, respMsg, respOpts] = streamSpy.mock.calls[1];
+    expect(respMsg.contextId).toBe('ctx-live');
+    expect(respMsg.taskId).toBeUndefined();
+    expect(respOpts?.contextId).toBe('ctx-live');
+    expect(respOpts?.taskId).toBeUndefined();
+
+    iframe.remove();
+  });
+
+  it('sendA2uiAction aborts active generation stream without cancelling pending RPCs', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+    let chatAborted = false;
+    let rpcAborted = false;
+    let releaseRpc!: () => void;
+    const rpcBarrier = new Promise<void>(resolve => {
+      releaseRpc = resolve;
+    });
+
+    vi.mocked(mockA2aTransport.sendMessageStream!).mockImplementation(
+      async function* (_url, msg, opts) {
+        if (msg.parts.some(p => p.data?.['callAgentFunction'])) {
+          opts?.abortSignal?.addEventListener('abort', () => {
+            rpcAborted = true;
+          });
+          await rpcBarrier;
+          yield {
+            final: true,
+            message: {
+              role: 'agent',
+              parts: [
+                {
+                  data: {
+                    version: '1.0',
+                    agentFunctionResponse: {functionCallId: 'rpc-keep-alive', value: {kept: true}},
+                  },
+                },
+              ],
+            },
+          };
+          return;
+        }
+        if (msg.parts.some(p => p.text === 'first prompt')) {
+          opts?.abortSignal?.addEventListener('abort', () => {
+            chatAborted = true;
+          });
+          await waitForAbort(opts?.abortSignal);
+          return;
+        }
+        yield {
+          final: true,
+          message: {role: 'agent', parts: [{text: 'Action handled'}]},
+        };
+      },
+    );
+
+    const inputArea = await harness.getInputArea();
+    await inputArea.setInputValue('first prompt');
+    await inputArea.clickSend();
+    await vi.waitFor(() => expect(fixture.componentInstance['_isStreaming']()).toBe(true));
+
+    mockCallAgentFunction$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        callAgentFunction: {
+          surfaceId: 's1',
+          functionCallId: 'rpc-keep-alive',
+          callFunction: {['@call']: 'slowRpc'},
+        },
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(fixture.componentInstance['pendingFunctionCalls'].has('rpc-keep-alive')).toBe(true),
+    );
+
+    mockSendToServer$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {version: '1.0', action: {name: 'clickBtn'}},
+    });
+
+    await vi.waitFor(() => expect(chatAborted).toBe(true));
+    expect(rpcAborted).toBe(false);
+    expect(fixture.componentInstance['pendingFunctionCalls'].has('rpc-keep-alive')).toBe(true);
+
+    releaseRpc();
+    await vi.waitFor(() =>
+      expect(mockHostCommunication['sendRenderA2UI']).toHaveBeenCalledWith(
+        [
+          {
+            version: '1.0',
+            agentFunctionResponse: {functionCallId: 'rpc-keep-alive', value: {kept: true}},
+          },
+        ],
+        mockWindow,
+      ),
+    );
+
+    iframe.remove();
+  });
+
+  it('keeps _activeRpcCount accurate when Stop cancels an RPC and a new RPC starts immediately', async () => {
+    const {iframe, contentWindow: mockWindow} = await harness.attachChildIframe();
+    let resolveFirstRpc!: () => void;
+    let resolveSecondRpc!: () => void;
+    let callIndex = 0;
+
+    vi.mocked(mockA2aTransport.sendMessageStream!).mockImplementation(async function* () {
+      callIndex++;
+      if (callIndex === 1) {
+        await new Promise<void>(resolve => {
+          resolveFirstRpc = resolve;
+        });
+      } else {
+        await new Promise<void>(resolve => {
+          resolveSecondRpc = resolve;
+        });
+      }
+      yield {final: true, message: {role: 'agent', parts: []}};
+    });
+
+    mockRendererFunctionResponse$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        rendererFunctionResponse: {functionCallId: 'rf-1', value: {step: 1}},
+      },
+    });
+    await vi.waitFor(() => expect(fixture.componentInstance['_activeRpcCount']()).toBe(1));
+
+    // Stop generation and immediately start a second rendererFunctionResponse before first finishes
+    fixture.componentInstance['cancelActiveGeneration']();
+    expect(fixture.componentInstance['_activeRpcCount']()).toBe(0);
+
+    mockRendererFunctionResponse$.next({
+      sourceWindow: mockWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        rendererFunctionResponse: {functionCallId: 'rf-2', value: {step: 2}},
+      },
+    });
+    await vi.waitFor(() => expect(fixture.componentInstance['_activeRpcCount']()).toBe(1));
+
+    // Resolve the aborted first RPC first; its finally block must NOT decrement the second RPC's count
+    resolveFirstRpc();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fixture.componentInstance['_activeRpcCount']()).toBe(1);
+
+    resolveSecondRpc();
+    await vi.waitFor(() => expect(fixture.componentInstance['_activeRpcCount']()).toBe(0));
+
+    iframe.remove();
+  });
+
+  it('strips streamed callRendererFunction from inline/canvas payloads, dedupes by functionCallId, and flushes once after GuestFrame mounts and dispatches its surface', async () => {
+    mockActiveProtocolVersionSignal.set('v1.0');
+    vi.mocked(mockA2aTransport.sendMessageStream!).mockImplementation(async function* (_url, msg) {
+      const text = msg.parts.find(p => p.text)?.text;
+      if (text === 'inline turn') {
+        // Cumulative chunks repeating the same callRendererFunction fn-inline-1
+        yield {
+          final: false,
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                data: {
+                  version: '1.0',
+                  createSurface: {
+                    surfaceId: 'inline-rpc-surf',
+                    catalogId: 'cat-1',
+                    components: [{id: 'root', component: 'Text', text: 'Inline'}],
+                  },
+                },
+              },
+              {
+                data: {
+                  version: '1.0',
+                  callRendererFunction: {
+                    surfaceId: 'inline-rpc-surf',
+                    functionCallId: 'fn-inline-1',
+                    callFunction: {['@call']: 'focusInput'},
+                  },
+                },
+              },
+            ],
+          },
+        };
+        yield {
+          final: true,
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                data: {
+                  version: '1.0',
+                  callRendererFunction: {
+                    surfaceId: 'inline-rpc-surf',
+                    functionCallId: 'fn-inline-1',
+                    callFunction: {['@call']: 'focusInput'},
+                  },
+                },
+              },
+            ],
+          },
+        };
+        return;
+      }
+
+      if (text === 'canvas turn') {
+        yield {
+          final: true,
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                data: {
+                  version: '1.0',
+                  createSurface: {
+                    surfaceId: 'canvas-rpc-surf',
+                    catalogId: 'cat-1',
+                    components: [
+                      {
+                        id: 'root',
+                        component: 'Canvas',
+                        cardTitle: 'RPC Canvas',
+                        children: ['t1'],
+                      },
+                      {id: 't1', component: 'Text', text: 'Canvas Body'},
+                    ],
+                  },
+                },
+              },
+              {
+                data: {
+                  version: '1.0',
+                  callRendererFunction: {
+                    surfaceId: 'canvas-rpc-surf',
+                    functionCallId: 'fn-canvas-1',
+                    callFunction: {['@call']: 'animateCanvas'},
+                  },
+                },
+              },
+            ],
+          },
+        };
+        return;
+      }
+
+      // Follow-up turn updating canvas-rpc-surf without new RPCs
+      yield {
+        final: true,
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              data: {
+                version: '1.0',
+                updateDataModel: {surfaceId: 'canvas-rpc-surf', value: {tick: 2}},
+              },
+            },
+          ],
+        },
+      };
+    });
+
+    // 1. Inline turn (no Canvas)
+    const inputArea = await harness.getInputArea();
+    await inputArea.setInputValue('inline turn');
+    await inputArea.clickSend();
+    await vi.waitFor(() =>
+      expect(
+        fixture.componentInstance['messages']().some(
+          m => m.sender === 'agent' && !m.isStreaming && m.inlineA2uiPayload?.length,
+        ),
+      ).toBe(true),
+    );
+    fixture.detectChanges();
+
+    const inlineMsg = fixture.componentInstance['messages']().find(m => m.sender === 'agent')!;
+    expect(inlineMsg.a2uiPayload?.some(i => 'callRendererFunction' in i)).toBe(false);
+    expect(inlineMsg.inlineA2uiPayload?.some(i => 'callRendererFunction' in i)).toBe(false);
+
+    // Before GuestFrame announces RENDERER_READY, callRendererFunction must still be queued
+    const sendSpy = vi.mocked(mockHostCommunication['sendRenderA2UI'] as ReturnType<typeof vi.fn>);
+    expect(
+      sendSpy.mock.calls.some(
+        c =>
+          Array.isArray(c[0]) &&
+          c[0].some(
+            i => (i as RenderA2uiItem).callRendererFunction?.functionCallId === 'fn-inline-1',
+          ),
+      ),
+    ).toBe(false);
+
+    const history = await harness.getHistory();
+    const msgCount = await history.getMessageCount();
+    const inlineMsgHarness = await history.getMessage(msgCount - 1);
+    const inlineFrameHarness = await inlineMsgHarness?.getInlineFrame();
+    expect(inlineFrameHarness).toBeTruthy();
+    const inlineIframeTestEl = await inlineFrameHarness!.getIframe();
+    expect(inlineIframeTestEl).toBeTruthy();
+    const inlineIframe = TestbedHarnessEnvironment.getNativeElement(
+      inlineIframeTestEl!,
+    ) as HTMLIFrameElement;
+
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      payload: {},
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      sourceWindow: inlineIframe.contentWindow,
+    });
+    fixture.detectChanges();
+
+    const inlineRpcCalls = sendSpy.mock.calls.filter(
+      c =>
+        Array.isArray(c[0]) &&
+        c[0].some(
+          i => (i as RenderA2uiItem).callRendererFunction?.functionCallId === 'fn-inline-1',
+        ),
+    );
+    expect(inlineRpcCalls).toHaveLength(1);
+    expect(inlineRpcCalls[0][1]).toBe(inlineIframe.contentWindow);
+
+    // Verify surface RENDER_A2UI was sent BEFORE callRendererFunction
+    const surfaceDispatchIdx = sendSpy.mock.calls.findIndex(
+      c =>
+        Array.isArray(c[0]) &&
+        c[0].some(i => (i as RenderA2uiItem).createSurface?.surfaceId === 'inline-rpc-surf'),
+    );
+    const rpcDispatchIdx = sendSpy.mock.calls.indexOf(inlineRpcCalls[0]);
+    expect(surfaceDispatchIdx).toBeGreaterThanOrEqual(0);
+    expect(rpcDispatchIdx).toBeGreaterThan(surfaceDispatchIdx);
+
+    // 2. Canvas turn
+    sendSpy.mockClear();
+    await inputArea.setInputValue('canvas turn');
+    await inputArea.clickSend();
+    await vi.waitFor(() => expect(fixture.componentInstance['isCanvasOpen']()).toBe(true));
+    fixture.detectChanges();
+
+    const canvasMsg = fixture.componentInstance['messages']().at(-1)!;
+    expect(canvasMsg.a2uiPayload?.some(i => 'callRendererFunction' in i)).toBe(false);
+    expect(canvasMsg.canvasArtifacts?.[0].payload.some(i => 'callRendererFunction' in i)).toBe(
+      false,
+    );
+
+    const canvasFrameHarness = await harness.getSideCanvasFrame();
+    expect(canvasFrameHarness).toBeTruthy();
+    const canvasIframeTestEl = await canvasFrameHarness!.getIframe();
+    expect(canvasIframeTestEl).toBeTruthy();
+    const canvasIframe = TestbedHarnessEnvironment.getNativeElement(
+      canvasIframeTestEl!,
+    ) as HTMLIFrameElement;
+
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      payload: {},
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      sourceWindow: canvasIframe.contentWindow,
+    });
+    fixture.detectChanges();
+
+    const canvasRpcCalls = sendSpy.mock.calls.filter(
+      c =>
+        Array.isArray(c[0]) &&
+        c[0].some(
+          i => (i as RenderA2uiItem).callRendererFunction?.functionCallId === 'fn-canvas-1',
+        ),
+    );
+    expect(canvasRpcCalls).toHaveLength(1);
+    expect(canvasRpcCalls[0][1]).toBe(canvasIframe.contentWindow);
+
+    // 3. Subsequent turn updating canvas-rpc-surf must NOT re-run fn-canvas-1
+    sendSpy.mockClear();
+    await inputArea.setInputValue('follow-up update');
+    await inputArea.clickSend();
+    await vi.waitFor(() =>
+      expect(
+        fixture.componentInstance['messages']().some(
+          m =>
+            m.sender === 'agent' && !m.isStreaming && m.a2uiPayload?.some(i => i.updateDataModel),
+        ),
+      ).toBe(true),
+    );
+    fixture.detectChanges();
+
+    expect(
+      sendSpy.mock.calls.some(
+        c =>
+          Array.isArray(c[0]) &&
+          c[0].some(
+            i => (i as RenderA2uiItem).callRendererFunction?.functionCallId === 'fn-canvas-1',
+          ),
+      ),
+    ).toBe(false);
+  });
+
+  it('drops queued streamed callRendererFunction calls when cancelActiveGeneration is invoked before RENDERER_READY', async () => {
+    mockActiveProtocolVersionSignal.set('v1.0');
+    let releaseStream!: () => void;
+    const streamGate = new Promise<void>(resolve => {
+      releaseStream = resolve;
+    });
+
+    vi.mocked(mockA2aTransport.sendMessageStream!).mockImplementation(
+      async function* (_url, _msg, opts) {
+        yield {
+          final: false,
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                data: {
+                  version: '1.0',
+                  createSurface: {
+                    surfaceId: 'cancelled-rpc-surf',
+                    catalogId: 'cat-1',
+                    components: [{id: 'root', component: 'Text', text: 'Pending cancel'}],
+                  },
+                },
+              },
+              {
+                data: {
+                  version: '1.0',
+                  callRendererFunction: {
+                    surfaceId: 'cancelled-rpc-surf',
+                    functionCallId: 'fn-cancelled-before-ready',
+                    callFunction: {['@call']: 'shouldNotRun'},
+                  },
+                },
+              },
+            ],
+          },
+        };
+        opts?.abortSignal?.addEventListener('abort', () => releaseStream(), {once: true});
+        await streamGate;
+      },
+    );
+
+    const inputArea = await harness.getInputArea();
+    await inputArea.setInputValue('queue then stop');
+    await inputArea.clickSend();
+
+    await vi.waitFor(() =>
+      expect(
+        fixture.componentInstance['messages']().some(
+          m => m.sender === 'agent' && m.inlineA2uiPayload?.length,
+        ),
+      ).toBe(true),
+    );
+    fixture.detectChanges();
+
+    // Stop generation before RENDERER_READY arrives
+    fixture.componentInstance['cancelActiveGeneration']();
+    fixture.detectChanges();
+
+    const history = await harness.getHistory();
+    const msgCount = await history.getMessageCount();
+    const msgHarness = await history.getMessage(msgCount - 1);
+    const inlineFrameHarness = await msgHarness?.getInlineFrame();
+    expect(inlineFrameHarness).toBeTruthy();
+    const iframeTestEl = await inlineFrameHarness!.getIframe();
+    expect(iframeTestEl).toBeTruthy();
+    const inlineIframe = TestbedHarnessEnvironment.getNativeElement(
+      iframeTestEl!,
+    ) as HTMLIFrameElement;
+
+    const sendSpy = vi.mocked(mockHostCommunication['sendRenderA2UI'] as ReturnType<typeof vi.fn>);
+    sendSpy.mockClear();
+
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      payload: {},
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      sourceWindow: inlineIframe.contentWindow,
+    });
+    fixture.detectChanges();
+
+    expect(
+      sendSpy.mock.calls.some(
+        c =>
+          Array.isArray(c[0]) &&
+          c[0].some(
+            i =>
+              (i as RenderA2uiItem).callRendererFunction?.functionCallId ===
+              'fn-cancelled-before-ready',
+          ),
+      ),
+    ).toBe(false);
+  });
 });

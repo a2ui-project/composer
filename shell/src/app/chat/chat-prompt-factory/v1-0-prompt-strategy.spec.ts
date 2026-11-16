@@ -109,6 +109,9 @@ describe('V10PromptStrategy', () => {
     expect(prompt).toContain('updateDataModel');
     expect(prompt).toContain('deleteSurface');
     expect(prompt).toContain('callRendererFunction');
+    expect(prompt).toContain(
+      'Do NOT emit `callRendererFunction` during routine UI creation or edits',
+    );
     expect(prompt).toContain('functionCallId');
     expect(prompt).toContain('callFunction');
   });

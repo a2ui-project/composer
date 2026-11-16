@@ -30,6 +30,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {provideRouter} from '@angular/router';
 import {HostCommunication} from '../host-communication/host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 import {DockviewComponent} from 'dockview-core';
 import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
@@ -461,6 +462,37 @@ describe('ComposerWorkspace Dashboard', () => {
 
       expect(pendingRpcRegistry.isRegisteredFrame(newWindow)).toBe(true);
       expect(pendingRpcRegistry.isRegisteredFrame(oldWindow)).toBe(false);
+    });
+
+    it('cancels pending RPCs without posting replies or timeouts when rendererUrl changes on the same WindowProxy', () => {
+      vi.useFakeTimers();
+      const pendingRpcRegistry = TestBed.inject(PendingRpcRegistry);
+      const hostComm = TestBed.inject(HostCommunication);
+      const sendSpy = vi.spyOn(hostComm, 'sendRenderA2UI');
+      const manager = fixture.componentRef.injector.get(ComposerDockview);
+      const renderedFrame = manager.getRenderedFrame();
+      const sharedProxyWindow = {} as Window;
+      vi.spyOn(renderedFrame!, 'contentWindow', 'get').mockReturnValue(sharedProxyWindow);
+
+      pendingRpcRegistry.registerFrame(sharedProxyWindow);
+      const entry = pendingRpcRegistry.registerRpc({
+        functionCallId: 'call-before-nav',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'slowOp'},
+        sourceWindow: sharedProxyWindow,
+      });
+      expect(entry.status).toBe('pending');
+
+      const startupConfigState = TestBed.inject(StartupConfigStateService);
+      startupConfigState.setResolvedUrl('http://localhost:4300/new-renderer');
+      fixture.detectChanges();
+
+      expect(pendingRpcRegistry.getRpc('call-before-nav')?.status).toBe('rejected');
+      expect(sendSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(35000);
+      expect(sendSpy).not.toHaveBeenCalled();
+      vi.useRealTimers();
     });
 
     it('rejects non-workspace iframes (/agent-chat, /demos, /gallery)', () => {

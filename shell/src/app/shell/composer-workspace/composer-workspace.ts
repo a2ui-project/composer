@@ -155,6 +155,23 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       this.composerDockview.updateTheme(this.isDarkTheme());
     });
 
+    let previousRendererUrl = untracked(() => this.startupResolution.resolvedUrl());
+    effect(() => {
+      const currentRendererUrl = this.startupResolution.resolvedUrl();
+      if (currentRendererUrl === previousRendererUrl) {
+        return;
+      }
+      previousRendererUrl = currentRendererUrl;
+      untracked(() => {
+        const rendered = this.composerDockview.getRenderedFrame();
+        const win = rendered?.contentWindow ?? this.activeRegisteredPreviewWindow;
+        if (win) {
+          this.pendingRpcRegistry.cancelPendingCalls(win);
+        }
+        this.activeRegisteredPreviewWindow = null;
+      });
+    });
+
     effect(() => {
       const nonce = this.stateSync.sessionResetNonce();
       if (nonce > this.lastHandledResetNonce) {

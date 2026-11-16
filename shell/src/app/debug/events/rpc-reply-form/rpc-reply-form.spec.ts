@@ -227,4 +227,14 @@ describe('RpcReplyForm', () => {
     expect(badge).toBe('Timed out');
     expect(await harness.isPending()).toBe(false);
   });
+
+  it('exposes visible countdown and status text without overriding aria-label or duplicated landmarks', async () => {
+    expect(await harness.getContainerRole()).toBeNull();
+    expect(await harness.getFormRole()).toBeNull();
+    expect(await harness.getRemainingTimeAriaLabel()).toBeNull();
+
+    registry.replyValue('rpc-test-1', 'ok');
+    fixture.detectChanges();
+    expect(await harness.getStatusBadgeAriaLabel()).toBeNull();
+  });
 });

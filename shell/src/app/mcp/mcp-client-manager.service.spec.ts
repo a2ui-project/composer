@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Provider, signal} from '@angular/core';
+import {Provider} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {McpClientManagerService} from './mcp-client-manager.service';
@@ -22,8 +22,6 @@ import {MCP_SERVER_CONNECTOR, McpServerConnection} from './mcp-server-connector'
 import {ErrorLogger} from '../debug/error-logger.service';
 import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../storage/models/local-storage-keys';
-import {CatalogManagement} from '../storage/catalog-management/catalog-management';
-import {Catalog, CatalogJson} from '../storage/models/catalog-storage.model';
 
 const supportsMock = vi.fn();
 const connectMock = vi.fn();
@@ -379,47 +377,6 @@ describe('McpClientManagerService', () => {
     expect(service.doesCatalogSupportMcp([basicCatalog, mcpCatalog])).toBe(true);
     // Multi-catalog without callMcpTool -> false
     expect(service.doesCatalogSupportMcp([basicCatalog, noMcpCatalog])).toBe(false);
-  });
-
-  describe('isMcpSupportedByActiveCatalog', () => {
-    it('returns false when CatalogManagement is not provided', () => {
-      expect(service.isMcpSupportedByActiveCatalog()).toBe(false);
-    });
-
-    it('evaluates activeCatalogs and falls back to activeCatalog', () => {
-      const activeCatalogsSig = signal<CatalogJson[]>([]);
-      const activeCatalogSig = signal<Catalog | null>(null);
-
-      const catalogMgmtMock = {
-        activeCatalogs: activeCatalogsSig,
-        activeCatalog: activeCatalogSig,
-      };
-
-      const mcpService = createService([{provide: CatalogManagement, useValue: catalogMgmtMock}]);
-
-      // Both null / empty -> false
-      expect(mcpService.isMcpSupportedByActiveCatalog()).toBe(false);
-
-      const basicCatalog = {components: {Text: {}}};
-      const mcpCatalog = {functions: {callMcpTool: {}}};
-
-      // activeCatalogs has [basicCatalog, mcpCatalog] -> true
-      activeCatalogsSig.set([basicCatalog, mcpCatalog]);
-      expect(mcpService.isMcpSupportedByActiveCatalog()).toBe(true);
-
-      // activeCatalogs has only [basicCatalog] -> false
-      activeCatalogsSig.set([basicCatalog]);
-      expect(mcpService.isMcpSupportedByActiveCatalog()).toBe(false);
-
-      // activeCatalogs empty, falls back to activeCatalog with callMcpTool -> true
-      activeCatalogsSig.set([]);
-      activeCatalogSig.set(mcpCatalog);
-      expect(mcpService.isMcpSupportedByActiveCatalog()).toBe(true);
-
-      // activeCatalogs empty, activeCatalog has no callMcpTool -> false
-      activeCatalogSig.set(basicCatalog);
-      expect(mcpService.isMcpSupportedByActiveCatalog()).toBe(false);
-    });
   });
 
   it('finds callMcpTool in a catalog that lists its functions', () => {

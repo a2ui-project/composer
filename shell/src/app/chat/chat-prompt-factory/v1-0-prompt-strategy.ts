@@ -389,7 +389,7 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
   - For a replacement UI or new surface, emit a single complete \`createSurface\`
     message containing inline \`components\` and \`dataModel\`.
   - To delete a surface, emit \`deleteSurface\`.
-  - To trigger an agent function call directly on the renderer, emit \`callRendererFunction\`.
+  - Do NOT emit \`callRendererFunction\` during routine UI creation or edits; emit \`callRendererFunction\` only when the user explicitly asks to invoke or test a renderer-registered function.
 
   ## Output Format: Strict A2UI JSON Lines (JSONL)
 
@@ -401,7 +401,8 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
   2. **Canonical Version & Command**: Every message object MUST include
     \`"version": "1.0"\` (WITHOUT a leading 'v') at the top level and specify
     exactly one A2UI command: \`"createSurface"\`, \`"updateComponents"\`,
-    \`"updateDataModel"\`, \`"deleteSurface"\`, or \`"callRendererFunction"\`.
+    \`"updateDataModel"\`, \`"deleteSurface"\`, or \`"callRendererFunction"\`
+    (only when explicitly asked to invoke a renderer function).
   3. **No Markdown or Preamble**: Output ONLY raw JSON Lines. Do NOT wrap
     your response in markdown code fences (such as \`\`\`jsonl or \`\`\`). Do
     NOT include any conversational text, greetings, explanations,

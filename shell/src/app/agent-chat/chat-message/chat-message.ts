@@ -148,6 +148,12 @@ export class A2aChatMessage {
   readonly closeCanvas = output<void>();
   /** Emitted with the message ID when the user clicks to open the protocol message inspector. */
   readonly openInspector = output<string>();
+  /** Emitted after this message's inline RenderedFrame dispatches its payload. */
+  readonly inlinePayloadDispatched = output<{
+    messageId: string;
+    payload: unknown[];
+    sourceWindow: Window;
+  }>();
 
   /**
    * Records the user's last manual expand/collapse action along with the content state

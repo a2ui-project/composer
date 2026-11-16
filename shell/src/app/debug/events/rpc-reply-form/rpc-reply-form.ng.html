@@ -14,24 +14,20 @@
  limitations under the License.
 -->
 
-<div class="rpc-form-container" role="region" aria-label="RPC Reply Form">
+<div class="rpc-form-container">
   <div class="rpc-header">
     <div class="rpc-metadata">
       <span>RPC: {{ rpc().functionCallId }}</span>
     </div>
     @if (isPending()) {
-      <span class="rpc-remaining-time" aria-label="Remaining time"
-        >Expires in: {{ remainingSeconds() }}s</span
-      >
+      <span class="rpc-remaining-time">Expires in: {{ remainingSeconds() }}s</span>
     } @else {
-      <span class="rpc-status-badge status-{{ status() }}" aria-label="RPC Status">{{
-        badgeLabel()
-      }}</span>
+      <span class="rpc-status-badge status-{{ status() }}">{{ badgeLabel() }}</span>
     }
   </div>
 
   @if (isPending()) {
-    <form class="rpc-actions-section" (submit)="$event.preventDefault()" role="form">
+    <form class="rpc-actions-section" (submit)="$event.preventDefault()">
       <div class="rpc-value-row">
         <textarea
           class="rpc-value-input"

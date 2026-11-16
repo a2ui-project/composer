@@ -433,13 +433,22 @@ export function normalizeA2uiItems(
   return normalized;
 }
 
+/**
+ * Returns true if the normalized item is a one-shot RPC envelope
+ * (`callRendererFunction` or `agentFunctionResponse`) that must not persist in surface state.
+ */
+export function isOneShotRpcEnvelope(item: RenderA2uiItem): boolean {
+  return Boolean(
+    item.callRendererFunction || item.agentFunctionResponse || 'callAgentFunctionResponse' in item,
+  );
+}
+
 function getItemSurfaceId(item: RenderA2uiItem): string | undefined {
   return (
     item.createSurface?.surfaceId ??
     item.updateComponents?.surfaceId ??
     item.updateDataModel?.surfaceId ??
-    item.deleteSurface?.surfaceId ??
-    item.callRendererFunction?.surfaceId
+    item.deleteSurface?.surfaceId
   );
 }
 
@@ -450,6 +459,7 @@ function extractPriorSurfaceItems(
   const itemsBySurface = new Map<string, RenderA2uiItem[]>();
 
   for (const item of priorItems) {
+    if (isOneShotRpcEnvelope(item)) continue;
     const surfaceId = getItemSurfaceId(item);
     if (!surfaceId || !targetSurfaceIds.has(surfaceId)) continue;
 
@@ -478,8 +488,9 @@ export function mergeA2uiItems(
   newItems: readonly RenderA2uiItem[],
   priorSessionItems?: readonly RenderA2uiItem[],
 ): RenderA2uiItem[] {
-  const normalizedNew = normalizeA2uiItems(newItems);
-  if (normalizedNew.length === 0) return [...existingItems];
+  const normalizedNew = normalizeA2uiItems(newItems).filter(item => !isOneShotRpcEnvelope(item));
+  const sanitizedExisting = existingItems.filter(item => !isOneShotRpcEnvelope(item));
+  if (normalizedNew.length === 0) return [...sanitizedExisting];
 
   const newCreateSurfaces = new Set<string>();
   for (const item of normalizedNew) {
@@ -488,7 +499,7 @@ export function mergeA2uiItems(
     }
   }
 
-  let priorAndExistingItems = existingItems;
+  let priorAndExistingItems = sanitizedExisting;
   if (priorSessionItems && priorSessionItems.length > 0) {
     const knownSurfaces = new Set([
       ...priorAndExistingItems.map(getItemSurfaceId),
@@ -926,7 +937,7 @@ export function partitionA2uiSurfacePayload(
   items: RenderA2uiItem[],
   catalog?: Catalog | null,
 ): PartitionedA2uiSurface {
-  const normalized = normalizeA2uiItems(items);
+  const normalized = normalizeA2uiItems(items).filter(item => !isOneShotRpcEnvelope(item));
   if (normalized.length === 0) {
     return {inlinePayload: null, canvasArtifacts: [], hasCanvas: false};
   }
@@ -988,5 +999,8 @@ export function unwrapCanvasForRenderer(
   catalog?: Catalog | null,
 ): RenderA2uiItem[] {
   const partitioned = partitionA2uiSurfacePayload(items, catalog);
-  return partitioned.canvasArtifacts[0]?.payload || normalizeA2uiItems(items);
+  return (
+    partitioned.canvasArtifacts[0]?.payload ||
+    normalizeA2uiItems(items).filter(item => !isOneShotRpcEnvelope(item))
+  );
 }

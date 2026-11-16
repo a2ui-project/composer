@@ -32,6 +32,8 @@ export class RpcReplyFormHarness extends ComponentHarness {
   private readonly getReplyValueBtn = this.locatorForOptional('button.rpc-reply-value-btn');
   private readonly getReplyErrorBtn = this.locatorForOptional('button.rpc-reply-error-btn');
   private readonly getValidationErrorEl = this.locatorForOptional('.rpc-validation-error');
+  private readonly getContainerEl = this.locatorForOptional('.rpc-form-container');
+  private readonly getFormEl = this.locatorForOptional('form');
   private readonly getStatusBadgeEl = this.locatorForOptional('.rpc-status-badge');
   private readonly getRemainingTimeEl = this.locatorForOptional('.rpc-remaining-time');
 
@@ -111,5 +113,25 @@ export class RpcReplyFormHarness extends ComponentHarness {
   async isPending(): Promise<boolean> {
     const textarea = await this.getValueTextarea();
     return textarea !== null;
+  }
+
+  async getContainerRole(): Promise<string | null> {
+    const el = await this.getContainerEl();
+    return el ? el.getAttribute('role') : null;
+  }
+
+  async getFormRole(): Promise<string | null> {
+    const el = await this.getFormEl();
+    return el ? el.getAttribute('role') : null;
+  }
+
+  async getRemainingTimeAriaLabel(): Promise<string | null> {
+    const el = await this.getRemainingTimeEl();
+    return el ? el.getAttribute('aria-label') : null;
+  }
+
+  async getStatusBadgeAriaLabel(): Promise<string | null> {
+    const el = await this.getStatusBadgeEl();
+    return el ? el.getAttribute('aria-label') : null;
   }
 }

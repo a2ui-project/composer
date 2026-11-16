@@ -92,19 +92,41 @@ export class PendingRpcRegistry implements OnDestroy {
    */
   unregisterFrame(win: Window): void {
     this.registeredFrames.delete(win);
+    this.cancelPendingCalls(win, {
+      notifyWindow: true,
+      code: 'WINDOW_UNREGISTERED',
+      message: 'Originating workspace frame was unregistered.',
+    });
+  }
 
+  /**
+   * Cancels and rejects any unresolved pending calls originating from `win` (e.g. when an
+   * existing iframe navigates to a new renderer URL keeping the same WindowProxy).
+   */
+  cancelPendingCalls(
+    win: Window,
+    options: {notifyWindow?: boolean; code?: string; message?: string} = {},
+  ): void {
+    const {
+      notifyWindow = false,
+      code = 'CANCELLED',
+      message = 'Originating renderer navigated to a new URL.',
+    } = options;
+    let changed = false;
     for (const [functionCallId, entry] of this.pendingCalls.entries()) {
       if (entry.sourceWindow === win && entry.status === 'pending') {
         this.cancelTimer(entry);
         entry.status = 'rejected';
-        entry.error = {
-          code: 'WINDOW_UNREGISTERED',
-          message: 'Originating workspace frame was unregistered.',
-        };
-        this.sendWireResponse(win, functionCallId, undefined, entry.error);
+        entry.error = {code, message};
+        if (notifyWindow) {
+          this.sendWireResponse(win, functionCallId, undefined, entry.error);
+        }
+        changed = true;
       }
     }
-    this.bumpState();
+    if (changed || notifyWindow) {
+      this.bumpState();
+    }
   }
 
   /**
@@ -152,10 +174,23 @@ export class PendingRpcRegistry implements OnDestroy {
 
     const existing = this.pendingCalls.get(params.functionCallId);
     if (existing) {
-      if (existing.status !== 'pending') {
+      if (existing.startedAtMs === startedAtMs && existing.sourceWindow === params.sourceWindow) {
         return existing;
       }
-      this.cancelTimer(existing);
+      if (existing.status === 'pending') {
+        this.cancelTimer(existing);
+        existing.status = 'rejected';
+        existing.error = {
+          code: 'CANCELLED',
+          message: 'Agent function call was superseded by a duplicate functionCallId.',
+        };
+        this.sendWireResponse(
+          existing.sourceWindow,
+          params.functionCallId,
+          undefined,
+          existing.error,
+        );
+      }
     }
 
     const entry: PendingRpcEntry = {

@@ -77,7 +77,9 @@ import {
 import {A2aStreamEventParser} from './converters/a2a-stream-event-parser.service';
 import {
   catalogDefinesCanvas,
+  isOneShotRpcEnvelope,
   mergeA2uiItems,
+  normalizeA2uiItems,
   partitionA2uiSurfacePayload,
 } from './converters/surface-partitioner';
 import {A2aErrorsInspector} from './errors-inspector/errors-inspector';
@@ -240,6 +242,15 @@ export class A2aChatView implements OnInit {
   >();
   private readonly pendingRendererFunctionResponses = new Set<AbortController>();
   private readonly ownedWindows = new WeakSet<Window>();
+  private readonly renderedSurfaceWindows = new Map<string, Window>();
+  private readonly renderedMessageWindows = new Map<string, Window>();
+  private lastRenderedSurfaceWindow: Window | null = null;
+  private readonly pendingSurfaceRpcs: Array<{
+    agentMessageId: string;
+    item: RenderA2uiItem;
+    surfaceId?: string;
+  }> = [];
+  private readonly seenStreamedRpcKeysByMessage = new Map<string, Set<string>>();
   private activeAbortController?: AbortController;
   private configDialogRef?: MatDialogRef<void, void>;
 
@@ -302,6 +313,7 @@ export class A2aChatView implements OnInit {
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => {
       this.cancelActiveGeneration(false);
+      this.clearStreamedRpcState();
       this.closeConfigDialog();
     });
 
@@ -391,6 +403,7 @@ export class A2aChatView implements OnInit {
     this.activeContextId.set(undefined);
     this.activeCanvasPayload.set(null);
     this.isCanvasOpen.set(false);
+    this.clearStreamedRpcState();
   }
 
   protected sendUserMessage(event: SendMessageEvent): void {
@@ -521,8 +534,11 @@ export class A2aChatView implements OnInit {
 
     if (action === null || action === undefined) return;
 
-    if (this._isStreaming()) {
-      this.cancelActiveGeneration();
+    if (this.activeAbortController) {
+      this.activeAbortController.abort();
+      this.activeAbortController = undefined;
+      this._isStreaming.set(false);
+      this.messages.update(msgs => msgs.map(m => (m.isStreaming ? {...m, isStreaming: false} : m)));
     }
 
     let actionUserMessage: string | undefined;
@@ -723,7 +739,11 @@ export class A2aChatView implements OnInit {
           const currentText = m.text ? `${m.text}\n\n*(Turn cancelled)*` : '*(Turn cancelled)*';
           return {...m, text: currentText, isStreaming: false};
         }
-        const hasContent = m.text || m.thinking || (m.a2uiPayload && m.a2uiPayload.length > 0);
+        const hasContent =
+          m.text ||
+          m.thinking ||
+          (m.a2uiPayload && m.a2uiPayload.length > 0) ||
+          this.seenStreamedRpcKeysByMessage.has(m.id);
         if (!hasContent && m.sender !== 'error') {
           return {
             ...m,
@@ -796,6 +816,12 @@ export class A2aChatView implements OnInit {
       this.activeTaskId.set(parsed.taskId);
     }
 
+    const normalizedItems =
+      parsed.a2uiItems.length > 0 ? normalizeA2uiItems(parsed.a2uiItems, this.errorLogger) : [];
+    const surfaceItems = normalizedItems.filter(item => !isOneShotRpcEnvelope(item));
+    const rpcItems = normalizedItems.filter(isOneShotRpcEnvelope);
+    const touchedSurfaceIds = this.extractSurfaceIds(surfaceItems);
+
     this.messages.update(msgs =>
       msgs.map((m, index) => {
         if (m.id !== agentMessageId) return m;
@@ -807,10 +833,10 @@ export class A2aChatView implements OnInit {
           ? this.appendStreamedThought(m.thinking, parsed.thoughtChunk)
           : m.thinking;
         const updatedPayload =
-          parsed.a2uiItems.length > 0
+          surfaceItems.length > 0
             ? mergeA2uiItems(
                 m.a2uiPayload || [],
-                parsed.a2uiItems,
+                surfaceItems,
                 msgs.slice(0, index).flatMap(message => message.a2uiPayload ?? []),
               )
             : m.a2uiPayload;
@@ -829,7 +855,7 @@ export class A2aChatView implements OnInit {
         // which must not flip a header that already rendered above it.
         let inlineSurfaceLeadsText = m.inlineSurfaceLeadsText;
         if (inlineSurfaceLeadsText === undefined) {
-          if (parsed.a2uiItems.length > 0 && !m.text) {
+          if (surfaceItems.length > 0 && !m.text) {
             inlineSurfaceLeadsText = parsed.a2uiPrecedesText === true;
           } else if (parsed.textChunk) {
             inlineSurfaceLeadsText = false;
@@ -852,7 +878,7 @@ export class A2aChatView implements OnInit {
       }),
     );
 
-    if (parsed.a2uiItems.length > 0) {
+    if (surfaceItems.length > 0) {
       const activeMsg = this.messages().find(m => m.id === agentMessageId);
       if (activeMsg?.canvasArtifacts && activeMsg.canvasArtifacts.length > 0) {
         const autoOpenArtifact = activeMsg.canvasArtifacts.find(a => a.autoOpen);
@@ -870,6 +896,10 @@ export class A2aChatView implements OnInit {
           this.openCanvasSurface(autoOpenArtifact.payload);
         }
       }
+    }
+
+    if (rpcItems.length > 0) {
+      this.enqueueStreamedRpcs(rpcItems, agentMessageId, touchedSurfaceIds);
     }
   }
 
@@ -927,6 +957,7 @@ export class A2aChatView implements OnInit {
       controller.abort();
     }
     this.pendingRendererFunctionResponses.clear();
+    this.pendingSurfaceRpcs.length = 0;
     this.abortAllPendingFunctionCalls(notifyWindows);
     this._isStreaming.set(false);
     this.messages.update(msgs => msgs.map(m => (m.isStreaming ? {...m, isStreaming: false} : m)));
@@ -941,6 +972,7 @@ export class A2aChatView implements OnInit {
     this.activeContextId.set(undefined);
     this.activeCanvasPayload.set(null);
     this.isCanvasOpen.set(false);
+    this.clearStreamedRpcState();
   }
 
   protected openCanvasSurface(payload: RenderA2uiItem[]): void {
@@ -951,6 +983,22 @@ export class A2aChatView implements OnInit {
   protected closeCanvasSurface(): void {
     this.isCanvasOpen.set(false);
     this.activeCanvasPayload.set(null);
+    this.pruneDetachedSurfaceWindows();
+  }
+
+  protected onInlineSurfacePayloadDispatched(event: {
+    messageId: string;
+    payload: unknown[];
+    sourceWindow: Window;
+  }): void {
+    this.handleSurfacePayloadDispatched(event.payload, event.sourceWindow, event.messageId);
+  }
+
+  protected onCanvasSurfacePayloadDispatched(event: {
+    payload: unknown[];
+    sourceWindow: Window;
+  }): void {
+    this.handleSurfacePayloadDispatched(event.payload, event.sourceWindow);
   }
 
   protected toggleMessageInspector(): void {
@@ -1079,9 +1127,59 @@ export class A2aChatView implements OnInit {
     this._activeRpcCount.set(0);
   }
 
-  private isOwnedWindow(win: Window | null | undefined): boolean {
+  private clearStreamedRpcState(): void {
+    this.pendingSurfaceRpcs.length = 0;
+    this.seenStreamedRpcKeysByMessage.clear();
+    this.renderedSurfaceWindows.clear();
+    this.renderedMessageWindows.clear();
+    this.lastRenderedSurfaceWindow = null;
+  }
+
+  private extractSurfaceIds(items: readonly unknown[]): Set<string> {
+    const surfaceIds = new Set<string>();
+    for (const raw of items) {
+      if (!raw || typeof raw !== 'object') continue;
+      const item = raw as RenderA2uiItem;
+      const surfaceId =
+        item.createSurface?.surfaceId ??
+        item.updateComponents?.surfaceId ??
+        item.updateDataModel?.surfaceId;
+      if (typeof surfaceId === 'string' && surfaceId) {
+        surfaceIds.add(surfaceId);
+      }
+    }
+    return surfaceIds;
+  }
+
+  private normalizeRpcEnvelopeItem(item: RenderA2uiItem): RenderA2uiItem {
+    let normalized = item;
+    const itemRecord = normalized as Record<string, unknown>;
+    if (itemRecord['callAgentFunctionResponse'] && !itemRecord['agentFunctionResponse']) {
+      normalized = {
+        ...normalized,
+        agentFunctionResponse: itemRecord[
+          'callAgentFunctionResponse'
+        ] as RenderA2uiItem['agentFunctionResponse'],
+      };
+    }
+    if (normalized.agentFunctionResponse) {
+      const respRec = normalized.agentFunctionResponse as unknown as Record<string, unknown>;
+      if (respRec['result'] !== undefined && respRec['value'] === undefined) {
+        const {result, ...rest} = respRec;
+        normalized = {
+          ...normalized,
+          agentFunctionResponse: {
+            ...rest,
+            value: result,
+          } as RenderA2uiItem['agentFunctionResponse'],
+        };
+      }
+    }
+    return normalized;
+  }
+
+  private isLiveOwnedWindow(win: Window | null | undefined): win is Window {
     if (!win) return false;
-    if (this.ownedWindows.has(win)) return true;
     const element = this.elementRef?.nativeElement as HTMLElement | undefined;
     if (!element) return false;
     const iframes = element.querySelectorAll('iframe');
@@ -1092,6 +1190,129 @@ export class A2aChatView implements OnInit {
       }
     }
     return false;
+  }
+
+  private pruneDetachedSurfaceWindows(): void {
+    for (const [surfaceId, win] of this.renderedSurfaceWindows.entries()) {
+      if (!this.isLiveOwnedWindow(win)) {
+        this.renderedSurfaceWindows.delete(surfaceId);
+      }
+    }
+    for (const [messageId, win] of this.renderedMessageWindows.entries()) {
+      if (!this.isLiveOwnedWindow(win)) {
+        this.renderedMessageWindows.delete(messageId);
+      }
+    }
+    if (this.lastRenderedSurfaceWindow && !this.isLiveOwnedWindow(this.lastRenderedSurfaceWindow)) {
+      this.lastRenderedSurfaceWindow = null;
+    }
+  }
+
+  private enqueueStreamedRpcs(
+    rpcItems: readonly RenderA2uiItem[],
+    agentMessageId: string,
+    touchedSurfaceIds: ReadonlySet<string>,
+  ): void {
+    let seenKeys = this.seenStreamedRpcKeysByMessage.get(agentMessageId);
+    if (!seenKeys) {
+      seenKeys = new Set<string>();
+      this.seenStreamedRpcKeysByMessage.set(agentMessageId, seenKeys);
+    }
+
+    for (const rawItem of rpcItems) {
+      const item = this.normalizeRpcEnvelopeItem(rawItem);
+      const kind = item.callRendererFunction ? 'call' : 'resp';
+      const functionCallId =
+        item.callRendererFunction?.functionCallId ?? item.agentFunctionResponse?.functionCallId;
+      const dedupKey = `${kind}:${functionCallId ?? JSON.stringify(item)}`;
+      if (seenKeys.has(dedupKey)) {
+        continue;
+      }
+      seenKeys.add(dedupKey);
+
+      if (kind === 'resp' && functionCallId) {
+        const pendingCall = this.pendingFunctionCalls.get(functionCallId);
+        if (pendingCall) {
+          this.hostCommunication.sendRenderA2UI([item], pendingCall.sourceWindow);
+          continue;
+        }
+      }
+
+      const surfaceId = item.callRendererFunction?.surfaceId;
+      const targetWin = this.resolveReadyRpcTargetWindow(
+        surfaceId,
+        agentMessageId,
+        touchedSurfaceIds,
+      );
+      if (targetWin) {
+        this.hostCommunication.sendRenderA2UI([item], targetWin);
+      } else {
+        this.pendingSurfaceRpcs.push({agentMessageId, item, surfaceId});
+      }
+    }
+  }
+
+  private resolveReadyRpcTargetWindow(
+    surfaceId: string | undefined,
+    agentMessageId: string,
+    touchedSurfaceIds: ReadonlySet<string>,
+  ): Window | null {
+    if (surfaceId) {
+      if (touchedSurfaceIds.has(surfaceId)) {
+        return null;
+      }
+      const win = this.renderedSurfaceWindows.get(surfaceId);
+      return this.isLiveOwnedWindow(win) ? win : null;
+    }
+    if (touchedSurfaceIds.size > 0) {
+      return null;
+    }
+    const msgWin = this.renderedMessageWindows.get(agentMessageId);
+    if (this.isLiveOwnedWindow(msgWin)) {
+      return msgWin;
+    }
+    return this.isLiveOwnedWindow(this.lastRenderedSurfaceWindow)
+      ? this.lastRenderedSurfaceWindow
+      : null;
+  }
+
+  private handleSurfacePayloadDispatched(
+    payload: unknown[],
+    sourceWindow: Window,
+    messageId?: string,
+  ): void {
+    this.ownedWindows.add(sourceWindow);
+    const dispatchedSurfaceIds = this.extractSurfaceIds(payload);
+    for (const surfaceId of dispatchedSurfaceIds) {
+      this.renderedSurfaceWindows.set(surfaceId, sourceWindow);
+    }
+    if (messageId) {
+      this.renderedMessageWindows.set(messageId, sourceWindow);
+    }
+    this.lastRenderedSurfaceWindow = sourceWindow;
+
+    if (this.pendingSurfaceRpcs.length === 0) {
+      return;
+    }
+
+    const remaining: typeof this.pendingSurfaceRpcs = [];
+    for (const entry of this.pendingSurfaceRpcs) {
+      const matchesSurface = entry.surfaceId ? dispatchedSurfaceIds.has(entry.surfaceId) : false;
+      const matchesUnscopedMessage =
+        !entry.surfaceId && (!messageId || entry.agentMessageId === messageId);
+      if (matchesSurface || matchesUnscopedMessage) {
+        this.hostCommunication.sendRenderA2UI([entry.item], sourceWindow);
+      } else {
+        remaining.push(entry);
+      }
+    }
+    this.pendingSurfaceRpcs.length = 0;
+    this.pendingSurfaceRpcs.push(...remaining);
+  }
+
+  private isOwnedWindow(win: Window | null | undefined): boolean {
+    if (!win) return false;
+    return this.ownedWindows.has(win) || this.isLiveOwnedWindow(win);
   }
 
   private async handleCallAgentFunction(
@@ -1146,7 +1367,6 @@ export class A2aChatView implements OnInit {
       role: 'user',
       parts: [callPart],
       ...(this.activeContextId() ? {contextId: this.activeContextId()} : {}),
-      ...(this.activeTaskId() ? {taskId: this.activeTaskId()!} : {}),
     };
 
     this.recordInspectorEvent(createSentMessageEvent(callMessage));
@@ -1157,7 +1377,6 @@ export class A2aChatView implements OnInit {
       const stream = this.a2aTransport.sendMessageStream(url, callMessage, {
         tenantId: this.configProvider.a2aTenantId() || undefined,
         contextId: this.activeContextId(),
-        taskId: this.activeTaskId() || undefined,
         abortSignal: abortController.signal,
         protocolVersion: '1.0',
       });
@@ -1173,29 +1392,8 @@ export class A2aChatView implements OnInit {
           this.activeTaskId.set(parsed.taskId);
         }
         if (parsed.a2uiItems && parsed.a2uiItems.length > 0) {
-          for (let item of parsed.a2uiItems) {
-            const itemRecord = item as Record<string, unknown>;
-            if (itemRecord['callAgentFunctionResponse'] && !itemRecord['agentFunctionResponse']) {
-              item = {
-                ...item,
-                agentFunctionResponse: itemRecord[
-                  'callAgentFunctionResponse'
-                ] as RenderA2uiItem['agentFunctionResponse'],
-              };
-            }
-            if (item.agentFunctionResponse) {
-              const respRec = item.agentFunctionResponse as unknown as Record<string, unknown>;
-              if (respRec['result'] !== undefined && respRec['value'] === undefined) {
-                const {result, ...rest} = respRec;
-                item = {
-                  ...item,
-                  agentFunctionResponse: {
-                    ...rest,
-                    value: result,
-                  } as RenderA2uiItem['agentFunctionResponse'],
-                };
-              }
-            }
+          for (const rawItem of parsed.a2uiItems) {
+            const item = this.normalizeRpcEnvelopeItem(rawItem);
 
             if (item.agentFunctionResponse?.functionCallId === functionCallId) {
               hasReceivedResponse = true;
@@ -1271,7 +1469,6 @@ export class A2aChatView implements OnInit {
       role: 'user',
       parts: [responsePart],
       ...(this.activeContextId() ? {contextId: this.activeContextId()} : {}),
-      ...(this.activeTaskId() ? {taskId: this.activeTaskId()!} : {}),
     };
 
     this.recordInspectorEvent(createSentMessageEvent(responseMessage));
@@ -1280,7 +1477,6 @@ export class A2aChatView implements OnInit {
       const stream = this.a2aTransport.sendMessageStream(url, responseMessage, {
         tenantId: this.configProvider.a2aTenantId() || undefined,
         contextId: this.activeContextId(),
-        taskId: this.activeTaskId() || undefined,
         abortSignal: abortController.signal,
         protocolVersion: '1.0',
       });
@@ -1295,29 +1491,8 @@ export class A2aChatView implements OnInit {
           this.activeTaskId.set(parsed.taskId);
         }
         if (parsed.a2uiItems && parsed.a2uiItems.length > 0 && env.sourceWindow) {
-          for (let item of parsed.a2uiItems) {
-            const itemRecord = item as Record<string, unknown>;
-            if (itemRecord['callAgentFunctionResponse'] && !itemRecord['agentFunctionResponse']) {
-              item = {
-                ...item,
-                agentFunctionResponse: itemRecord[
-                  'callAgentFunctionResponse'
-                ] as RenderA2uiItem['agentFunctionResponse'],
-              };
-            }
-            if (item.agentFunctionResponse) {
-              const respRec = item.agentFunctionResponse as unknown as Record<string, unknown>;
-              if (respRec['result'] !== undefined && respRec['value'] === undefined) {
-                const {result, ...rest} = respRec;
-                item = {
-                  ...item,
-                  agentFunctionResponse: {
-                    ...rest,
-                    value: result,
-                  } as RenderA2uiItem['agentFunctionResponse'],
-                };
-              }
-            }
+          for (const rawItem of parsed.a2uiItems) {
+            const item = this.normalizeRpcEnvelopeItem(rawItem);
             if (
               item.callRendererFunction ||
               item.agentFunctionResponse ||
@@ -1337,8 +1512,9 @@ export class A2aChatView implements OnInit {
         this.recordInspectorEvent(createErrorEvent(err));
       }
     } finally {
-      this.pendingRendererFunctionResponses.delete(abortController);
-      this._activeRpcCount.update(c => Math.max(0, c - 1));
+      if (this.pendingRendererFunctionResponses.delete(abortController)) {
+        this._activeRpcCount.update(c => Math.max(0, c - 1));
+      }
     }
   }
 }

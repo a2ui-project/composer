@@ -21,6 +21,7 @@ import {
   computed,
   untracked,
   input,
+  output,
   signal,
   viewChild,
 } from '@angular/core';
@@ -72,6 +73,9 @@ export class RenderedFrame {
    * when no live agent is connected to the session.
    */
   readonly autoRejectAgentFunctions = input<boolean>(false);
+
+  /** Emits after the inner GuestFrame dispatches a RENDER_A2UI payload to its window. */
+  readonly payloadDispatched = output<{payload: unknown[]; sourceWindow: Window}>();
 
   /**
    * The A2UI messages to render in the guest. Sent once the guest's document
@@ -173,6 +177,11 @@ export class RenderedFrame {
     if (initialForDocument) {
       this.hasRenderError = false;
       this.reportedHeight.set(null);
+    }
+    const payload = this.payload();
+    const sourceWindow = this.contentWindow;
+    if (Array.isArray(payload) && sourceWindow) {
+      this.payloadDispatched.emit({payload, sourceWindow});
     }
   }
 

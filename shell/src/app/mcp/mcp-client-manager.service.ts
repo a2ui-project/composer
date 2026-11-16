@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, Injector, Signal, computed, inject, signal} from '@angular/core';
+import {Injectable, inject, signal} from '@angular/core';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
 import {
@@ -24,7 +24,6 @@ import {
 } from '../storage/models/catalog-storage.model';
 import {LocalStorageKey} from '../storage/models/local-storage-keys';
 import {MCP_SERVER_CONNECTOR, McpServerConnection} from './mcp-server-connector';
-import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 
 export declare interface McpToolInfo {
   name: string;
@@ -57,29 +56,9 @@ export class McpClientManagerService {
   private readonly storage = inject(LocalStorageInteractions);
   private readonly errorLogger = inject(ErrorLogger).withTag('[McpClientManager]');
   private readonly connector = inject(MCP_SERVER_CONNECTOR);
-  private readonly injector = inject(Injector);
-  private catalogManagement: CatalogManagement | null = null;
   private readonly connections = new Map<string, McpServerConnection>();
 
   readonly servers = signal<McpServerConfig[]>([]);
-
-  readonly isMcpSupportedByActiveCatalog: Signal<boolean> = computed(() => {
-    if (!this.catalogManagement) {
-      try {
-        this.catalogManagement = this.injector.get(CatalogManagement, null, {optional: true});
-      } catch {
-        this.catalogManagement = null;
-      }
-    }
-    if (!this.catalogManagement) {
-      return false;
-    }
-    const catalogs = this.catalogManagement.activeCatalogs();
-    if (catalogs && catalogs.length > 0) {
-      return this.doesCatalogSupportMcp(catalogs);
-    }
-    return this.doesCatalogSupportMcp(this.catalogManagement.activeCatalog());
-  });
 
   constructor() {
     this.loadFromStorage();

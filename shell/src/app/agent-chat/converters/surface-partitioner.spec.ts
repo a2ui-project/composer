@@ -23,6 +23,7 @@ import {
   hasA2uiCanvasComponent,
   isA2uiItem,
   isA2uiMimeType,
+  isOneShotRpcEnvelope,
   mergeA2uiItems,
   normalizeA2uiItems,
   partitionA2uiSurfacePayload,
@@ -1119,6 +1120,12 @@ describe('SurfacePartitioner', () => {
       expect(normalized.length).toBe(1);
       expect(normalized[0]['agentFunctionResponse']).toBeDefined();
       expect(normalized[0]['callAgentFunctionResponse']).toBeUndefined();
+      expect(
+        isOneShotRpcEnvelope({
+          version: '1.0',
+          callAgentFunctionResponse: {functionCallId: 'raw-1'},
+        } as RenderA2uiItem),
+      ).toBe(true);
     });
 
     it('does not leak RPC envelopes into otherItems or canvas card payloads', () => {
@@ -1163,6 +1170,60 @@ describe('SurfacePartitioner', () => {
       const canvasPayload = partitioned.canvasArtifacts[0].payload;
       expect(canvasPayload.some(item => 'callRendererFunction' in item)).toBe(false);
       expect(canvasPayload.some(item => 'agentFunctionResponse' in item)).toBe(false);
+    });
+
+    it('excludes callRendererFunction and agentFunctionResponse from inlinePayload, mergeA2uiItems, and extractPriorSurfaceItems', () => {
+      const priorItems = normalizeA2uiItems([
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'cat-1',
+            components: [{id: 'root', component: 'Text', text: 'Initial'}],
+          },
+        },
+        {
+          version: '1.0',
+          callRendererFunction: {
+            surfaceId: 's1',
+            functionCallId: 'old-call',
+            callFunction: {['@call']: 'notify'},
+          },
+        },
+        {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId: 'old-agent-call',
+            value: {ok: true},
+          },
+        },
+      ]);
+
+      const mergedPrior = mergeA2uiItems([], priorItems);
+      expect(mergedPrior.some(item => 'callRendererFunction' in item)).toBe(false);
+      expect(mergedPrior.some(item => 'agentFunctionResponse' in item)).toBe(false);
+
+      const partitionedInline = partitionA2uiSurfacePayload(priorItems);
+      expect(partitionedInline.hasCanvas).toBe(false);
+      expect(partitionedInline.inlinePayload?.some(item => 'callRendererFunction' in item)).toBe(
+        false,
+      );
+      expect(partitionedInline.inlinePayload?.some(item => 'agentFunctionResponse' in item)).toBe(
+        false,
+      );
+
+      // Subsequent turn updating s1 via priorSessionItems must never carry forward old RPCs
+      const followUpDelta = normalizeA2uiItems([
+        {
+          version: '1.0',
+          updateDataModel: {surfaceId: 's1', path: '/status', value: 'updated'},
+        },
+      ]);
+      const mergedNextTurn = mergeA2uiItems([], followUpDelta, priorItems);
+      expect(mergedNextTurn.some(item => 'callRendererFunction' in item)).toBe(false);
+      expect(mergedNextTurn.some(item => 'agentFunctionResponse' in item)).toBe(false);
+      expect(mergedNextTurn.some(item => item.createSurface?.surfaceId === 's1')).toBe(true);
+      expect(mergedNextTurn.some(item => item.updateDataModel?.surfaceId === 's1')).toBe(true);
     });
   });
 });

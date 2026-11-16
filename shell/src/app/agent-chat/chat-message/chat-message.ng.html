@@ -81,6 +81,13 @@
               [payload]="inlinePayload()"
               sizing="content"
               [defaultTarget]="DefaultTarget.KEEP"
+              (payloadDispatched)="
+                inlinePayloadDispatched.emit({
+                  messageId: message().id,
+                  payload: $event.payload,
+                  sourceWindow: $event.sourceWindow,
+                })
+              "
             ></a2ui-composer-rendered-frame>
           </div>
         </ng-template>

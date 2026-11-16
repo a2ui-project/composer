@@ -333,6 +333,114 @@ describe('PendingRpcRegistry', () => {
       expect(service.getRpc('call-settled')?.status).toBe('replied');
       expect(mockHostComm.sendRenderA2UI).toHaveBeenCalledTimes(1);
     });
+
+    it('preserves pending RPC on matching startedAtMs and sourceWindow re-hydration', () => {
+      service.registerFrame(dummyWindow);
+      const startedAt = Date.now();
+      const first = service.registerRpc({
+        functionCallId: 'call-same',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'once'},
+        sourceWindow: dummyWindow,
+        startedAtMs: startedAt,
+      });
+
+      const rehydrated = service.registerRpc({
+        functionCallId: 'call-same',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'once'},
+        sourceWindow: dummyWindow,
+        startedAtMs: startedAt,
+      });
+
+      expect(rehydrated).toBe(first);
+      expect(mockHostComm.sendRenderA2UI).not.toHaveBeenCalled();
+    });
+
+    it('cancels existing pending RPC and notifies its sourceWindow when replaced by non-matching registration', () => {
+      const windowA = {name: 'A'} as unknown as Window;
+      const windowB = {name: 'B'} as unknown as Window;
+      const now = Date.now();
+      service.registerFrame(windowA);
+      service.registerFrame(windowB);
+
+      service.registerRpc({
+        functionCallId: 'call-dup',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'first'},
+        sourceWindow: windowA,
+        startedAtMs: now,
+      });
+
+      const replacement = service.registerRpc({
+        functionCallId: 'call-dup',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'second'},
+        sourceWindow: windowB,
+        startedAtMs: now + 1000,
+      });
+
+      expect(mockHostComm.sendRenderA2UI).toHaveBeenCalledWith(
+        [
+          {
+            version: '1.0',
+            agentFunctionResponse: {
+              functionCallId: 'call-dup',
+              error: {
+                code: 'CANCELLED',
+                message: 'Agent function call was superseded by a duplicate functionCallId.',
+              },
+            },
+          },
+        ],
+        windowA,
+      );
+      expect(replacement.sourceWindow).toBe(windowB);
+      expect(replacement.status).toBe('pending');
+    });
+
+    it('replaces an already-settled RPC when re-invoked with a new timestamp or window', () => {
+      const now = Date.now();
+      service.registerFrame(dummyWindow);
+      service.registerRpc({
+        functionCallId: 'call-reuse',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'once'},
+        sourceWindow: dummyWindow,
+        startedAtMs: now,
+      });
+      expect(service.replyValue('call-reuse', {ok: true})).toBe(true);
+
+      const fresh = service.registerRpc({
+        functionCallId: 'call-reuse',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'twice'},
+        sourceWindow: dummyWindow,
+        startedAtMs: now + 4000,
+      });
+
+      expect(fresh.status).toBe('pending');
+      expect(fresh.startedAtMs).toBe(now + 4000);
+      expect(service.getRpc('call-reuse')?.status).toBe('pending');
+    });
+
+    it('cancels pending calls silently via cancelPendingCalls without posting to navigated window', () => {
+      vi.advanceTimersByTime(0);
+      service.registerFrame(dummyWindow);
+      service.registerRpc({
+        functionCallId: 'call-nav',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'waitReply'},
+        sourceWindow: dummyWindow,
+      });
+
+      service.cancelPendingCalls(dummyWindow);
+      expect(service.getRpc('call-nav')?.status).toBe('rejected');
+      expect(mockHostComm.sendRenderA2UI).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(35000);
+      expect(mockHostComm.sendRenderA2UI).not.toHaveBeenCalled();
+    });
   });
 
   describe('Replying with Error', () => {

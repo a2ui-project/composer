@@ -76,6 +76,12 @@ export class A2aChatHistory implements AfterViewChecked {
   readonly closeCanvas = output<void>();
   /** Emitted with the message ID when the user clicks to open the protocol inspector drawer. */
   readonly openInspector = output<string>();
+  /** Emitted when an inline message surface finishes dispatching its payload to an iframe. */
+  readonly inlinePayloadDispatched = output<{
+    messageId: string;
+    payload: unknown[];
+    sourceWindow: Window;
+  }>();
 
   protected readonly scrollContainerRef = viewChild<ElementRef<HTMLDivElement>>('scrollContainer');
 
