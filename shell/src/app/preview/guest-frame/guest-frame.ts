@@ -105,10 +105,6 @@ export class GuestFrame implements OnInit {
     return this.iframeRef()?.nativeElement.contentWindow ?? null;
   }
 
-  get iframeElement(): HTMLIFrameElement | null {
-    return this.iframeRef()?.nativeElement ?? null;
-  }
-
   /**
    * The A2UI messages to render. Sent once the guest's document has announced
    * itself with RENDERER_READY, and again whenever its content changes; never

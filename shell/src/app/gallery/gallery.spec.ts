@@ -891,6 +891,39 @@ describe('Gallery Component', () => {
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalled();
   });
 
+  it('renders component example on v0.9 when handshake settles with error fallback', () => {
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
+    hostCommunicationMock.sendRenderA2UI.mockClear();
+    catalogManagementMock.hasReceivedCatalogResponse.set(false);
+    catalogManagementMock.activeProtocolVersion.set('v0.9');
+    catalogManagementMock.activeCatalog.set(null);
+    catalogManagementMock.catalogError.set('Watchdog timeout: A2UI_CATALOG not received.');
+    catalogServiceMock.selectedComponentProvenance.set({
+      componentKey: 'Text',
+      componentSchema: {type: 'object'},
+      catalogId: 'https://a2ui.org/custom_catalog.json',
+      catalogTitle: 'Custom',
+      catalog: {
+        catalogId: 'https://a2ui.org/custom_catalog.json',
+        components: {Text: {type: 'object'}},
+      },
+    });
+    catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Text', text: 'Fallback'}],
+    });
+    fixture.detectChanges();
+
+    expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
+
+    // Failed handshake still settles hasReceivedCatalogResponse while staying on v0.9
+    catalogManagementMock.hasReceivedCatalogResponse.set(true);
+    fixture.detectChanges();
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
   it('rejects payload and logs error when protocol version does not match active renderer', () => {
     const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
     catalogManagementMock.activeProtocolVersion.set('v0.9');

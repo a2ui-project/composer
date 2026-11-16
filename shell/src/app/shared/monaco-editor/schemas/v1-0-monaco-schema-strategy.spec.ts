@@ -385,6 +385,21 @@ describe('V10MonacoSchemaStrategy', () => {
     expect(components['SharedWidget']['description']).toBe('Primary version');
     expect(functions['sharedFunc']['description']).toBe('Primary sharedFunc');
     expect(defs['SharedDef']['description']).toBe('Primary SharedDef');
+
+    // componentUnion anyOf should also contain only the primary catalog definition on collision
+    const galleryEntry = schemas.find(s => s.uri === 'a2ui-gallery-example-schema');
+    const gallery = galleryEntry?.schema as {
+      properties: {
+        components: {
+          items: {
+            allOf: Array<{anyOf?: Array<Record<string, unknown>>}>;
+          };
+        };
+      };
+    };
+    const unionAnyOf = gallery.properties.components.items.allOf[1].anyOf ?? [];
+    expect(unionAnyOf).toHaveLength(1);
+    expect(unionAnyOf[0]['description']).toBe('Primary version');
   });
 
   it('provides canonical V1_0_COMMON_TYPES_SCHEMA schema definition', () => {

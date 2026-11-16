@@ -42,7 +42,7 @@ import {concatMap} from 'rxjs/operators';
 import {sanitizeHtml} from 'safevalues';
 import {IndexedDbStorage} from '../indexed-db-storage/indexed-db-storage';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {PreviewBridgeMessageType, type A2uiProtocolVersion} from 'a2ui-bridge';
+import {isV1ProtocolVersion, PreviewBridgeMessageType, type A2uiProtocolVersion} from 'a2ui-bridge';
 import {stableStringify} from '../stable-stringify/stable-stringify';
 import {CATALOG_WATCHDOG_MESSAGE, CATALOG_WATCHDOG_TIMEOUT_MS} from './catalog-watchdog';
 
@@ -429,8 +429,20 @@ export class CatalogManagement {
    * attribute or handshake settlement state.
    */
   readonly activeProtocolVersion: Signal<A2uiProtocolVersion> = computed<A2uiProtocolVersion>(() =>
-    resolveProtocolVersion(this._hasReceivedCatalogResponse(), this._activeCatalog()),
+    resolveProtocolVersion(
+      this._hasReceivedCatalogResponse(),
+      this._activeCatalogs(),
+      this._catalogError() !== null,
+      this._activeCatalog(),
+    ),
   );
+
+  private settleHandshakeError(errorMsg: string): void {
+    this._catalogError.set(errorMsg);
+    this._hasReceivedCatalogResponse.set(true);
+    this._handshakeState.set('settled');
+    this._isHandshakeInProgress.set(false);
+  }
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -464,9 +476,8 @@ export class CatalogManagement {
                 return;
               }
               this._watchdogFired.set(true);
-              this._catalogError.set(CATALOG_WATCHDOG_MESSAGE);
               this.logger.error(CATALOG_WATCHDOG_MESSAGE);
-              this._isHandshakeInProgress.set(false);
+              this.settleHandshakeError(CATALOG_WATCHDOG_MESSAGE);
               this.watchdogTimerId = null;
             }, CATALOG_WATCHDOG_TIMEOUT_MS);
 
@@ -481,9 +492,8 @@ export class CatalogManagement {
             const rawPayload = envelope.payload;
             if (!rawPayload || typeof rawPayload !== 'object' || Array.isArray(rawPayload)) {
               const errorMsg = 'Invalid or malformed A2UI_CATALOG payload received.';
-              this._catalogError.set(errorMsg);
               this.logger.error(errorMsg, rawPayload);
-              this._isHandshakeInProgress.set(false);
+              this.settleHandshakeError(errorMsg);
               return of(null);
             }
 
@@ -491,9 +501,8 @@ export class CatalogManagement {
               const errorObj = (rawPayload as {error: {message?: string}}).error;
               const errorMsg =
                 errorObj?.message || 'Unknown error occurred in preview bridge during handshake.';
-              this._catalogError.set(errorMsg);
               this.logger.error('Handshake failed with bridge error:', errorMsg);
-              this._isHandshakeInProgress.set(false);
+              this.settleHandshakeError(errorMsg);
               return of(null);
             }
 
@@ -531,9 +540,8 @@ export class CatalogManagement {
 
             if (!primary || typeof primary !== 'object' || Array.isArray(primary)) {
               const errorMsg = 'Invalid or malformed A2UI_CATALOG payload received.';
-              this._catalogError.set(errorMsg);
               this.logger.error(errorMsg, rawPayload);
-              this._isHandshakeInProgress.set(false);
+              this.settleHandshakeError(errorMsg);
               return of(null);
             }
 
@@ -542,18 +550,16 @@ export class CatalogManagement {
               catalogObj = sanitizeCatalog(primary as Catalog);
             } catch (err: unknown) {
               const errorMsg = 'Failed to clone or serialize catalog payload.';
-              this._catalogError.set(errorMsg);
               this.logger.error(errorMsg, err);
-              this._isHandshakeInProgress.set(false);
+              this.settleHandshakeError(errorMsg);
               return of(null);
             }
 
             const catalogId = getCatalogId(catalogObj);
             if (!catalogId) {
               const errorMsg = 'Catalog is missing a valid identifier (catalogId or $id).';
-              this._catalogError.set(errorMsg);
               this.logger.error(errorMsg, catalogObj);
-              this._isHandshakeInProgress.set(false);
+              this.settleHandshakeError(errorMsg);
               return of(null);
             }
 
@@ -572,9 +578,8 @@ export class CatalogManagement {
                 catalogsArr.length > 1 ? stableStringify(catalogsArr) : stableStringify(catalogObj);
             } catch (err: unknown) {
               const errorMsg = 'Failed to clone or serialize catalog payload.';
-              this._catalogError.set(errorMsg);
               this.logger.error(errorMsg, err);
-              this._isHandshakeInProgress.set(false);
+              this.settleHandshakeError(errorMsg);
               return of(null);
             }
 
@@ -669,9 +674,8 @@ export class CatalogManagement {
                 })
                 .catch((err: unknown) => {
                   const errorMsg = 'Failed to compute catalog hash or access storage.';
-                  this._catalogError.set(errorMsg);
                   this.logger.error(errorMsg, err);
-                  this._isHandshakeInProgress.set(false);
+                  this.settleHandshakeError(errorMsg);
                   return null;
                 }),
             );
@@ -700,24 +704,29 @@ export function sanitizeCatalog(catalog: Catalog): Catalog {
 }
 
 /**
- * Resolves the active protocol version based on handshake state and catalog version.
+ * Resolves the active protocol version based on handshake state, active catalogs, and error state.
  *
- * @param hasReceived Whether a catalog handshake response has been received.
- * @param catalog The currently active catalog or null.
+ * @param hasReceived Whether a catalog handshake response has settled.
+ * @param catalogs Active catalogs negotiated during the handshake.
+ * @param hasCatalogError Whether the latest handshake attempt ended in an error.
+ * @param primaryCatalog Fallback primary catalog when `catalogs` is empty.
  * @returns The resolved protocol version ('v0.9' or 'v1.0').
  */
 function resolveProtocolVersion(
   hasReceived: boolean,
-  catalog: Catalog | null,
+  catalogs: readonly Catalog[],
+  hasCatalogError: boolean,
+  primaryCatalog: Catalog | null = null,
 ): A2uiProtocolVersion {
   if (!hasReceived) {
     return 'v0.9';
   }
-  if (!catalog || isCatalogEmpty(catalog)) {
-    return 'v1.0';
+  const allCatalogs = catalogs.length > 0 ? catalogs : primaryCatalog ? [primaryCatalog] : [];
+  const nonEmptyCatalogs = allCatalogs.filter(c => !isCatalogEmpty(c));
+  if (nonEmptyCatalogs.length === 0) {
+    return hasCatalogError ? 'v0.9' : 'v1.0';
   }
-  const version = catalog.protocolVersion;
-  if (version === '1.0' || version === 'v1.0') {
+  if (nonEmptyCatalogs.some(c => isV1ProtocolVersion(c.protocolVersion))) {
     return 'v1.0';
   }
   return 'v0.9';

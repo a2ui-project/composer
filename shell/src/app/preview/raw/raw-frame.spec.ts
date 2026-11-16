@@ -1496,15 +1496,39 @@ describe('RawFrame JSON Source Editor View', () => {
   describe('protocol version mismatch & unsettled handshake', () => {
     it('blocks dispatch while catalog discovery handshake is unsettled (hasReceivedCatalogResponse is false)', async () => {
       vi.useFakeTimers();
+      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
       mockHasReceivedCatalogResponse.set(false);
 
       const {harness} = await setup(false);
       expect(await harness.getJsonText()).toContain('"createSurface"');
       expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Deferring RENDER_A2UI dispatch until catalog'),
+      );
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
 
       // Advancing time should not fire watchdog since dispatch was blocked
       vi.advanceTimersByTime(16000);
       expect(errorLoggerMock.warn).not.toHaveBeenCalled();
+      debugSpy.mockRestore();
+    });
+
+    it('dispatches default v0.9 payload after handshake settles with a fallback error state', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(false);
+      mockActiveProtocolVersion.set('v0.9');
+
+      const {fixture} = await setup(false);
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+
+      // Simulate CatalogManagement settling on v0.9 after watchdog or bridge error
+      mockHasReceivedCatalogResponse.set(true);
+      fixture.detectChanges();
+      await Promise.resolve();
+
+      expect(sendRenderA2UIMock).toHaveBeenCalledWith(expect.any(Array));
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
     });
 
     it('blocks dispatch, logs PROTOCOL_VERSION_MISMATCH, and does not fire watchdog when payload mismatches settled catalog version', async () => {

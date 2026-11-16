@@ -1042,6 +1042,28 @@ describe('GuestFrame', () => {
       expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(PAYLOAD, iframe);
     });
 
+    it('dispatches default v0.9 payload when handshake settles on v0.9 after an error', async () => {
+      hasReceivedCatalogResponseSignal.set(true);
+      activeProtocolVersionSignal.set('v0.9');
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+
+      const {fixture, harness} = await mount(host => host.payload.set(PAYLOAD));
+      const iframe = await iframeOf(harness);
+      await harness.simulateFrameLoad();
+
+      messages.next(
+        bridgeEnvelope(
+          PreviewBridgeMessageType.RENDERER_READY,
+          {},
+          {sourceWindow: iframe.contentWindow!},
+        ),
+      );
+      fixture.detectChanges();
+
+      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(PAYLOAD, iframe);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
     it('blocks dispatch and logs PROTOCOL_VERSION_MISMATCH when settled catalog version mismatches payload', async () => {
       const v1Payload = [
         {

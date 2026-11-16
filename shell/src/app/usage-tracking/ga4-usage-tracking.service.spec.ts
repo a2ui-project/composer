@@ -795,17 +795,6 @@ describe('Ga4UsageTrackingService', () => {
       expect((calls[2][2] as Record<string, unknown>)['invalid_property']).toBe('@path');
     });
 
-    it('passes explicit protocolVersion parameter in trackComposerError when provided', () => {
-      service.trackComposerError({
-        sourceTag: '[Protocol]',
-        errorCategory: 'PROTOCOL_VERSION_MISMATCH',
-        protocolVersion: 'v1.0',
-      });
-
-      const calls = mockWindow.gtag!.mock.calls;
-      expect((calls[0][2] as Record<string, unknown>)['protocol_version']).toBe('v1.0');
-    });
-
     it('attaches empty string for protocol_version before handshake response is received', () => {
       mockCatalogManagement.hasReceivedCatalogResponse.set(false);
       service.trackPageView({pagePath: '/chat'});

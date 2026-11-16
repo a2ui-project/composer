@@ -16,7 +16,8 @@
 
 import {Injectable, effect, inject, signal, Signal, OnDestroy, untracked} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
-import {ReplaySubject, Subject, Observable, filter} from 'rxjs';
+import {ReplaySubject, Subject, Observable} from 'rxjs';
+import {filter} from 'rxjs/operators';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {EnvironmentContextService} from '../startup-resolution/state/environment-context.service';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
@@ -190,36 +191,6 @@ export class HostCommunication implements OnDestroy {
         typeof env.payload === 'object' &&
         'rendererFunctionResponse' in env.payload &&
         !!(env.payload as Record<string, unknown>)['rendererFunctionResponse'],
-    ),
-  );
-
-  /** Stream of incoming user action events */
-  readonly action$ = this.sendToServer$.pipe(
-    filter(
-      (
-        env,
-      ): env is SendToServerEnvelope & {
-        payload: {action: unknown};
-      } =>
-        !!env.payload &&
-        typeof env.payload === 'object' &&
-        'action' in env.payload &&
-        !!(env.payload as Record<string, unknown>)['action'],
-    ),
-  );
-
-  /** Stream of incoming error reports */
-  readonly sendToServerError$ = this.sendToServer$.pipe(
-    filter(
-      (
-        env,
-      ): env is SendToServerEnvelope & {
-        payload: {error: unknown};
-      } =>
-        !!env.payload &&
-        typeof env.payload === 'object' &&
-        'error' in env.payload &&
-        !!(env.payload as Record<string, unknown>)['error'],
     ),
   );
 

@@ -513,6 +513,9 @@ export class RawFrame {
 
   private sendValidatedRenderA2UI(payload: unknown[]): boolean {
     if (!this.catalogManagement.hasReceivedCatalogResponse()) {
+      console.debug(
+        '[RawFrame] Deferring RENDER_A2UI dispatch until catalog discovery handshake settles.',
+      );
       return false;
     }
 

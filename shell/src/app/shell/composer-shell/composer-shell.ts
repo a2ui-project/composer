@@ -27,7 +27,7 @@ import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
 import {MatToolbarModule} from '@angular/material/toolbar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet} from '@angular/router';
-import {filter, map} from 'rxjs';
+import {filter, map} from 'rxjs/operators';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';

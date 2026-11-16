@@ -90,7 +90,6 @@ export interface ComposerErrorTelemetryParams {
   line?: number;
   column?: number;
   invalidProperty?: string;
-  protocolVersion?: string;
 }
 
 /**

@@ -207,6 +207,9 @@ describe('CatalogManagement', () => {
         'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
       );
       expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.handshakeState()).toBe('settled');
+      expect(service.activeProtocolVersion()).toBe('v0.9');
     },
   );
 
@@ -288,6 +291,9 @@ describe('CatalogManagement', () => {
 
       expect(service.catalogError()).toBe('Bridge in-memory catalog processing crash');
       expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.handshakeState()).toBe('settled');
+      expect(service.activeProtocolVersion()).toBe('v0.9');
       expect(errorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('Handshake failed with bridge error:'),
@@ -915,6 +921,35 @@ describe('CatalogManagement', () => {
 
       expect(service.hasReceivedCatalogResponse()).toBe(true);
       expect(service.activeProtocolVersion()).toBe('v0.9');
+    });
+
+    it('settles with activeProtocolVersion v1.0 when a secondary catalog has protocolVersion 1.x or v1.0', async () => {
+      const primaryV09 = {
+        catalogId: 'primary-v09',
+        title: 'Primary v0.9',
+        components: {},
+      };
+      const secondaryV1 = {
+        catalogId: 'secondary-v1',
+        title: 'Secondary v1.x',
+        protocolVersion: '1.1',
+        components: {},
+      };
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalog: primaryV09,
+          catalogs: [primaryV09, secondaryV1],
+        },
+        timestamp: 40051,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.activeProtocolVersion()).toBe('v1.0');
     });
 
     it('handles multi-catalog payload { catalog, catalogs } and caches catalogsJson', async () => {

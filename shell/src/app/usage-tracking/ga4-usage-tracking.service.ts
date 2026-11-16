@@ -476,9 +476,6 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       ['column']: params.column ?? -1,
       ['invalid_property']: sanitizedInvalidProperty,
     };
-    if (params.protocolVersion !== undefined) {
-      customParams['protocol_version'] = params.protocolVersion;
-    }
     this.dispatchGtagEvent('composer_error', customParams);
   }
 }

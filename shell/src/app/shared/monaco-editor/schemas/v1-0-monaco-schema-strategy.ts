@@ -113,13 +113,11 @@ export class V10MonacoSchemaStrategy implements MonacoSchemaStrategy {
       cat => this.normalizeRefs(cat, cat.$defs) as CatalogJson,
     );
 
-    const mergedComponents: unknown[] = [];
     const mergedComponentMap: Record<string, unknown> = {};
     const mergedDefs: Record<string, unknown> = {};
     const mergedFunctions: Record<string, unknown> = {};
     for (const cat of normalizedCatalogs) {
       if (cat.components && typeof cat.components === 'object') {
-        mergedComponents.push(...Object.values(cat.components));
         for (const [key, val] of Object.entries(cat.components)) {
           if (!Object.hasOwn(mergedComponentMap, key)) {
             mergedComponentMap[key] = val;
@@ -154,8 +152,9 @@ export class V10MonacoSchemaStrategy implements MonacoSchemaStrategy {
       };
     }
 
+    const mergedComponentValues = Object.values(mergedComponentMap);
     const componentUnion =
-      mergedComponents.length > 0
+      mergedComponentValues.length > 0
         ? {
             type: 'object',
             allOf: [
@@ -163,7 +162,7 @@ export class V10MonacoSchemaStrategy implements MonacoSchemaStrategy {
                 $ref: `${V1_0_COMMON_TYPES_URI}#/$defs/ComponentCommon`,
               },
               {
-                anyOf: mergedComponents,
+                anyOf: mergedComponentValues,
               },
             ],
           }

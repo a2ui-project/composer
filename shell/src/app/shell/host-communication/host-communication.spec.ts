@@ -2485,62 +2485,6 @@ describe('HostCommunication', () => {
       ).toEqual({success: true});
     });
 
-    it('routes action to action$ stream', () => {
-      const emitted: unknown[] = [];
-      service.action$.subscribe(e => emitted.push(e));
-
-      const event = new MessageEvent('message', {
-        source: mockIframeWindow,
-        origin: 'http://localhost:3000',
-        data: {
-          type: PreviewBridgeMessageType.SEND_TO_SERVER,
-          payload: {
-            version: '1.0',
-            action: {name: 'click_btn'},
-          },
-        },
-      });
-      window.dispatchEvent(event);
-
-      expect(emitted.length).toBe(1);
-      expect((emitted[0] as {sourceWindow: Window | null}).sourceWindow).toBe(mockIframeWindow);
-      expect(
-        (
-          emitted[0] as {
-            payload: {action: {name: string}};
-          }
-        ).payload.action.name,
-      ).toBe('click_btn');
-    });
-
-    it('routes error to sendToServerError$ stream', () => {
-      const emitted: unknown[] = [];
-      service.sendToServerError$.subscribe(e => emitted.push(e));
-
-      const event = new MessageEvent('message', {
-        source: mockIframeWindow,
-        origin: 'http://localhost:3000',
-        data: {
-          type: PreviewBridgeMessageType.SEND_TO_SERVER,
-          payload: {
-            version: '1.0',
-            error: {message: 'Server error', code: 'INTERNAL'},
-          },
-        },
-      });
-      window.dispatchEvent(event);
-
-      expect(emitted.length).toBe(1);
-      expect((emitted[0] as {sourceWindow: Window | null}).sourceWindow).toBe(mockIframeWindow);
-      expect(
-        (
-          emitted[0] as {
-            payload: {error: {code: string}};
-          }
-        ).payload.error.code,
-      ).toBe('INTERNAL');
-    });
-
     it('rejects malformed SEND_TO_SERVER and does not emit on sendToServer$', () => {
       const emitted: unknown[] = [];
       service.sendToServer$.subscribe(e => emitted.push(e));

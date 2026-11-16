@@ -15,7 +15,8 @@
  */
 
 /**
- * This is a copy synchronized from https://github.com/a2ui-project/a2ui/blob/main/specification/v1_0/json/common_types.json
+ * This is a copy synchronized from https://github.com/a2ui-project/a2ui/blob/4fdc4c632cf761af64fa474530df8211483fa282/specification/v1_0/json/common_types.json
+ * (matching @a2ui/web_core@0.15.0).
  */
 // prettier-ignore
 export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
