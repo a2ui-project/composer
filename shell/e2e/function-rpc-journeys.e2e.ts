@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {test, expect, type Page, type BrowserContext, type Route} from '@playwright/test';
+import {expect, test} from './fixtures';
+import type {BrowserContext, Page, Route} from '@playwright/test';
 import {
   demosCoordinator,
   firstPreviewFrame,
@@ -23,7 +24,12 @@ import {
 } from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 import {connectMockAgent, sseEvent} from '../src/app/agent-chat/test/mock-a2a-agent';
-import {setMonacoContent, waitForMonacoEditor, waitForPreviewTab} from './helpers';
+import {
+  resetStorageOnce,
+  setMonacoContent,
+  waitForMonacoEditor,
+  waitForPreviewTab,
+} from './helpers';
 
 const V10_RENDERER_URL = 'http://mock-v10-renderer.local/index.html';
 
@@ -214,20 +220,14 @@ test.describe('A2UI v1.0 Function RPC Journeys Suite', () => {
 
     await setupV10Config(context);
 
-    await page.addInitScript(() => {
-      if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
-        sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
-        localStorage.clear();
-        localStorage.setItem('a2ui_composer_force_1p', 'true');
-        localStorage.setItem(
-          'a2ui_composer_allowed_origins',
-          JSON.stringify([
-            'http://mock-v10-renderer.local',
-            'http://mock-agent.local',
-            'http://localhost:3456',
-          ]),
-        );
-      }
+    const angularOrigin = new URL(RENDERER_URLS.angular).origin;
+    await resetStorageOnce(page, {
+      a2ui_composer_force_1p: 'true',
+      a2ui_composer_allowed_origins: JSON.stringify([
+        'http://mock-v10-renderer.local',
+        'http://mock-agent.local',
+        angularOrigin,
+      ]),
     });
   });
 

@@ -32,6 +32,6 @@ import {attachCatalogSchema} from '../../../shared/attach-catalog-schema.js';
 export class SampleBasicCatalog extends BasicCatalog {
   constructor() {
     super();
-    attachCatalogSchema(this);
+    attachCatalogSchema(this, {title: 'Angular Basic Catalog'});
   }
 }

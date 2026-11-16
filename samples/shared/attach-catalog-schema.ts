@@ -27,7 +27,7 @@ export function attachCatalogSchema<
   T extends {
     catalogSchema?: unknown;
   },
->(catalog: T): T {
+>(catalog: T, options?: {title?: string}): T {
   const ownDesc = Object.getOwnPropertyDescriptor(catalog, 'catalogSchema');
   if ((ownDesc && !ownDesc.configurable) || !Object.isExtensible(catalog)) {
     return catalog;
@@ -50,6 +50,7 @@ export function attachCatalogSchema<
         title: 'Basic Catalog',
         description: 'Unified catalog of basic A2UI components and functions.',
         ...base,
+        ...(options?.title ? {title: options.title} : {}),
       };
     },
     configurable: true,

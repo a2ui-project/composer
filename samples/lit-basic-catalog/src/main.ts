@@ -28,7 +28,7 @@ import {DEMOS} from '../../shared/demos';
 void A2uiSurface;
 
 injectBasicCatalogStyles();
-attachCatalogSchema(basicCatalog);
+attachCatalogSchema(basicCatalog, {title: 'Lit Basic Catalog'});
 
 export const AppRoot = bootstrapLitSandbox([basicCatalog, createMcpFunctionsCatalog()], {
   elementTagName: 'app-root',

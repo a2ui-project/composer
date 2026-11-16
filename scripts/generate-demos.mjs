@@ -34,7 +34,6 @@ import {
   extractSurfaceComponents,
   validateV10Components,
 } from '../samples/shared/validate-components.ts';
-import {normalizeDemoHeadings} from './normalize-demo-headings.mjs';
 
 // `fileURLToPath` (rather than `new URL(...).pathname`) is required here:
 // the latter mangles paths containing spaces or other characters that need
@@ -208,7 +207,7 @@ function readExamples(filenames) {
       id,
       name: example.name,
       description: example.description,
-      a2ui: normalizeDemoHeadings(example.messages),
+      a2ui: example.messages,
     });
   }
 
@@ -243,7 +242,7 @@ function readShowcaseDemos() {
           id: `showcase-${idFromFilename(filename)}`,
           name: example.name,
           description: example.description,
-          a2ui: normalizeDemoHeadings(example.messages),
+          a2ui: example.messages,
         };
       })
   );

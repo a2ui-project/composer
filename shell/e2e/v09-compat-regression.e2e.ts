@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-import {test, expect, type Page, type BrowserContext, type Route} from '@playwright/test';
+import {expect, test} from './fixtures';
+import type {BrowserContext, Page, Route} from '@playwright/test';
 import {CAR_BOOKING_V1_0} from '../src/app/chat/chat-service/initial-draft';
 import {CATALOG_WATCHDOG_MESSAGE} from '../src/app/storage/catalog-management/catalog-watchdog';
 import {inlineSurfaceFrame, previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 import {connectMockAgent, sseEvent} from '../src/app/agent-chat/test/mock-a2a-agent';
-import {getMonacoContent, setMonacoContent, waitForMonacoEditor} from './helpers';
+import {getMonacoContent, resetStorageOnce, setMonacoContent, waitForMonacoEditor} from './helpers';
 
 const V09_RENDERER_URL = 'http://mock-v09-renderer.local/index.html';
 const V10_RENDERER_URL = 'http://mock-v10-renderer.local/index.html';
@@ -157,20 +158,15 @@ test.describe('v0.9 Compatibility Regression Suite', () => {
 
     await setupMockRenderers(context);
 
-    const allowedOrigins = [
-      'http://mock-v09-renderer.local',
-      'http://mock-v10-renderer.local',
-      'http://mock-agent.local',
-      new URL(RENDERER_URLS.angular).origin,
-    ];
-    await page.addInitScript(origins => {
-      if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
-        sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
-        localStorage.clear();
-        localStorage.setItem('a2ui_composer_force_1p', 'true');
-        localStorage.setItem('a2ui_composer_allowed_origins', JSON.stringify(origins));
-      }
-    }, allowedOrigins);
+    await resetStorageOnce(page, {
+      a2ui_composer_force_1p: 'true',
+      a2ui_composer_allowed_origins: JSON.stringify([
+        'http://mock-v09-renderer.local',
+        'http://mock-v10-renderer.local',
+        'http://mock-agent.local',
+        new URL(RENDERER_URLS.angular).origin,
+      ]),
+    });
   });
 
   test('loads CAR_BOOKING (v0.9) starter draft on /workspace and dispatches 3-message v0.9 RENDER_A2UI', async ({

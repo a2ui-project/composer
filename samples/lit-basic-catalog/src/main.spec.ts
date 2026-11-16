@@ -317,4 +317,18 @@ describe('attachCatalogSchema', () => {
       attachCatalogSchema(nonConfigurableCatalog);
     }).not.toThrow();
   });
+
+  it('allows overriding the schema title via options', () => {
+    const catalog: {catalogSchema?: unknown} = {
+      catalogSchema: {title: 'Basic Catalog', components: {Text: {}}},
+    };
+
+    attachCatalogSchema(catalog, {title: 'Lit Basic Catalog'});
+
+    expect(catalog.catalogSchema).toEqual({
+      title: 'Lit Basic Catalog',
+      description: 'Unified catalog of basic A2UI components and functions.',
+      components: {Text: {}},
+    });
+  });
 });

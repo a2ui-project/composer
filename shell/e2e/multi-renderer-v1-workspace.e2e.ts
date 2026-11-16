@@ -14,15 +14,10 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {expect, test} from './fixtures';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
-import {
-  getMonacoContent,
-  mockLocalRenderersConfig,
-  setMonacoContent,
-  waitForMonacoEditor,
-} from './helpers';
+import {getMonacoContent, resetStorageOnce, setMonacoContent, waitForMonacoEditor} from './helpers';
 
 interface MonacoMarker {
   severity: number;
@@ -129,49 +124,46 @@ const INVALID_V10_PAYLOAD = JSON.stringify([
   },
 ]);
 
-const INVALID_FN_CALL_PAYLOAD = JSON.stringify([
-  {
-    version: '1.0',
-    createSurface: {
-      surfaceId: 'v10-invalid-fn-surface',
-      catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
-      components: [
-        {
-          id: 'root',
-          component: 'Button',
-          child: 'btn_text',
-          action: {
-            functionCall: {
-              '@call': 'openUrl',
-              args: {
-                url: 12345,
+const INVALID_FN_CALL_PAYLOAD = JSON.stringify(
+  [
+    {
+      version: '1.0',
+      createSurface: {
+        surfaceId: 'v10-invalid-fn-surface',
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        components: [
+          {
+            id: 'root',
+            component: 'Button',
+            child: 'btn_text',
+            action: {
+              functionCall: {
+                '@call': 'openUrl',
+                args: {
+                  url: 12345,
+                },
               },
             },
           },
-        },
-        {
-          id: 'btn_text',
-          component: 'Text',
-          text: 'Invalid Function',
-        },
-      ],
+          {
+            id: 'btn_text',
+            component: 'Text',
+            text: 'Invalid Function',
+          },
+        ],
+      },
     },
-  },
-]);
+  ],
+  null,
+  2,
+);
+
+const INVALID_FN_CALL_URL_LINE =
+  INVALID_FN_CALL_PAYLOAD.split('\n').findIndex(line => line.includes('"url": 12345')) + 1;
 
 test.describe('Multi-Renderer v1.0 Workspace E2E Suite', () => {
-  test.beforeEach(async ({context, page}) => {
-    await mockLocalRenderersConfig(context);
-
-    await page.addInitScript(() => {
-      try {
-        if (window === window.top) {
-          localStorage.setItem('a2ui_composer_force_1p', 'true');
-        }
-      } catch {
-        // Ignore cross-origin sandboxed frame SecurityError
-      }
-    });
+  test.beforeEach(async ({page}) => {
+    await resetStorageOnce(page, {a2ui_composer_force_1p: 'true'});
   });
 
   test('switches across all three live v1.0 sample renderers (Angular, Lit, React) on /workspace and verifies CAR_BOOKING_V1_0 renders cleanly', async ({
@@ -302,19 +294,36 @@ test.describe('Multi-Renderer v1.0 Workspace E2E Suite', () => {
       )
       .toBe(true);
 
-    // 3. Set payload with invalid function argument to verify FunctionCall schema enforcement
-    await setMonacoContent(page, INVALID_FN_CALL_PAYLOAD);
-
-    // Verify Monaco produces error markers flagging the invalid function call argument
+    // 3. Reset to a valid v1.0 payload so previous error markers clear cleanly,
+    //    then set a payload with an invalid function argument on a known line.
+    expect(INVALID_FN_CALL_URL_LINE).toBeGreaterThan(0);
+    await setMonacoContent(page, VALID_V10_PAYLOAD);
     await expect
       .poll(
         async () => {
           return page.evaluate(() => {
             const monaco = (window as unknown as WindowWithMonacoMarkers).monaco;
+            if (!monaco) return -1;
+            const markers = monaco.editor.getModelMarkers({});
+            return markers.filter(m => m.severity === 8).length;
+          });
+        },
+        {timeout: 15_000},
+      )
+      .toBe(0);
+
+    await setMonacoContent(page, INVALID_FN_CALL_PAYLOAD);
+
+    // Verify Monaco produces an error marker specifically on the invalid `"url": 12345` line
+    await expect
+      .poll(
+        async () => {
+          return page.evaluate(urlLine => {
+            const monaco = (window as unknown as WindowWithMonacoMarkers).monaco;
             if (!monaco) return false;
             const markers = monaco.editor.getModelMarkers({});
-            return markers.some(m => m.severity === 8);
-          });
+            return markers.some(m => m.severity === 8 && m.startLineNumber === urlLine);
+          }, INVALID_FN_CALL_URL_LINE);
         },
         {timeout: 15_000},
       )

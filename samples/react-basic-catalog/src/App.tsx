@@ -25,7 +25,7 @@ import {A2uiSurface, MarkdownContext, type ReactCatalogComponent} from '@a2ui/re
 import {basicCatalog} from '@a2ui/web_core/catalogs/basic/v1';
 import {useDebouncedValue} from './hooks/use-debounced-value.js';
 
-attachCatalogSchema(basicCatalog);
+attachCatalogSchema(basicCatalog, {title: 'React Basic Catalog'});
 
 const mcpFunctionsCatalog = createMcpFunctionsCatalog();
 

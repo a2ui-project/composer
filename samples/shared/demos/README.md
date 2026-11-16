@@ -23,6 +23,4 @@ The checkout photo uses the same public Unsplash image as the upstream basic-cat
 
 Edit a showcase's JSON, then run `yarn generate:demos` from the repository root to rewrite `demos.json`. The numeric `NN_` prefix orders the showcases. The generator validates message schemas, basic-component properties, unique component IDs, and child references first. CI runs `yarn generate:demos:check`, which fails if `demos.json` is out of date.
 
-During generation, a literal Text heading such as `{text: '# Title', variant: 'h1'}` becomes `{text: 'Title', variant: 'h1'}`, because heading variants render plain text. Only a leading Markdown marker that matches the explicit heading level is removed. Markdown body text, dynamic bindings, other hashes, and upstream source files remain unchanged. Run `node --test scripts/normalize-demo-headings.test.mjs` to verify this normalization.
-
 Review changes in Angular, Lit, and React, including light and dark themes, narrow layouts, and any input or action bindings. The shell consumes the demos the renderer supplies and doesn't know their component types or content.

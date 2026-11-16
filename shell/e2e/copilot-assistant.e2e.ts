@@ -250,7 +250,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
       'src',
       /localhost:3457/,
     );
-    await expect(page.locator('.header-title')).toHaveText('A2UI Composer - Basic Catalog');
+    await expect(page.locator('.header-title')).toHaveText('A2UI Composer - Lit Basic Catalog');
     await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
     await expect(prompt).toHaveValue('Create a simple card in this renderer');
 
@@ -261,7 +261,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
     );
     await page.getByRole('menuitemradio', {name: 'Angular Basic'}).click();
     await expect(selector).toHaveAccessibleName('Choose renderer, current: Angular Basic');
-    await expect(page.locator('.header-title')).toContainText('Basic Catalog');
+    await expect(page.locator('.header-title')).toHaveText('A2UI Composer - Angular Basic Catalog');
     await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
     await expect(prompt).toHaveValue('Create a simple card in this renderer');
   });
