@@ -39,6 +39,8 @@ vi.mock('a2ui-bridge', () => ({
     getMcpClient: vi.fn(),
   },
   ERROR_OVERLAY_DEBOUNCE_MS: 350,
+  isV1ProtocolVersion: (v: unknown) =>
+    typeof v === 'string' && (v.trim().startsWith('1.') || v.trim().startsWith('v1.')),
   createMcpCatalogFunctions: vi.fn().mockReturnValue([]),
 }));
 
