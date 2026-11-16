@@ -57,16 +57,13 @@ export interface PropertyChangeEvent {
 /**
  * Metadata and control state for one editable catalog property of the selected component.
  */
-export interface EditableProperty {
+interface EditableProperty {
   name: string;
   required: boolean;
   control: PropertyControl;
   kind: PropertyControl['kind'];
-  options: PropertyControl['options'];
   /** The current value, or undefined when the example omits the property. */
   value: unknown;
-  /** Formatted JSON representation of the value, or empty string when undefined. */
-  json: string;
   /** Set when the value is a binding or call that only the JSON tab can edit. */
   note: string | null;
   /** True for properties every component in the catalog shares, such as accessibility. */
@@ -226,9 +223,7 @@ export class PropertyEditor {
           required: prop.required,
           control,
           kind: control.kind,
-          options: control.options,
           value,
-          json: value === undefined ? '' : formatJson(value),
           note: describeUneditableValue(value, control),
           common: !prop.required && common.has(prop.name),
           firstCommon: false,
