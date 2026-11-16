@@ -309,7 +309,7 @@ export class PropertyEditor {
   /**
    * Sets one property on the target component, or removes it when value is undefined.
    */
-  protected editProperty(name: string, value: unknown): string | null {
+  protected editProperty(name: string, value: unknown, emitStatus = true): string | null {
     const target = this.component();
     if (!target || this.disabled()) {
       return null;
@@ -329,7 +329,9 @@ export class PropertyEditor {
           ? target['id']
           : (this.resolvedComponentKey() ?? 'target');
       const reason = `"${name}" on "${componentId}" does not match its catalog property type or choices.`;
-      this.statusMessage.emit(`${reason} Preview keeps its previous value.`);
+      if (emitStatus) {
+        this.statusMessage.emit(`${reason} Preview keeps its previous value.`);
+      }
       return reason;
     }
     let updatedComponent: Record<string, unknown>;
@@ -347,7 +349,7 @@ export class PropertyEditor {
   /**
    * Updates a top-level or nested property at `path`.
    */
-  protected editAtPath(path: PropertyPath, value: unknown): string | null {
+  protected editAtPath(path: PropertyPath, value: unknown, emitStatus = true): string | null {
     if (path.length === 0) {
       return null;
     }
@@ -356,7 +358,7 @@ export class PropertyEditor {
       return null;
     }
     if (rest.length === 0) {
-      return this.editProperty(rootName, value);
+      return this.editProperty(rootName, value, emitStatus);
     }
     const currentRoot = this.component()?.[rootName];
     const topProp = this.editableProperties().find(prop => prop.name === rootName);
@@ -367,7 +369,7 @@ export class PropertyEditor {
       topProp?.control,
       topProp?.required ?? false,
     );
-    return this.editProperty(rootName, updatedRoot);
+    return this.editProperty(rootName, updatedRoot, emitStatus);
   }
 
   /**
@@ -423,9 +425,8 @@ export class PropertyEditor {
         return;
       }
     }
-    const error = this.editAtPath(path, value);
+    const error = this.editAtPath(path, value, false);
     if (error) {
-      this.statusMessage.emit('');
       setError(`${error} The example keeps its previous value.`);
       return;
     }

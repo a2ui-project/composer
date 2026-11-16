@@ -127,10 +127,7 @@ describe('PropertyEditor Component', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [PropertyEditor],
-      providers: [
-        {provide: CatalogManagement, useClass: MockCatalogManagement},
-        ErrorLogger,
-      ],
+      providers: [{provide: CatalogManagement, useClass: MockCatalogManagement}, ErrorLogger],
     }).compileComponents();
 
     fixture = TestBed.createComponent(PropertyEditor);
@@ -264,7 +261,7 @@ describe('PropertyEditor Component', () => {
     expect(await harness.getPropertyError('style')).toBe(
       '"style" on "box-1" does not match its catalog property type or choices. The example keeps its previous value.',
     );
-    expect(statusSpy).toHaveBeenLastCalledWith('');
+    expect(statusSpy.mock.calls).toEqual([['']]);
     expect(changeSpy).not.toHaveBeenCalled();
   });
 
