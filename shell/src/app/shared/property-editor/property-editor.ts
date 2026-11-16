@@ -109,18 +109,8 @@ export class PropertyEditor {
   readonly component = input<Record<string, unknown> | null | undefined>(null);
 
   /**
-   * Optional override for the component type key; defaults to `component()['component']`.
-   */
-  readonly componentKey = input<string | null | undefined>(undefined);
-
-  /**
-   * Optional catalog override; defaults to `CatalogManagement.activeCatalog()`.
-   */
-  readonly catalog = input<Catalog | null | undefined>(undefined);
-
-  /**
    * Optional pre-resolved property specifications; when omitted, resolved automatically
-   * from the active catalog and `componentKey`.
+   * from the active catalog and `component()['component']`.
    */
   readonly properties = input<ParsedProperty[] | null | undefined>(undefined);
 
@@ -144,23 +134,13 @@ export class PropertyEditor {
   protected readonly formatJson = formatJson;
   protected readonly describeUneditableValue = describeUneditableValue;
 
-  private readonly activeCatalog: Signal<Catalog | null> = computed(() => {
-    const explicitCatalog = this.catalog();
-    return explicitCatalog !== undefined ? explicitCatalog : this.catalogManagement.activeCatalog();
-  });
-
   private readonly catalogSignature: Signal<string | null> = computed(() => {
-    const catalog = this.activeCatalog();
+    const catalog = this.catalogManagement.activeCatalog();
     return catalog ? stableStringify(catalog) : null;
   });
 
   private readonly resolvedComponentKey: Signal<string | null> = computed(() => {
-    const explicitKey = this.componentKey();
-    if (typeof explicitKey === 'string' && explicitKey) {
-      return explicitKey;
-    }
-    const target = this.component();
-    const typeName = target?.['component'];
+    const typeName = this.component()?.['component'];
     return typeof typeName === 'string' && typeName ? typeName : null;
   });
 
@@ -171,7 +151,7 @@ export class PropertyEditor {
     resolver: CatalogSchemaResolver;
     common: Set<string>;
   } | null> = computed(() => {
-    const catalog = this.activeCatalog();
+    const catalog = this.catalogManagement.activeCatalog();
     if (!catalog) {
       return null;
     }

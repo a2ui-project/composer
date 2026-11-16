@@ -159,19 +159,6 @@ describe('PropertyEditor Component', () => {
     expect(await harness.getPropertySectionHeadings()).toEqual(['Common properties']);
   });
 
-  it('resolves properties using explicit catalog and componentKey inputs when provided', async () => {
-    catalogManagementMock.activeCatalog.set(null);
-    fixture.componentRef.setInput('catalog', jsonCatalog);
-    fixture.componentRef.setInput('componentKey', 'StyledBox');
-    fixture.componentRef.setInput('component', {
-      id: 'box-override',
-      style: {padding: 8},
-    });
-    fixture.detectChanges();
-
-    expect(await harness.getPropertyNames()).toEqual(['style', 'weight']);
-  });
-
   it('blocks property edits when disabled input is true', async () => {
     const propertyChanges: PropertyChangeEvent[] = [];
     fixture.componentInstance.propertyChange.subscribe(event => propertyChanges.push(event));
