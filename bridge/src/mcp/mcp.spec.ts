@@ -182,6 +182,16 @@ describe('MCP Bridge & Catalog Functions', () => {
         updateFn.execute({updates: {'/a': 1}}, {resolveDynamicValue: (v: unknown) => v} as never),
       ).toThrow(/context\.set is not a function/);
 
+      expect(() => updateFn.execute({updates: {'/__proto__': 'bad'}}, mockCtx)).toThrow(
+        /prototype pollution key/,
+      );
+      expect(() => updateFn.execute({updates: {'/nested/__proto__/x': 1}}, mockCtx)).toThrow(
+        /prototype pollution key/,
+      );
+      expect(() => updateFn.execute({updates: {'/constructor/x': 'bad'}}, mockCtx)).toThrow(
+        /prototype pollution key/,
+      );
+
       const callMcpFn = mcpFunctions.find(f => f.name === 'callMcpTool')!;
       const toolRes = await callMcpFn.execute({name: 'list_dir', arguments: {path: '/'}}, mockCtx);
       expect(mockClient.callTool).toHaveBeenCalledWith({
@@ -330,6 +340,14 @@ describe('MCP Bridge & Catalog Functions', () => {
         'primitive-entry',
         {version: 'v0.9', createSurface: {surfaceId: 's3'}},
       ]);
+    });
+
+    it('does not recurse 100x when resolveDynamicValue passes normalized function calls through unchanged', () => {
+      const resolveSpy = vi.fn((v: unknown) => v);
+      const mockCtx = {resolveDynamicValue: resolveSpy};
+      const result = resolveDynamicValueDeep({call: 'passthroughFn'}, mockCtx);
+      expect(result).toEqual({call: 'passthroughFn', args: {}, returnType: 'any'});
+      expect(resolveSpy).toHaveBeenCalledTimes(1);
     });
   });
 

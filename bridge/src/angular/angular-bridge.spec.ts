@@ -618,6 +618,32 @@ describe('Angular Sandbox Connection Spec', () => {
     expect(config.useUniversalComponents).toBe(true);
   });
 
+  it('does not treat an unrelated component named UniversalOnlyComponent as universal-only', () => {
+    class UniversalOnlyComponent {}
+    const unrelatedCatalog = {
+      id: 'unrelated-cat',
+      components: new Map([['text', {tagName: 'a2ui-text', component: UniversalOnlyComponent}]]),
+    };
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideA2uiSandbox([unrelatedCatalog]),
+        {provide: A2uiRendererService, useValue: mockRendererService},
+      ],
+    });
+
+    const config = TestBed.inject(A2UI_RENDERER_CONFIG) as {
+      useUniversalComponents?: boolean;
+    };
+    expect(Boolean(config.useUniversalComponents)).toBe(false);
+  });
+
   it('forwards callAgentFunction on the attached processor to rendererService.callAgentFunction', async () => {
     const mockCallAgentFunction = vi.fn().mockResolvedValue({result: 'ok'});
     const mockRendererService = {

@@ -93,7 +93,7 @@ export class V10DynamicValueStrategy implements DynamicValueStrategy<
         if (this.isFunctionCall(node)) {
           const dynamicCall = this.normalizeFunctionCall(node);
           const resolved = context.resolveDynamicValue(dynamicCall);
-          return {resolved: true, value: resolved};
+          return {resolved: true, value: resolved, unchanged: resolved === dynamicCall};
         }
         return {resolved: false};
       },

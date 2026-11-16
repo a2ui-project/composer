@@ -15,7 +15,7 @@
  */
 
 import type {A2uiProtocolVersion} from '../bridge-message.js';
-import type {BridgeProtocolStrategy} from './bridge-protocol-strategy.js';
+import {isV1ProtocolVersion, type BridgeProtocolStrategy} from './bridge-protocol-strategy.js';
 import {V09BridgeProtocolStrategy} from './v0-9-bridge-protocol-strategy.js';
 import {V10BridgeProtocolStrategy} from './v1-0-bridge-protocol-strategy.js';
 
@@ -45,7 +45,7 @@ export function resolveProtocolStrategy(version?: string | null): BridgeProtocol
   if (registered) {
     return registered;
   }
-  if (trimmed.startsWith('1.') || trimmed.startsWith('v1.')) {
+  if (isV1ProtocolVersion(trimmed)) {
     return defaultV10Strategy;
   }
   return defaultV09Strategy;
@@ -63,11 +63,8 @@ export function detectProtocolVersion(messages: readonly unknown[]): A2uiProtoco
   for (const item of messages) {
     if (item && typeof item === 'object') {
       const version = (item as Record<string, unknown>)['version'];
-      if (typeof version === 'string') {
-        const v = version.trim();
-        if (v === 'v1.0' || v === '1.0' || v.startsWith('1.') || v.startsWith('v1.')) {
-          return 'v1.0';
-        }
+      if (isV1ProtocolVersion(version)) {
+        return 'v1.0';
       }
     }
   }

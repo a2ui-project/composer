@@ -95,7 +95,7 @@ export function resolveDynamicValueDeep<T = unknown>(
                 returnType: node.returnType ?? 'any',
               };
         const resolved = (context as DataContext).resolveDynamicValue(dynamicCall);
-        return {resolved: true, value: resolved};
+        return {resolved: true, value: resolved, unchanged: resolved === dynamicCall};
       }
       return {resolved: false};
     },

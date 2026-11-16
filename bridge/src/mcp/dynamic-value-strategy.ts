@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {isV1ProtocolVersion} from '../protocol/bridge-protocol-strategy.js';
+
 /** Maximum recursion depth when resolving nested dynamic values to prevent infinite loops. */
 export const MAX_RESOLUTION_DEPTH = 100;
 
@@ -38,7 +40,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Result of evaluating a potential dynamic expression node.
  */
-export type DynamicExpressionResult = {resolved: true; value: unknown} | {resolved: false};
+export type DynamicExpressionResult =
+  {resolved: true; value: unknown; unchanged?: boolean} | {resolved: false};
 
 /**
  * Recursively resolves dynamic values within arrays, objects, and nested nodes
@@ -70,7 +73,7 @@ export function resolveDynamicTree<T = unknown>(
   }
   const exprResult = resolveExpression(value);
   if (exprResult.resolved) {
-    if (exprResult.value === value) {
+    if (exprResult.unchanged || exprResult.value === value) {
       return exprResult.value as unknown as T;
     }
     return resolveDynamicTree(exprResult.value, resolveExpression, depth + 1);
@@ -133,16 +136,7 @@ import {v10DynamicValueStrategy} from './v1-0-dynamic-value-strategy.js';
 export function getDynamicValueStrategy(
   version?: 'v0.9' | 'v1.0' | '0.9' | '1.0' | string | null,
 ): DynamicValueStrategy {
-  if (!version || typeof version !== 'string') {
-    return v09DynamicValueStrategy;
-  }
-  const trimmed = version.trim();
-  if (
-    trimmed === 'v1.0' ||
-    trimmed === '1.0' ||
-    trimmed.startsWith('1.') ||
-    trimmed.startsWith('v1.')
-  ) {
+  if (isV1ProtocolVersion(version)) {
     return v10DynamicValueStrategy;
   }
   return v09DynamicValueStrategy;
@@ -172,11 +166,7 @@ export function detectDynamicValueStrategy(
   }
   const version = ctx.surfaceProtocolVersion ?? ctx.protocolVersion;
   if (typeof version === 'string') {
-    const v = version.trim();
-    if (v === '1.0' || v === 'v1.0' || v.startsWith('1.') || v.startsWith('v1.')) {
-      return v10DynamicValueStrategy;
-    }
-    return v09DynamicValueStrategy;
+    return isV1ProtocolVersion(version) ? v10DynamicValueStrategy : v09DynamicValueStrategy;
   }
   return undefined;
 }
@@ -224,11 +214,13 @@ export function resolveDynamicValueWithContext<T = unknown>(
       }
       if (v10DynamicValueStrategy.isFunctionCall(node)) {
         const call = v10DynamicValueStrategy.normalizeFunctionCall(node);
-        return {resolved: true, value: context.resolveDynamicValue(call)};
+        const resolved = context.resolveDynamicValue(call);
+        return {resolved: true, value: resolved, unchanged: resolved === call};
       }
       if (v09DynamicValueStrategy.isFunctionCall(node)) {
         const call = v09DynamicValueStrategy.normalizeFunctionCall(node);
-        return {resolved: true, value: context.resolveDynamicValue(call)};
+        const resolved = context.resolveDynamicValue(call);
+        return {resolved: true, value: resolved, unchanged: resolved === call};
       }
       return {resolved: false};
     },

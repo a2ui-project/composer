@@ -15,6 +15,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
+import {isV1ProtocolVersion} from './bridge-protocol-strategy';
 import {resolveProtocolStrategy, detectProtocolVersion} from './protocol-strategy-registry';
 import {V09BridgeProtocolStrategy} from './v0-9-bridge-protocol-strategy';
 import {V10BridgeProtocolStrategy} from './v1-0-bridge-protocol-strategy';
@@ -49,6 +50,24 @@ describe('ProtocolStrategyRegistry', () => {
       expect(detectProtocolVersion([{}])).toBe('v0.9');
       expect(detectProtocolVersion([])).toBe('v0.9');
       expect(detectProtocolVersion(null as unknown as unknown[])).toBe('v0.9');
+    });
+  });
+
+  describe('isV1ProtocolVersion', () => {
+    it('returns true for v1.x protocol version strings', () => {
+      expect(isV1ProtocolVersion('1.0')).toBe(true);
+      expect(isV1ProtocolVersion('v1.0')).toBe(true);
+      expect(isV1ProtocolVersion(' 1.2 ')).toBe(true);
+      expect(isV1ProtocolVersion('v1.1')).toBe(true);
+    });
+
+    it('returns false for v0.9 or non-string inputs', () => {
+      expect(isV1ProtocolVersion('0.9')).toBe(false);
+      expect(isV1ProtocolVersion('v0.9')).toBe(false);
+      expect(isV1ProtocolVersion('')).toBe(false);
+      expect(isV1ProtocolVersion(null)).toBe(false);
+      expect(isV1ProtocolVersion(undefined)).toBe(false);
+      expect(isV1ProtocolVersion(1.0)).toBe(false);
     });
   });
 });

@@ -166,6 +166,18 @@ export declare interface CatalogErrorDetails {
   message: string;
 }
 
+/**
+ * Minimal catalog definition representation used by the Preview Bridge.
+ *
+ * @deprecated Use {@link PreviewBridge.aliasSingleCatalogId} for single-catalog ID aliasing, or {@link CatalogHandshakePayload} / `Record<string, unknown>` for typing.
+ */
+export declare interface CatalogDetails {
+  catalogId?: string;
+  id?: string;
+  $id?: string;
+  [key: string]: unknown;
+}
+
 /** Payload for A2UI_CATALOG message type. */
 export declare interface CatalogHandshakePayload {
   /** Primary catalog schema definition. */

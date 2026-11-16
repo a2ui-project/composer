@@ -21,6 +21,7 @@ import {
 
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
+import {isV1ProtocolVersion} from './protocol/bridge-protocol-strategy.js';
 import {
   resolveProtocolStrategy,
   detectProtocolVersion,
@@ -383,26 +384,11 @@ export class PreviewBridge {
     return this.mcpClient;
   }
 
-  /** Standalone or manually registered processor reference. */
-  private manualProcessor: RendererProcessor | null = null;
-
-  /**
-   * Sets or updates the active renderer processor reference.
-   *
-   * @param processor The framework-specific message processor.
-   */
-  setActiveProcessor(processor: RendererProcessor): void {
-    if (this.activeRenderer) {
-      this.activeRenderer.processor = processor;
-    }
-    this.manualProcessor = processor;
-  }
-
   /**
    * Returns the currently attached renderer processor, if any.
    */
   getActiveProcessor(): RendererProcessor | undefined {
-    return this.activeRenderer?.processor ?? this.manualProcessor ?? undefined;
+    return this.activeRenderer?.processor;
   }
 
   /**
@@ -715,11 +701,8 @@ export class PreviewBridge {
     for (const entry of candidates) {
       if (entry && typeof entry === 'object') {
         const ver = (entry as {protocolVersion?: unknown}).protocolVersion;
-        if (typeof ver === 'string') {
-          const v = ver.trim();
-          if (v === '1.0' || v === 'v1.0' || v.startsWith('1.') || v.startsWith('v1.')) {
-            return '1.0';
-          }
+        if (isV1ProtocolVersion(ver)) {
+          return '1.0';
         }
       }
     }
@@ -766,7 +749,6 @@ export class PreviewBridge {
     }
     this.activeConnections.clear();
     this.mcpClient = null;
-    this.manualProcessor = null;
   }
 
   private resolveExpectedParentOrigin(): string {
@@ -1380,8 +1362,11 @@ export class PreviewBridge {
       return jsonMeta;
     };
 
+    const hasCatalogSchema = Boolean(
+      catObj.catalogSchema && typeof catObj.catalogSchema === 'object',
+    );
     let schema: Record<string, unknown>;
-    if (catObj.catalogSchema && typeof catObj.catalogSchema === 'object') {
+    if (hasCatalogSchema) {
       schema = {...(catObj.catalogSchema as Record<string, unknown>)};
     } else {
       const meta = getJsonMeta();
@@ -1410,7 +1395,7 @@ export class PreviewBridge {
     const title =
       (schema['title'] as string | undefined) ??
       (catObj['title'] as string | undefined) ??
-      (schema['title'] === undefined && catObj['title'] === undefined
+      (!hasCatalogSchema && schema['title'] === undefined && catObj['title'] === undefined
         ? (getJsonMeta()?.['title'] as string | undefined)
         : undefined);
     if (title) {
@@ -1420,7 +1405,9 @@ export class PreviewBridge {
     const description =
       (schema['description'] as string | undefined) ??
       (catObj['description'] as string | undefined) ??
-      (schema['description'] === undefined && catObj['description'] === undefined
+      (!hasCatalogSchema &&
+      schema['description'] === undefined &&
+      catObj['description'] === undefined
         ? (getJsonMeta()?.['description'] as string | undefined)
         : undefined);
     if (description) {
@@ -1582,14 +1569,13 @@ export class PreviewBridge {
           rawList.length === 1 &&
           Boolean(firstItem && typeof firstItem === 'object') &&
           firstItem?.components instanceof Map &&
-          firstItem?.protocolVersion !== '1.0' &&
-          firstItem?.protocolVersion !== 'v1.0';
+          !isV1ProtocolVersion(firstItem?.protocolVersion);
 
         if (!isSingleNonV10RuntimeCatalog) {
           return this.normalizeCatalogList(rawList, rawList.length > 1);
         }
 
-        const canExtractSchema =
+        const canExtractSchema = (): boolean =>
           Boolean(firstItem?.catalogSchema && typeof firstItem.catalogSchema === 'object') ||
           typeof firstItem?.toJson === 'function';
         try {
@@ -1597,12 +1583,16 @@ export class PreviewBridge {
           if (networkResolved) {
             return networkResolved;
           }
-          if (canExtractSchema) {
+          if (canExtractSchema()) {
             return this.normalizeCatalogList(rawList, false);
           }
           return null;
         } catch (err) {
-          if (canExtractSchema) {
+          if (canExtractSchema()) {
+            console.warn(
+              'PreviewBridge: Network catalog fetch failed, falling back to in-memory catalog schema:',
+              err,
+            );
             return this.normalizeCatalogList(rawList, false);
           }
           throw err;
@@ -1658,14 +1648,7 @@ export class PreviewBridge {
       }
 
       const {primarySchema, allSchemas, isMultiCatalog} = resolved;
-      const isV1 = allSchemas.some(schema => {
-        const ver = schema['protocolVersion'];
-        if (typeof ver === 'string') {
-          const v = ver.trim();
-          return v === '1.0' || v === 'v1.0' || v.startsWith('1.') || v.startsWith('v1.');
-        }
-        return false;
-      });
+      const isV1 = allSchemas.some(schema => isV1ProtocolVersion(schema['protocolVersion']));
       this.activeProtocolVersion = isV1 ? '1.0' : 'v0.9';
 
       const catalogId =
@@ -1755,17 +1738,14 @@ export class PreviewBridge {
     });
   }
 
-  private lastResolvedCatalogId?: string;
-
   /**
    * Aligns a single catalog's ID with the resolved catalogId when exactly one catalog is configured.
    *
    * @param catalogId The resolved catalog ID.
    * @param rawCatalog The catalog or array of catalogs to alias.
    */
-  aliasSingleCatalogId(catalogId: string | undefined, rawCatalog: unknown): void {
-    const targetCatalogId = catalogId || this.lastResolvedCatalogId;
-    if (!targetCatalogId) {
+  aliasSingleCatalogId(catalogId: string, rawCatalog: unknown): void {
+    if (!catalogId) {
       return;
     }
     const catalogs = Array.isArray(rawCatalog)
@@ -1776,7 +1756,7 @@ export class PreviewBridge {
     if (
       catalogs &&
       catalogs.length === 1 &&
-      !catalogs.some(c => (c as {id?: string})?.id === targetCatalogId)
+      !catalogs.some(c => (c as {id?: string})?.id === catalogId)
     ) {
       const firstCatalog = catalogs[0];
       if (firstCatalog && typeof firstCatalog === 'object') {
@@ -1784,10 +1764,10 @@ export class PreviewBridge {
         // aliasing is a convenience, so a read-only object must not break
         // catalog resolution.
         try {
-          (firstCatalog as unknown as {id?: string}).id = targetCatalogId;
+          (firstCatalog as unknown as {id?: string}).id = catalogId;
         } catch (error: unknown) {
           console.warn(
-            `PreviewBridge: Unable to alias catalog id to "${targetCatalogId}" (catalog is read-only):`,
+            `PreviewBridge: Unable to alias catalog id to "${catalogId}" (catalog is read-only):`,
             error,
           );
         }
@@ -1799,10 +1779,6 @@ export class PreviewBridge {
    * Safely triggers the onCatalogResolved callback if registered in the active renderer config.
    */
   private notifyCatalogResolved(catalogId: string): void {
-    this.lastResolvedCatalogId = catalogId;
-    if (this.activeRenderer?.config.catalogs) {
-      this.aliasSingleCatalogId(catalogId, this.activeRenderer.config.catalogs);
-    }
     if (this.activeRenderer?.config.onCatalogResolved) {
       try {
         this.activeRenderer.config.onCatalogResolved(catalogId);

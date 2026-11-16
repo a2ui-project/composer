@@ -82,7 +82,10 @@ export function createUpdateDataModelImplementation(
             isPrototypePollutionKey(path) ||
             path.split('/').some(segment => isPrototypePollutionKey(segment))
           ) {
-            continue;
+            throw new A2uiExpressionError(
+              `updateDataModel forbids prototype pollution key in path "${path}".`,
+              'updateDataModel',
+            );
           }
           // Clone objects and arrays to prevent mutations from affecting cached tool results.
           context.set(

@@ -17,6 +17,18 @@
 import type {A2uiProtocolVersion, RenderA2uiItem} from '../bridge-message.js';
 
 /**
+ * Returns true if `version` is a string representing an A2UI v1.x protocol version
+ * (e.g. `'1.0'` or `'v1.0'`).
+ */
+export function isV1ProtocolVersion(version: unknown): boolean {
+  if (typeof version !== 'string') {
+    return false;
+  }
+  const v = version.trim();
+  return v.startsWith('1.') || v.startsWith('v1.');
+}
+
+/**
  * Strategy interface abstracting version-specific behavior across A2UI protocol specifications.
  */
 export interface BridgeProtocolStrategy {

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
 import {DataContext, DataModel, Catalog, createFunctionImplementation} from '@a2ui/web_core/v1_0';
 import {z} from 'zod/v3';
 import {V10DynamicValueStrategy, v10DynamicValueStrategy} from './v1-0-dynamic-value-strategy.js';
@@ -217,6 +217,16 @@ describe('V10DynamicValueStrategy', () => {
         name: 'Alice',
         doubled: 42,
       });
+    });
+
+    it('stops immediately when resolveDynamicValue returns the normalized v1.0 function call unchanged', () => {
+      const resolveSpy = vi.fn((v: unknown) => v);
+      const result = strategy.resolveDynamicValueDeep(
+        {['@call']: 'passthroughFn'},
+        {resolveDynamicValue: resolveSpy},
+      );
+      expect(result).toEqual({['@call']: 'passthroughFn', ['args']: {}});
+      expect(resolveSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -36,6 +36,7 @@ import {
 } from '@a2ui/angular/v0_9';
 import {
   a2uiBridge,
+  isV1ProtocolVersion,
   ThemePreference,
   RendererProcessor,
   SurfaceStateSubscription,
@@ -72,14 +73,14 @@ function catalogRequiresUniversalComponents(catalog: unknown): boolean {
     protocolVersion?: unknown;
     components?: unknown;
   };
-  if (record.protocolVersion === '1.0' || record.protocolVersion === 'v1.0') {
+  if (isV1ProtocolVersion(record.protocolVersion)) {
     return true;
   }
   if (record.components instanceof Map) {
     for (const entry of record.components.values()) {
       if (entry && typeof entry === 'object' && 'tagName' in entry) {
-        const comp = (entry as {component?: {name?: string}}).component;
-        if (!comp || comp === UniversalOnlyComponent || comp.name === 'UniversalOnlyComponent') {
+        const comp = (entry as {component?: unknown}).component;
+        if (!comp || comp === UniversalOnlyComponent) {
           return true;
         }
       }

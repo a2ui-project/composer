@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
 import {
   V09DynamicValueStrategy,
   v09DynamicValueStrategy,
@@ -152,6 +152,16 @@ describe('V09DynamicValueStrategy', () => {
     it('passes through Promises without blocking', () => {
       const promise = Promise.resolve('async');
       expect(strategy.resolveDynamicValueDeep(promise, mockContext)).toBe(promise);
+    });
+
+    it('stops immediately when resolveDynamicValue returns the normalized function call unchanged', () => {
+      const resolveSpy = vi.fn((v: unknown) => v);
+      const result = strategy.resolveDynamicValueDeep(
+        {call: 'passthroughFn'},
+        {resolveDynamicValue: resolveSpy},
+      );
+      expect(result).toEqual({call: 'passthroughFn', args: {}, returnType: 'any'});
+      expect(resolveSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

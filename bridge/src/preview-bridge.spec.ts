@@ -24,6 +24,7 @@ import {
   safeSerialize,
 } from './index';
 import {PreviewBridgeMessageType, ThemePreference} from './bridge-message';
+import {createMcpFunctionsCatalog} from './mcp/v1-0-mcp-catalog';
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
 describe('PreviewBridge Core API Runtime', () => {
@@ -3038,11 +3039,14 @@ describe('PreviewBridge Core API Runtime', () => {
       );
     });
 
-    it('manages manual and active processor via setActiveProcessor and getActiveProcessor', () => {
+    it('manages active processor via attachRenderer, getActiveProcessor, and destroy', () => {
       const mockProcessor = {processMessages: vi.fn()};
       expect(bridge.getActiveProcessor()).toBeUndefined();
 
-      bridge.setActiveProcessor(mockProcessor);
+      bridge.attachRenderer(mockProcessor, {
+        surfaceGroup: {onSurfaceCreated: {subscribe: vi.fn()}} as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+      });
       expect(bridge.getActiveProcessor()).toBe(mockProcessor);
 
       bridge.destroy();
@@ -3535,6 +3539,183 @@ describe('PreviewBridge Core API Runtime', () => {
           }),
           window.location.origin,
         );
+      });
+
+      it('does not invoke toJson when catalogSchema is present even without title or description', async () => {
+        const mcpCatalog = createMcpFunctionsCatalog();
+        const mcpToJsonSpy =
+          typeof (mcpCatalog as unknown as {toJson?: unknown}).toJson === 'function'
+            ? vi.spyOn(mcpCatalog as unknown as {toJson: () => unknown}, 'toJson')
+            : vi.fn(() => ({title: 'Unexpected'}));
+        if (typeof (mcpCatalog as unknown as {toJson?: unknown}).toJson !== 'function') {
+          (mcpCatalog as unknown as {toJson: () => unknown}).toJson = mcpToJsonSpy;
+        }
+
+        const catalogLikeToJson = vi.fn(() => ({
+          title: 'Should Not Call',
+          description: 'Should Not Call',
+        }));
+        const untitledCatalogLike = {
+          id: 'https://example.com/untitled-schema-catalog.json',
+          catalogSchema: {
+            $id: 'https://example.com/untitled-schema-catalog.json',
+            components: {Text: {}},
+          },
+          toJson: catalogLikeToJson,
+        };
+
+        bridge.attachRenderer(
+          {processMessages: vi.fn()},
+          {
+            surfaceGroup: {onSurfaceCreated: {subscribe: vi.fn()}} as unknown as SurfaceGroupLike,
+            onSurfaceReady: vi.fn(),
+            catalogs: [mcpCatalog, untitledCatalogLike],
+          },
+        );
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: window.parent,
+            origin: window.location.origin,
+            data: {type: PreviewBridgeMessageType.GET_CATALOG},
+          }),
+        );
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(mcpToJsonSpy).not.toHaveBeenCalled();
+        expect(catalogLikeToJson).not.toHaveBeenCalled();
+        expect(window.parent.postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload: expect.objectContaining({
+              catalogs: expect.arrayContaining([
+                expect.objectContaining({$id: 'https://example.com/untitled-schema-catalog.json'}),
+              ]),
+            }),
+          }),
+          window.location.origin,
+        );
+      });
+    });
+
+    describe('resolveCatalog single non-v1.0 runtime catalog network resolution', () => {
+      it('does not access catalogSchema or toJson when network fetch succeeds', async () => {
+        const originalFetch = window.fetch;
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const catalogSchemaGetter = vi.fn(() => ({
+          $id: 'https://example.com/runtime-cat.json',
+          components: {},
+        }));
+        const toJsonSpy = vi.fn(() => ({$id: 'https://example.com/runtime-cat.json'}));
+        const runtimeCatalog: Record<string, unknown> = {
+          id: 'https://example.com/runtime-cat.json',
+          components: new Map([['Text', {}]]),
+          toJson: toJsonSpy,
+        };
+        Object.defineProperty(runtimeCatalog, 'catalogSchema', {
+          get: catalogSchemaGetter,
+          configurable: true,
+        });
+
+        const networkPayload = {catalogId: 'network-cat', components: {Button: {}}};
+        window.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          text: async () => JSON.stringify(networkPayload),
+        });
+
+        try {
+          bridge.attachRenderer(
+            {processMessages: vi.fn()},
+            {
+              surfaceGroup: {onSurfaceCreated: {subscribe: vi.fn()}} as unknown as SurfaceGroupLike,
+              onSurfaceReady: vi.fn(),
+              catalogs: [runtimeCatalog],
+            },
+          );
+
+          window.dispatchEvent(
+            new MessageEvent('message', {
+              source: window.parent,
+              origin: window.location.origin,
+              data: {type: PreviewBridgeMessageType.GET_CATALOG},
+            }),
+          );
+
+          await new Promise(resolve => setTimeout(resolve, 10));
+
+          expect(catalogSchemaGetter).not.toHaveBeenCalled();
+          expect(toJsonSpy).not.toHaveBeenCalled();
+          expect(warnSpy).not.toHaveBeenCalled();
+          expect(window.parent.postMessage).toHaveBeenCalledWith(
+            {
+              type: PreviewBridgeMessageType.A2UI_CATALOG,
+              payload: {...networkPayload, $id: 'network-cat'},
+            },
+            window.location.origin,
+          );
+        } finally {
+          window.fetch = originalFetch;
+          warnSpy.mockRestore();
+        }
+      });
+
+      it('logs a warning and falls back to in-memory schema when network fetch fails', async () => {
+        const originalFetch = window.fetch;
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const runtimeCatalog = {
+          id: 'https://example.com/runtime-fallback.json',
+          components: new Map([['Text', {}]]),
+          catalogSchema: {
+            $id: 'https://example.com/runtime-fallback.json',
+            components: {Text: {}},
+          },
+        };
+
+        window.fetch = vi.fn().mockResolvedValue({
+          ok: false,
+          status: 404,
+          text: async () => 'Not Found',
+        });
+
+        try {
+          bridge.attachRenderer(
+            {processMessages: vi.fn()},
+            {
+              surfaceGroup: {onSurfaceCreated: {subscribe: vi.fn()}} as unknown as SurfaceGroupLike,
+              onSurfaceReady: vi.fn(),
+              catalogs: [runtimeCatalog],
+            },
+          );
+
+          window.dispatchEvent(
+            new MessageEvent('message', {
+              source: window.parent,
+              origin: window.location.origin,
+              data: {type: PreviewBridgeMessageType.GET_CATALOG},
+            }),
+          );
+
+          await new Promise(resolve => setTimeout(resolve, 10));
+
+          expect(warnSpy).toHaveBeenCalledWith(
+            'PreviewBridge: Network catalog fetch failed, falling back to in-memory catalog schema:',
+            expect.any(Error),
+          );
+          expect(window.parent.postMessage).toHaveBeenCalledWith(
+            expect.objectContaining({
+              type: PreviewBridgeMessageType.A2UI_CATALOG,
+              payload: expect.objectContaining({
+                $id: 'https://example.com/runtime-fallback.json',
+                catalogId: 'https://example.com/runtime-fallback.json',
+              }),
+            }),
+            window.location.origin,
+          );
+        } finally {
+          window.fetch = originalFetch;
+          warnSpy.mockRestore();
+        }
       });
     });
 

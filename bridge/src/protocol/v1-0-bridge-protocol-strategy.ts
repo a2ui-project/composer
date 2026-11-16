@@ -15,7 +15,7 @@
  */
 
 import type {A2uiProtocolVersion} from '../bridge-message.js';
-import {BaseBridgeProtocolStrategy} from './bridge-protocol-strategy.js';
+import {BaseBridgeProtocolStrategy, isV1ProtocolVersion} from './bridge-protocol-strategy.js';
 
 /**
  * Protocol strategy implementing A2UI v1.0 wire behaviors.
@@ -42,11 +42,8 @@ export class V10BridgeProtocolStrategy extends BaseBridgeProtocolStrategy {
     for (const item of messages) {
       if (item && typeof item === 'object') {
         const version = (item as Record<string, unknown>)['version'];
-        if (typeof version === 'string') {
-          const v = version.trim();
-          if (v === 'v1.0' || v === '1.0' || v.startsWith('1.') || v.startsWith('v1.')) {
-            (item as Record<string, unknown>)['version'] = '1.0';
-          }
+        if (isV1ProtocolVersion(version)) {
+          (item as Record<string, unknown>)['version'] = '1.0';
         }
       }
     }
