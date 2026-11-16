@@ -226,14 +226,14 @@ const buttonProps = ButtonApi.schema.shape;
 /**
  * The basic catalog's Button, limited to what a Slack button can do: it requires
  * an action, which the preview runs when the button is clicked; it takes no
- * checks (`checks`, `isValid` and `validationErrors`), the rules that disable a
- * basic catalog Button, since a Slack button can't be disabled; and its variant
- * is `default` or `primary`, the two styles Slack draws.
+ * `checks`, the rules that disable a basic catalog Button, since a Slack
+ * button can't be disabled; and its variant is `default` or `primary`, the two
+ * styles Slack draws.
  */
 const SlackButtonApi: ComponentApi = {
   name: ButtonApi.name,
   schema: ButtonApi.schema
-    .omit({checks: true, isValid: true, validationErrors: true})
+    .omit({checks: true})
     .extend({
       variant: buttonProps.variant
         .unwrap()
@@ -244,7 +244,6 @@ const SlackButtonApi: ComponentApi = {
           "A hint for the button style. 'primary' marks the main call to action and becomes Slack's primary button; 'default' is a plain Slack button.",
         )
         .optional(),
-      action: buttonProps.action.unwrap(),
     })
     .strict()
     .describe(
@@ -392,7 +391,12 @@ function processRefs(node: unknown): void {
 
   const record = node as Record<string, unknown>;
   if (typeof record.description === 'string' && record.description.startsWith('REF:')) {
-    const [ref, description = ''] = record.description.substring(4).split('|');
+    const [rawRef, description = ''] = record.description.substring(4).split('|');
+    // Every `REF:#/$defs/*` marker emitted by @a2ui/web_core's basic catalog
+    // schemas targets `common_types.json`, so rewrite them unconditionally.
+    // Catalog-local `$defs` (`anyComponent` / `anyFunction`) are constructed
+    // directly on the outer envelope in `createSlackCatalogJson`.
+    const ref = rawRef.startsWith('#/$defs/') ? `common_types.json${rawRef}` : rawRef;
     for (const key of Object.keys(record)) {
       delete record[key];
     }
@@ -444,7 +448,7 @@ function functionSchemaFor(
 ): NonNullable<SlackCatalogJson['functions']>[number] {
   return {
     name: api.name,
-    description: api.schema.description,
+    description: api.description ?? api.schema.description,
     returnType: api.returnType,
     parameters: schemaJsonFor(api.schema),
   };

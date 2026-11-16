@@ -159,11 +159,21 @@ describe('Slack catalog schema payload', () => {
         returnType,
       })),
     ).toEqual(
-      upstreamInlineCatalog?.functions?.map(({name, description, returnType}) => ({
-        name,
-        description,
-        returnType,
-      })),
+      upstreamInlineCatalog?.functions?.map(
+        ({
+          name,
+          description,
+          returnType,
+        }: {
+          name: string;
+          description?: string;
+          returnType?: string;
+        }) => ({
+          name,
+          description,
+          returnType,
+        }),
+      ),
     );
   });
 
@@ -659,5 +669,25 @@ describe('Slack catalog schema payload', () => {
         },
       },
     ]);
+  });
+
+  it('rewrites #/$defs/* schema refs to common_types.json while keeping catalog-local $defs', () => {
+    const componentsJson = JSON.stringify(slackCatalogJson.components);
+    const functionsJson = JSON.stringify(slackCatalogJson.functions);
+
+    expect(componentsJson).toContain('common_types.json#/$defs/');
+    expect(componentsJson).not.toContain('"$ref":"#/$defs/');
+    expect(functionsJson).toContain('common_types.json#/$defs/');
+    expect(functionsJson).not.toContain('"$ref":"#/$defs/');
+
+    const defs = slackCatalogJson.$defs as {
+      anyComponent?: {oneOf?: Array<{$ref?: string}>};
+      anyFunction?: {oneOf?: unknown[]};
+    };
+    expect(defs.anyComponent?.oneOf?.length).toBeGreaterThan(0);
+    expect(defs.anyComponent?.oneOf?.every(entry => entry.$ref?.startsWith('#/components/'))).toBe(
+      true,
+    );
+    expect(defs.anyFunction?.oneOf?.length).toBeGreaterThan(0);
   });
 });

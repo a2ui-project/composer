@@ -66,8 +66,7 @@ describe('dispatchReadOnlyLocalFunctionAction', () => {
       functionCall: {
         call: 'formatString',
         args: {
-          value: 'Ready for ${name}',
-          name: 'Slack',
+          value: 'Ready for Slack',
         },
         returnType: 'string',
       },
@@ -123,6 +122,6 @@ describe('dispatchReadOnlyLocalFunctionAction', () => {
         componentId: 'root',
       }),
     ]);
-    expect(result.diagnostics?.[0]?.message).toContain('Invalid regex pattern');
+    expect(result.diagnostics?.[0]?.message).toMatch(/regex.*pattern/i);
   });
 });
