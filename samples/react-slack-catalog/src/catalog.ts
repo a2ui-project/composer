@@ -534,13 +534,14 @@ function callArgsSchemaFor(parameters: JsonSchemaObject): JsonSchemaObject {
   };
 }
 
+/** Converts the Slack catalog definition into its published JSON Schema payload. */
 export function createSlackCatalogJson(catalog: typeof slackCatalog): SlackCatalogJson {
   const components: Record<string, unknown> = {};
   for (const [name, api] of catalog.components.entries()) {
     components[name] = componentSchemaFor(name, api);
   }
 
-  const functions = [...catalog.functions.values()].map(functionSchemaFor);
+  const functions = [...catalog.functions.values()].map(api => functionSchemaFor(api));
   const theme = catalog.themeSchema ? schemaJsonFor(catalog.themeSchema).properties : undefined;
 
   return {

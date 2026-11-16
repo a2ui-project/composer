@@ -29,11 +29,10 @@ import {ErrorLogger} from '../../debug/error-logger.service';
 import {
   HostCommunication,
   MessageEnvelope,
-  isCatalogHandshakeErrorPayload,
 } from '../../shell/host-communication/host-communication';
+import {isCatalogHandshakeErrorPayload} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {
   Catalog,
-  CatalogComponentSchema,
   CatalogJson,
   getCatalogFunctionEntries,
   getCatalogId,
@@ -41,12 +40,20 @@ import {
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {from, of} from 'rxjs';
 import {concatMap} from 'rxjs/operators';
-import {sanitizeHtml} from 'safevalues';
 import {IndexedDbStorage} from '../indexed-db-storage/indexed-db-storage';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {isV1ProtocolVersion, PreviewBridgeMessageType, type A2uiProtocolVersion} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, type A2uiProtocolVersion} from 'a2ui-bridge';
 import {stableStringify} from '../stable-stringify/stable-stringify';
 import {CATALOG_WATCHDOG_MESSAGE, CATALOG_WATCHDOG_TIMEOUT_MS} from './catalog-watchdog';
+import {
+  isEmptyCatalogPayload,
+  mergeCatalogs,
+  orderCatalogs,
+  resolveProtocolVersion,
+  sanitizeCatalog,
+} from './catalog-domain';
+
+export {mergeCatalogs, resolveProtocolVersion, sanitizeCatalog} from './catalog-domain';
 
 interface HydratedCatalog {
   catalog: Catalog;
@@ -375,68 +382,9 @@ export class CatalogManagement {
    * Merged catalog combining components and functions across all negotiated
    * catalogs in `activeCatalogs()`, giving precedence to the primary `activeCatalog()`.
    */
-  readonly mergedActiveCatalog: Signal<Catalog | null> = computed<Catalog | null>(() => {
-    const primary = this._activeCatalog();
-    const catalogs = this._activeCatalogs();
-    if (!primary && catalogs.length === 0) {
-      return null;
-    }
-
-    const primaryId = primary?.catalogId || primary?.$id;
-    const ordered: Catalog[] = primary
-      ? [
-          primary,
-          ...catalogs.filter(
-            c => c !== primary && (primaryId === undefined || (c.catalogId || c.$id) !== primaryId),
-          ),
-        ]
-      : catalogs;
-    const mergedComponents: Record<string, CatalogComponentSchema> = {};
-    const mergedFunctions: Record<string, Record<string, unknown>> = {};
-    const mergedDefs: Record<string, Record<string, unknown>> = {};
-    let firstCatalogId: string | undefined;
-
-    for (const cat of ordered) {
-      if (!cat) continue;
-      if (!firstCatalogId && cat.catalogId) {
-        firstCatalogId = cat.catalogId;
-      }
-      if (cat.components) {
-        for (const [key, schema] of Object.entries(cat.components)) {
-          if (!Object.hasOwn(mergedComponents, key)) {
-            mergedComponents[key] = schema;
-          }
-        }
-      }
-      for (const [key, schema] of getCatalogFunctionEntries(cat)) {
-        if (!Object.hasOwn(mergedFunctions, key)) {
-          mergedFunctions[key] = schema;
-        }
-      }
-      const catDefs = (cat as Record<string, unknown>)['$defs'];
-      if (catDefs && typeof catDefs === 'object' && !Array.isArray(catDefs)) {
-        for (const [key, schema] of Object.entries(catDefs as Record<string, unknown>)) {
-          if (
-            !Object.hasOwn(mergedDefs, key) &&
-            schema &&
-            typeof schema === 'object' &&
-            !Array.isArray(schema)
-          ) {
-            mergedDefs[key] = schema as Record<string, unknown>;
-          }
-        }
-      }
-    }
-
-    const base = primary ?? ordered[0] ?? {};
-    return sanitizeCatalog({
-      ...base,
-      catalogId: primary?.catalogId ?? firstCatalogId,
-      components: mergedComponents,
-      functions: mergedFunctions,
-      ...(Object.keys(mergedDefs).length > 0 ? {$defs: mergedDefs} : {}),
-    });
-  });
+  readonly mergedActiveCatalog: Signal<Catalog | null> = computed<Catalog | null>(() =>
+    mergeCatalogs(this._activeCatalog(), this._activeCatalogs()),
+  );
 
   /**
    * Active protocol version mapped from the active catalog's `protocolVersion`
@@ -477,359 +425,285 @@ export class CatalogManagement {
         takeUntilDestroyed(),
         concatMap((envelope: MessageEnvelope) => {
           if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
-            if (this._isHandshakeInProgress()) {
-              this.logger.warn('Handshake already in progress. Ignoring RENDERER_READY.');
-              return of(null);
-            }
-
-            this._isHandshakeInProgress.set(true);
-            this._handshakeState.set('in-progress');
-            this._watchdogFired.set(false);
-            this._catalogError.set(null);
-            this.hostCommunication.sendMessage({
-              type: PreviewBridgeMessageType.GET_CATALOG,
-            });
-
-            this.watchdogTimerId = setTimeout(() => {
-              if (this.watchdogTimerId === null) {
-                return;
-              }
-              this._watchdogFired.set(true);
-              this.logger.error(CATALOG_WATCHDOG_MESSAGE);
-              this.settleHandshakeError(CATALOG_WATCHDOG_MESSAGE);
-              this.watchdogTimerId = null;
-            }, CATALOG_WATCHDOG_TIMEOUT_MS);
-
-            return of(null);
-          } else if (envelope.type === PreviewBridgeMessageType.A2UI_CATALOG) {
-            if (this.watchdogTimerId !== null) {
-              clearTimeout(this.watchdogTimerId);
-              this.watchdogTimerId = null;
-            }
-            this._watchdogFired.set(false);
-
-            const rawPayload = envelope.payload;
-            if (!rawPayload || typeof rawPayload !== 'object' || Array.isArray(rawPayload)) {
-              const errorMsg = 'Invalid or malformed A2UI_CATALOG payload received.';
-              this.logger.error(errorMsg, rawPayload);
-              this.settleHandshakeError(errorMsg);
-              return of(null);
-            }
-
-            if (isCatalogHandshakeErrorPayload(rawPayload)) {
-              const errorMsg =
-                rawPayload.error.message ||
-                'Unknown error occurred in preview bridge during handshake.';
-              this.logger.error('Handshake failed with bridge error:', errorMsg);
-              this.settleHandshakeError(errorMsg);
-              return of(null);
-            }
-
-            if (isEmptyCatalogPayload(rawPayload)) {
-              this._hasReceivedCatalogResponse.set(true);
-              this._handshakeState.set('settled');
-              this._isHandshakeInProgress.set(false);
-              this._activeCatalog.set(null);
-              this._activeCatalogs.set([]);
-              this._lastCatalogString.set('');
-              this._lastChecksumHash.set('');
-              this._catalogError.set(null);
-              return of(null);
-            }
-
-            let primary: unknown;
-            let rawCatalogs: unknown;
-
-            const obj = rawPayload as Record<string, unknown>;
-            if ('catalog' in obj) {
-              primary =
-                obj['catalog'] ?? (Array.isArray(obj['catalogs']) ? obj['catalogs'][0] : undefined);
-              rawCatalogs = obj['catalogs'];
-            } else if (
-              'catalogs' in obj &&
-              Array.isArray(obj['catalogs']) &&
-              obj['catalogs'].length > 0
-            ) {
-              primary = obj['catalogs'][0];
-              rawCatalogs = obj['catalogs'];
-            } else {
-              primary = obj;
-              rawCatalogs = undefined;
-            }
-
-            if (!primary || typeof primary !== 'object' || Array.isArray(primary)) {
-              const errorMsg = 'Invalid or malformed A2UI_CATALOG payload received.';
-              this.logger.error(errorMsg, rawPayload);
-              this.settleHandshakeError(errorMsg);
-              return of(null);
-            }
-
-            let catalogObj: Catalog;
-            try {
-              catalogObj = sanitizeCatalog(primary as Catalog);
-            } catch (err: unknown) {
-              const errorMsg = 'Failed to clone or serialize catalog payload.';
-              this.logger.error(errorMsg, err);
-              this.settleHandshakeError(errorMsg);
-              return of(null);
-            }
-
-            const catalogId = getCatalogId(catalogObj);
-            if (!catalogId) {
-              const errorMsg = 'Catalog is missing a valid identifier (catalogId or $id).';
-              this.logger.error(errorMsg, catalogObj);
-              this.settleHandshakeError(errorMsg);
-              return of(null);
-            }
-
-            let catalogsArr: Catalog[];
-            try {
-              if (Array.isArray(rawCatalogs)) {
-                catalogsArr = [];
-                for (const c of rawCatalogs) {
-                  if (!c || typeof c !== 'object') {
-                    continue;
-                  }
-                  catalogsArr.push(c === primary ? catalogObj : sanitizeCatalog(c as Catalog));
-                }
-                if (catalogsArr.length === 0) {
-                  catalogsArr = [catalogObj];
-                }
-              } else {
-                catalogsArr = [catalogObj];
-              }
-            } catch (err: unknown) {
-              const errorMsg = 'Failed to clone or serialize catalog payload.';
-              this._catalogError.set(errorMsg);
-              this.logger.error(errorMsg, err);
-              this._isHandshakeInProgress.set(false);
-              return of(null);
-            }
-
-            let catalogString: string;
-            try {
-              catalogString =
-                catalogsArr.length > 1 ? stableStringify(catalogsArr) : stableStringify(catalogObj);
-            } catch (err: unknown) {
-              const errorMsg = 'Failed to clone or serialize catalog payload.';
-              this.logger.error(errorMsg, err);
-              this.settleHandshakeError(errorMsg);
-              return of(null);
-            }
-
-            const orderedCatalogs: Catalog[] = [
-              catalogObj,
-              ...catalogsArr.filter(c => c !== catalogObj && (c.catalogId || c.$id) !== catalogId),
-            ];
-            const seenComponents = new Set<string>();
-            const seenFunctions = new Set<string>();
-            const collidingComponents: string[] = [];
-            const collidingFunctions: string[] = [];
-
-            for (const cat of orderedCatalogs) {
-              if (!cat) continue;
-              if (cat.components) {
-                for (const key of Object.keys(cat.components)) {
-                  if (seenComponents.has(key)) {
-                    collidingComponents.push(key);
-                  } else {
-                    seenComponents.add(key);
-                  }
-                }
-              }
-              for (const [key] of getCatalogFunctionEntries(cat)) {
-                if (seenFunctions.has(key)) {
-                  collidingFunctions.push(key);
-                } else {
-                  seenFunctions.add(key);
-                }
-              }
-            }
-
-            if (collidingComponents.length > 0 || collidingFunctions.length > 0) {
-              this.logger.warn(
-                `Duplicate keys ignored during multi-catalog merge (primary catalog wins): components=[${collidingComponents.join(', ')}], functions=[${collidingFunctions.join(', ')}]`,
-              );
-            }
-
-            let hashHexPromise: Promise<string>;
-            if (!globalThis.crypto?.subtle) {
-              this.logger.warn(
-                'Web Crypto is not available in this insecure context. Falling back to synchronous checksum hash.',
-              );
-              const hashHex = simpleHash(catalogString);
-              hashHexPromise = Promise.resolve(hashHex);
-            } else {
-              hashHexPromise = crypto.subtle
-                .digest('SHA-256', new TextEncoder().encode(catalogString))
-                .then(hashBuffer => {
-                  const hashArray = Array.from(new Uint8Array(hashBuffer));
-                  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-                });
-            }
-
-            const expectedGeneration = this.syncResolutionGeneration();
-            const expectedSignalUrl = this.startupResolution.resolvedUrl();
-            const expectedRendererUrl = this.startupResolution.getResolvedRendererUrl();
-            const isStaleContinuation = (): boolean => {
-              const currentGeneration = this.syncResolutionGeneration();
-              return (
-                this.isDestroyed ||
-                currentGeneration !== expectedGeneration ||
-                this.startupResolution.resolvedUrl() !== expectedSignalUrl ||
-                this.startupResolution.getResolvedRendererUrl() !== expectedRendererUrl
-              );
-            };
-
-            return from(
-              hashHexPromise
-                .then(async hashHex => {
-                  if (isStaleContinuation()) {
-                    return null;
-                  }
-
-                  if (expectedRendererUrl) {
-                    const existingRecord =
-                      await this.indexedDbStorage.getCatalogRecord(expectedRendererUrl);
-                    if (isStaleContinuation()) {
-                      return null;
-                    }
-                    if (!existingRecord || existingRecord.checksumHash !== hashHex) {
-                      this._catalogHashDelta.set(true);
-                      await this.indexedDbStorage.saveCatalogRecord({
-                        rendererUrl: expectedRendererUrl,
-                        catalogString,
-                        checksumHash: hashHex,
-                        lastAccessed: Date.now(),
-                        catalogJson: catalogObj,
-                        catalogsJson: catalogsArr,
-                      });
-                    } else {
-                      this._catalogHashDelta.set(false);
-                      existingRecord.lastAccessed = Date.now();
-                      existingRecord.catalogJson = catalogObj;
-                      existingRecord.catalogsJson = catalogsArr;
-                      await this.indexedDbStorage.saveCatalogRecord(existingRecord);
-                    }
-                    if (isStaleContinuation()) {
-                      return null;
-                    }
-                  }
-
-                  this._lastCatalogString.set(catalogString);
-                  this._lastChecksumHash.set(hashHex);
-                  this._activeCatalog.set(catalogObj);
-                  this._activeCatalogs.set(catalogsArr);
-                  this._hasReceivedCatalogResponse.set(true);
-
-                  this._catalogError.set(null);
-                  this._isHandshakeInProgress.set(false);
-                  this._handshakeState.set('settled');
-                  return null;
-                })
-                .catch((err: unknown) => {
-                  if (isStaleContinuation()) {
-                    return null;
-                  }
-                  const errorMsg = 'Failed to compute catalog hash or access storage.';
-                  this.logger.error(errorMsg, err);
-                  this.settleHandshakeError(errorMsg);
-                  return null;
-                }),
-            );
+            return this.handleRendererReady();
           }
-
+          if (envelope.type === PreviewBridgeMessageType.A2UI_CATALOG) {
+            return this.handleCatalogEnvelope(envelope);
+          }
           return of(null);
         }),
       )
       .subscribe();
   }
+
+  private handleRendererReady() {
+    if (this._isHandshakeInProgress()) {
+      this.logger.warn('Handshake already in progress. Ignoring RENDERER_READY.');
+      return of(null);
+    }
+
+    this._isHandshakeInProgress.set(true);
+    this._handshakeState.set('in-progress');
+    this._watchdogFired.set(false);
+    this._catalogError.set(null);
+    this.hostCommunication.sendMessage({
+      type: PreviewBridgeMessageType.GET_CATALOG,
+    });
+
+    this.watchdogTimerId = setTimeout(() => {
+      if (this.watchdogTimerId === null) {
+        return;
+      }
+      this._watchdogFired.set(true);
+      this.logger.error(CATALOG_WATCHDOG_MESSAGE);
+      this.settleHandshakeError(CATALOG_WATCHDOG_MESSAGE);
+      this.watchdogTimerId = null;
+    }, CATALOG_WATCHDOG_TIMEOUT_MS);
+
+    return of(null);
+  }
+
+  private handleCatalogEnvelope(envelope: MessageEnvelope) {
+    if (this.watchdogTimerId !== null) {
+      clearTimeout(this.watchdogTimerId);
+      this.watchdogTimerId = null;
+    }
+    this._watchdogFired.set(false);
+
+    const rawPayload = envelope.payload;
+    if (!rawPayload || typeof rawPayload !== 'object' || Array.isArray(rawPayload)) {
+      const errorMsg = 'Invalid or malformed A2UI_CATALOG payload received.';
+      this.logger.error(errorMsg, rawPayload);
+      this.settleHandshakeError(errorMsg);
+      return of(null);
+    }
+
+    if (isCatalogHandshakeErrorPayload(rawPayload)) {
+      const errorMsg =
+        rawPayload.error.message || 'Unknown error occurred in preview bridge during handshake.';
+      this.logger.error('Handshake failed with bridge error:', errorMsg);
+      this.settleHandshakeError(errorMsg);
+      return of(null);
+    }
+
+    if (isEmptyCatalogPayload(rawPayload)) {
+      this._hasReceivedCatalogResponse.set(true);
+      this._handshakeState.set('settled');
+      this._isHandshakeInProgress.set(false);
+      this._activeCatalog.set(null);
+      this._activeCatalogs.set([]);
+      this._lastCatalogString.set('');
+      this._lastChecksumHash.set('');
+      this._catalogError.set(null);
+      return of(null);
+    }
+
+    const parsed = this.parseAndSanitizeHandshakePayload(rawPayload as Record<string, unknown>);
+    if ('errorMsg' in parsed) {
+      this.logger.error(parsed.errorMsg, parsed.detail);
+      this.settleHandshakeError(parsed.errorMsg);
+      return of(null);
+    }
+    const {catalogObj, catalogsArr, catalogString} = parsed;
+
+    this.warnOnMultiCatalogCollisions(catalogObj, catalogsArr);
+
+    const hashHexPromise = computeCatalogChecksum(catalogString, this.logger);
+    const expectedGeneration = this.syncResolutionGeneration();
+    const expectedSignalUrl = this.startupResolution.resolvedUrl();
+    const expectedRendererUrl = this.startupResolution.getResolvedRendererUrl();
+    const isStaleContinuation = (): boolean => {
+      const currentGeneration = this.syncResolutionGeneration();
+      return (
+        this.isDestroyed ||
+        currentGeneration !== expectedGeneration ||
+        this.startupResolution.resolvedUrl() !== expectedSignalUrl ||
+        this.startupResolution.getResolvedRendererUrl() !== expectedRendererUrl
+      );
+    };
+
+    return from(
+      hashHexPromise
+        .then(async hashHex => {
+          if (isStaleContinuation()) {
+            return null;
+          }
+
+          if (expectedRendererUrl) {
+            const existingRecord =
+              await this.indexedDbStorage.getCatalogRecord(expectedRendererUrl);
+            if (isStaleContinuation()) {
+              return null;
+            }
+            if (!existingRecord || existingRecord.checksumHash !== hashHex) {
+              this._catalogHashDelta.set(true);
+              await this.indexedDbStorage.saveCatalogRecord({
+                rendererUrl: expectedRendererUrl,
+                catalogString,
+                checksumHash: hashHex,
+                lastAccessed: Date.now(),
+                catalogJson: catalogObj,
+                catalogsJson: catalogsArr,
+              });
+            } else {
+              this._catalogHashDelta.set(false);
+              existingRecord.lastAccessed = Date.now();
+              existingRecord.catalogJson = catalogObj;
+              existingRecord.catalogsJson = catalogsArr;
+              await this.indexedDbStorage.saveCatalogRecord(existingRecord);
+            }
+            if (isStaleContinuation()) {
+              return null;
+            }
+          }
+
+          this._lastCatalogString.set(catalogString);
+          this._lastChecksumHash.set(hashHex);
+          this._activeCatalog.set(catalogObj);
+          this._activeCatalogs.set(catalogsArr);
+          this._hasReceivedCatalogResponse.set(true);
+
+          this._catalogError.set(null);
+          this._isHandshakeInProgress.set(false);
+          this._handshakeState.set('settled');
+          return null;
+        })
+        .catch((err: unknown) => {
+          if (isStaleContinuation()) {
+            return null;
+          }
+          const errorMsg = 'Failed to compute catalog hash or access storage.';
+          this.logger.error(errorMsg, err);
+          this.settleHandshakeError(errorMsg);
+          return null;
+        }),
+    );
+  }
+
+  private warnOnMultiCatalogCollisions(catalogObj: Catalog, catalogsArr: readonly Catalog[]): void {
+    const orderedCatalogs = orderCatalogs(catalogObj, catalogsArr);
+    const seenComponents = new Set<string>();
+    const seenFunctions = new Set<string>();
+    const collidingComponents: string[] = [];
+    const collidingFunctions: string[] = [];
+
+    for (const cat of orderedCatalogs) {
+      if (!cat) continue;
+      if (cat.components) {
+        for (const key of Object.keys(cat.components)) {
+          if (seenComponents.has(key)) {
+            collidingComponents.push(key);
+          } else {
+            seenComponents.add(key);
+          }
+        }
+      }
+      for (const [key] of getCatalogFunctionEntries(cat)) {
+        if (seenFunctions.has(key)) {
+          collidingFunctions.push(key);
+        } else {
+          seenFunctions.add(key);
+        }
+      }
+    }
+
+    if (collidingComponents.length > 0 || collidingFunctions.length > 0) {
+      this.logger.warn(
+        `Duplicate keys ignored during multi-catalog merge (primary catalog wins): components=[${collidingComponents.join(', ')}], functions=[${collidingFunctions.join(', ')}]`,
+      );
+    }
+  }
+
+  private parseAndSanitizeHandshakePayload(
+    rawPayload: Record<string, unknown>,
+  ):
+    | {catalogObj: Catalog; catalogsArr: Catalog[]; catalogString: string}
+    | {errorMsg: string; detail: unknown} {
+    const {primary, rawCatalogs} = extractCatalogTargets(rawPayload);
+    if (!primary || typeof primary !== 'object' || Array.isArray(primary)) {
+      return {
+        errorMsg: 'Invalid or malformed A2UI_CATALOG payload received.',
+        detail: rawPayload,
+      };
+    }
+
+    try {
+      const catalogObj = sanitizeCatalog(primary as Catalog);
+      if (!getCatalogId(catalogObj)) {
+        return {
+          errorMsg: 'Catalog is missing a valid identifier (catalogId or $id).',
+          detail: catalogObj,
+        };
+      }
+      const catalogsArr = sanitizeCatalogList(rawCatalogs, primary, catalogObj);
+      const catalogString =
+        catalogsArr.length > 1 ? stableStringify(catalogsArr) : stableStringify(catalogObj);
+      return {catalogObj, catalogsArr, catalogString};
+    } catch (err: unknown) {
+      return {
+        errorMsg: 'Failed to clone or serialize catalog payload.',
+        detail: err,
+      };
+    }
+  }
 }
 
-/**
- * Returns a copy of a catalog with its title and description sanitized, the
- * form in which Composer stores and displays a catalog a renderer sent.
- */
-export function sanitizeCatalog(catalog: Catalog): Catalog {
-  const sanitized = structuredClone(catalog);
-  if (typeof sanitized.title === 'string') {
-    sanitized.title = sanitizeHtml(sanitized.title).toString();
-  }
-  if (typeof sanitized.description === 'string') {
-    sanitized.description = sanitizeHtml(sanitized.description).toString();
-  }
-  return sanitized;
-}
-
-/**
- * Resolves the active protocol version based on handshake state, active catalogs, and error state.
- *
- * @param hasReceived Whether a catalog handshake response has settled.
- * @param catalogs Active catalogs negotiated during the handshake.
- * @param hasCatalogError Whether the latest handshake attempt ended in an error.
- * @param primaryCatalog Fallback primary catalog when `catalogs` is empty.
- * @returns The resolved protocol version ('v0.9' or 'v1.0').
- */
-function resolveProtocolVersion(
-  hasReceived: boolean,
-  catalogs: readonly Catalog[],
-  hasCatalogError: boolean,
-  primaryCatalog: Catalog | null = null,
-): A2uiProtocolVersion {
-  if (!hasReceived) {
-    return 'v0.9';
-  }
-  const allCatalogs = catalogs.length > 0 ? catalogs : primaryCatalog ? [primaryCatalog] : [];
-  const nonEmptyCatalogs = allCatalogs.filter(c => !isCatalogEmpty(c));
-  if (nonEmptyCatalogs.length === 0) {
-    return hasCatalogError ? 'v0.9' : 'v1.0';
-  }
-  if (nonEmptyCatalogs.some(c => isV1ProtocolVersion(c.protocolVersion))) {
-    return 'v1.0';
-  }
-  return 'v0.9';
-}
-
-function isCatalogEmpty(catalog: Catalog): boolean {
-  if (!catalog) return true;
-  const hasComponents = catalog.components && Object.keys(catalog.components).length > 0;
-  const hasFunctions = catalog.functions && Object.keys(catalog.functions).length > 0;
-  const hasProtocol = !!catalog.protocolVersion;
-  const hasId = !!(catalog.catalogId || catalog.$id);
-  return !hasComponents && !hasFunctions && !hasProtocol && !hasId;
-}
-
-function isEmptyCatalogPayload(rawPayload: unknown): boolean {
-  if (rawPayload === null || rawPayload === undefined) {
-    return false;
-  }
-  if (typeof rawPayload !== 'object' || Array.isArray(rawPayload)) {
-    return false;
-  }
-  const obj = rawPayload as Record<string, unknown>;
-  if (Object.keys(obj).length === 0) {
-    return true;
-  }
+function extractCatalogTargets(obj: Record<string, unknown>): {
+  primary: unknown;
+  rawCatalogs: unknown;
+} {
   if ('catalog' in obj) {
-    const primary = obj['catalog'];
-    const catalogs = obj['catalogs'];
-    const hasCatalogs = Array.isArray(catalogs) && catalogs.length > 0;
-    if (hasCatalogs) {
-      return false;
-    }
-    if (primary === null || primary === undefined) {
-      return true;
-    }
-    if (typeof primary === 'object' && !Array.isArray(primary)) {
-      const pObj = primary as Record<string, unknown>;
-      return Object.keys(pObj).length === 0;
-    }
-    return false;
+    return {
+      primary: obj['catalog'] ?? (Array.isArray(obj['catalogs']) ? obj['catalogs'][0] : undefined),
+      rawCatalogs: obj['catalogs'],
+    };
   }
-  if ('catalogs' in obj && Array.isArray(obj['catalogs']) && obj['catalogs'].length === 0) {
-    return true;
+  if ('catalogs' in obj && Array.isArray(obj['catalogs']) && obj['catalogs'].length > 0) {
+    return {
+      primary: obj['catalogs'][0],
+      rawCatalogs: obj['catalogs'],
+    };
   }
-  return false;
+  return {
+    primary: obj,
+    rawCatalogs: undefined,
+  };
+}
+
+function sanitizeCatalogList(
+  rawCatalogs: unknown,
+  primary: unknown,
+  sanitizedPrimary: Catalog,
+): Catalog[] {
+  if (!Array.isArray(rawCatalogs)) {
+    return [sanitizedPrimary];
+  }
+  const catalogsArr: Catalog[] = [];
+  for (const c of rawCatalogs) {
+    if (!c || typeof c !== 'object') {
+      continue;
+    }
+    catalogsArr.push(c === primary ? sanitizedPrimary : sanitizeCatalog(c as Catalog));
+  }
+  return catalogsArr.length > 0 ? catalogsArr : [sanitizedPrimary];
+}
+
+function computeCatalogChecksum(
+  catalogString: string,
+  logger: {warn(message: string): void},
+): Promise<string> {
+  if (!globalThis.crypto?.subtle) {
+    logger.warn(
+      'Web Crypto is not available in this insecure context. Falling back to synchronous checksum hash.',
+    );
+    return Promise.resolve(simpleHash(catalogString));
+  }
+  return crypto.subtle
+    .digest('SHA-256', new TextEncoder().encode(catalogString))
+    .then(hashBuffer => {
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    });
 }
 
 function simpleHash(str: string): string {

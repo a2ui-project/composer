@@ -16,6 +16,7 @@
 
 import {computed, Signal, signal, WritableSignal} from '@angular/core';
 import type {A2uiProtocolVersion} from 'a2ui-bridge';
+import {mergeCatalogs, resolveProtocolVersion} from '../catalog-domain';
 import type {CatalogManagement} from '../catalog-management';
 import type {Catalog, CatalogJson} from '../../models/catalog-storage.model';
 
@@ -23,7 +24,7 @@ import type {Catalog, CatalogJson} from '../../models/catalog-storage.model';
  * Public signal contract representing the reactive state of CatalogManagement.
  * Exists to decouple test suites from production IndexedDB storage dependencies.
  */
-export type MockCatalogManagement = Pick<
+export type FakeCatalogManagementState = Pick<
   CatalogManagement,
   | 'activeCatalogTitle'
   | 'activeCatalogDescription'
@@ -45,17 +46,17 @@ export type MockCatalogManagement = Pick<
  * Overrides allowing test suites to supply custom signals or writable signals
  * for specific CatalogManagement reactive state properties.
  */
-export type MockCatalogManagementOverrides = Partial<{
-  [K in keyof MockCatalogManagement]: MockCatalogManagement[K] extends Signal<infer T>
+export type FakeCatalogManagementOverrides = Partial<{
+  [K in keyof FakeCatalogManagementState]: FakeCatalogManagementState[K] extends Signal<infer T>
     ? Signal<T> | WritableSignal<T>
-    : MockCatalogManagement[K];
+    : FakeCatalogManagementState[K];
 }>;
 
 /**
  * Test double implementation of CatalogManagement that simulates reactive catalog
  * discovery and handshake state with in-memory signals for isolated unit testing.
  */
-export class FakeCatalogManagement implements MockCatalogManagement {
+export class FakeCatalogManagement implements FakeCatalogManagementState {
   readonly activeCatalogTitle: Signal<string>;
   readonly activeCatalogDescription: Signal<string>;
   readonly activeCatalog: Signal<Catalog | null>;
@@ -71,7 +72,7 @@ export class FakeCatalogManagement implements MockCatalogManagement {
   readonly hasReceivedCatalogResponse: Signal<boolean>;
   readonly handshakeState: Signal<'idle' | 'in-progress' | 'settled'>;
 
-  constructor(overrides?: MockCatalogManagementOverrides) {
+  constructor(overrides?: FakeCatalogManagementOverrides) {
     this.activeCatalog = overrides?.activeCatalog ?? signal<Catalog | null>(null);
     this.activeCatalogs = overrides?.activeCatalogs ?? signal<CatalogJson[]>([]);
     this.activeCatalogTitle =
@@ -81,9 +82,7 @@ export class FakeCatalogManagement implements MockCatalogManagement {
       computed(() => this.activeCatalog()?.description || '');
     this.mergedActiveCatalog =
       overrides?.mergedActiveCatalog ??
-      computed(() => this.activeCatalog() ?? this.activeCatalogs()[0] ?? null);
-    this.activeProtocolVersion =
-      overrides?.activeProtocolVersion ?? signal<A2uiProtocolVersion>('v0.9');
+      computed(() => mergeCatalogs(this.activeCatalog(), this.activeCatalogs()));
     this.catalogError = overrides?.catalogError ?? signal<string | null>(null);
     this.isHandshakeInProgress = overrides?.isHandshakeInProgress ?? signal(false);
     this.watchdogFired = overrides?.watchdogFired ?? signal(false);
@@ -91,6 +90,16 @@ export class FakeCatalogManagement implements MockCatalogManagement {
     this.lastChecksumHash = overrides?.lastChecksumHash ?? signal('');
     this.catalogHashDelta = overrides?.catalogHashDelta ?? signal(false);
     this.hasReceivedCatalogResponse = overrides?.hasReceivedCatalogResponse ?? signal(true);
+    this.activeProtocolVersion =
+      overrides?.activeProtocolVersion ??
+      computed<A2uiProtocolVersion>(() =>
+        resolveProtocolVersion(
+          this.hasReceivedCatalogResponse(),
+          this.activeCatalogs(),
+          this.catalogError() !== null,
+          this.activeCatalog(),
+        ),
+      );
     this.handshakeState =
       overrides?.handshakeState ?? signal<'idle' | 'in-progress' | 'settled'>('settled');
   }
@@ -102,10 +111,10 @@ export class FakeCatalogManagement implements MockCatalogManagement {
  * of consumer test harnesses.
  *
  * @param overrides Optional partial signals to override default test state.
- * @returns Fully populated MockCatalogManagement test double instance.
+ * @returns Fully populated FakeCatalogManagement test double instance.
  */
-export function createMockCatalogManagement(
-  overrides?: MockCatalogManagementOverrides,
-): MockCatalogManagement {
+export function createFakeCatalogManagement(
+  overrides?: FakeCatalogManagementOverrides,
+): FakeCatalogManagementState {
   return new FakeCatalogManagement(overrides);
 }

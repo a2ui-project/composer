@@ -71,7 +71,6 @@ export declare interface SendToServerEnvelope<T = SendToServerPayload> {
 }
 
 export type {CatalogHandshakeErrorPayload} from '../cross-frame-validator/cross-frame-validator';
-export {isCatalogHandshakeErrorPayload} from '../cross-frame-validator/cross-frame-validator';
 
 /**
  * What registering a frame does to the default target: the frame that
@@ -287,6 +286,27 @@ export class HostCommunication implements OnDestroy {
     );
   }
 
+  private isAllowedExpectedOrigin(origin: string): boolean {
+    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
+    if (!expectedUrl) {
+      return false;
+    }
+    try {
+      const expectedOrigin = this.environmentContext.resolveRendererUrl(expectedUrl).origin;
+      return origin === expectedOrigin;
+    } catch {
+      return false;
+    }
+  }
+
+  private dropIfPrototypePolluted(type: string, payload: unknown): boolean {
+    if (payload && typeof payload === 'object' && hasPrototypePollution(payload)) {
+      this.logger.warn(`Dropped prototype-polluted ${type} envelope`);
+      return true;
+    }
+    return false;
+  }
+
   private readonly messageListener = (event: MessageEvent) => {
     if (!this.hasRegisteredTarget()) {
       const isBridgeMessage =
@@ -295,17 +315,7 @@ export class HostCommunication implements OnDestroy {
         Object.values(PreviewBridgeMessageType).includes(event.data.type);
 
       if (event.data?.type === PreviewBridgeMessageType.CONSOLE_LOG) {
-        const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-        if (!expectedUrl) {
-          return;
-        }
-
-        try {
-          const expectedOrigin = this.environmentContext.resolveRendererUrl(expectedUrl).origin;
-          if (event.origin !== expectedOrigin) {
-            return;
-          }
-        } catch {
+        if (!this.isAllowedExpectedOrigin(event.origin)) {
           return;
         }
 
@@ -316,6 +326,9 @@ export class HostCommunication implements OnDestroy {
           timestamp: Date.now(),
           sourceWindow: (event.source as Window) ?? null,
         };
+        if (this.dropIfPrototypePolluted(envelope.type, envelope.payload)) {
+          return;
+        }
         this.handleConsoleLog(event.data.payload);
         this.messageStreamSubject.next(envelope);
         return;
@@ -341,17 +354,7 @@ export class HostCommunication implements OnDestroy {
       return;
     }
 
-    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-    if (!expectedUrl) {
-      return;
-    }
-
-    try {
-      const expectedOrigin = this.environmentContext.resolveRendererUrl(expectedUrl).origin;
-      if (event.origin !== expectedOrigin) {
-        return;
-      }
-    } catch (err) {
+    if (!this.isAllowedExpectedOrigin(event.origin)) {
       return;
     }
 
@@ -367,6 +370,15 @@ export class HostCommunication implements OnDestroy {
         timestamp: Date.now(),
         sourceWindow: (event.source as Window) ?? null,
       };
+      // Allow A2UI_CATALOG through to CrossFrameValidator below so polluted/malformed
+      // catalog frames synthesize a CatalogHandshakeErrorPayload instead of stalling
+      // the handshake until the 5s catalog watchdog fires.
+      if (
+        type !== PreviewBridgeMessageType.A2UI_CATALOG &&
+        this.dropIfPrototypePolluted(type, envelope.payload)
+      ) {
+        return;
+      }
       const sourceWindow = envelope.sourceWindow ?? null;
       if (type === PreviewBridgeMessageType.RENDERER_READY && sourceWindow) {
         this.markWindowReady(sourceWindow);
@@ -383,6 +395,9 @@ export class HostCommunication implements OnDestroy {
       }
 
       if (type === PreviewBridgeMessageType.MCP_REQUEST) {
+        if (!CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
+          return;
+        }
         // A frame that calls tools is evidently up, even if its RENDERER_READY
         // was missed; treat it exactly like a handshake so anything queued for
         // it does not wait for some other frame's RENDERER_READY.
@@ -453,16 +468,6 @@ export class HostCommunication implements OnDestroy {
             });
           }
         }
-      }
-
-      if (
-        type !== PreviewBridgeMessageType.A2UI_CATALOG &&
-        envelope.payload &&
-        typeof envelope.payload === 'object' &&
-        hasPrototypePollution(envelope.payload)
-      ) {
-        this.logger.warn(`Dropped prototype-polluted ${type} envelope`);
-        return;
       }
 
       if (type === PreviewBridgeMessageType.A2UI_CATALOG) {

@@ -20,7 +20,6 @@ import {CatalogManagement} from './catalog-management';
 import {
   HostCommunication,
   MessageEnvelope,
-  isCatalogHandshakeErrorPayload,
 } from '../../shell/host-communication/host-communication';
 import {IndexedDbStorage} from '../indexed-db-storage/indexed-db-storage';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
@@ -28,7 +27,7 @@ import {signal, Signal, WritableSignal} from '@angular/core';
 import {Subject} from 'rxjs';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {Catalog} from '../models/catalog-storage.model';
+import {Catalog, getCatalogId} from '../models/catalog-storage.model';
 import {stableStringify} from '../stable-stringify/stable-stringify';
 
 describe('CatalogManagement', () => {
@@ -98,6 +97,12 @@ describe('CatalogManagement', () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
+
+  async function flushMicrotasks(count = 10): Promise<void> {
+    for (let i = 0; i < count; i++) {
+      await Promise.resolve();
+    }
+  }
 
   it('initializes successfully with handshake not in progress', () => {
     expect(service).toBeTruthy();
@@ -338,6 +343,64 @@ describe('CatalogManagement', () => {
         message: expect.stringContaining('Failed to clone or serialize catalog'),
       }),
     );
+    errorSpy.mockRestore();
+  });
+
+  it('settles handshake error when secondary catalog in catalogs array fails structuredClone and recovers on next valid handshake', async () => {
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: 3005,
+    });
+    TestBed.tick();
+    expect(service.isHandshakeInProgress()).toBe(true);
+
+    const validPrimary = {
+      catalogId: 'primary-ok',
+      title: 'Primary',
+      components: {},
+    };
+    const nonClonableSecondary = {
+      catalogId: 'secondary-bad',
+      title: 'Secondary',
+      badFn: () => {},
+    };
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      origin: 'http://localhost',
+      payload: {
+        catalog: validPrimary,
+        catalogs: [validPrimary, nonClonableSecondary],
+      },
+      timestamp: 3006,
+    });
+    TestBed.tick();
+
+    expect(service.catalogError()).toBe('Failed to clone or serialize catalog payload.');
+    expect(service.isHandshakeInProgress()).toBe(false);
+    expect(service.handshakeState()).toBe('settled');
+    expect(service.hasReceivedCatalogResponse()).toBe(true);
+
+    // Subsequent valid handshake should recover cleanly
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      origin: 'http://localhost',
+      payload: {
+        catalogId: 'recovered-after-secondary-clone-failure',
+        title: 'Recovered Catalog',
+        components: {},
+      },
+      timestamp: 3007,
+    });
+    TestBed.tick();
+
+    await flushMicrotasks();
+
+    expect(service.catalogError()).toBeNull();
+    expect(service.activeCatalog()?.['catalogId']).toBe('recovered-after-secondary-clone-failure');
     errorSpy.mockRestore();
   });
 
@@ -906,11 +969,40 @@ describe('CatalogManagement', () => {
       expect(service.activeProtocolVersion()).toBe('v1.0');
     });
 
-    async function flushMicrotasks(count = 10): Promise<void> {
-      for (let i = 0; i < count; i++) {
-        await Promise.resolve();
-      }
-    }
+    it('preserves primary $id precedence over secondary catalogId in mergedActiveCatalog', async () => {
+      const primaryCatalog: Catalog = {
+        $id: 'https://test/primary-only-dollar-id.json',
+        components: {
+          Text: {type: 'object'},
+        },
+      };
+      const secondaryCatalog: Catalog = {
+        catalogId: 'https://test/secondary.json',
+        components: {
+          Chart: {type: 'object'},
+        },
+      };
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalog: primaryCatalog,
+          catalogs: [primaryCatalog, secondaryCatalog],
+        },
+        timestamp: 40025,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      const merged = service.mergedActiveCatalog();
+      expect(merged).not.toBeNull();
+      expect(getCatalogId(merged!)).toBe('https://test/primary-only-dollar-id.json');
+      expect(merged!.components).toEqual({
+        Text: {type: 'object'},
+        Chart: {type: 'object'},
+      });
+    });
 
     it('settles with activeProtocolVersion v1.0 when catalog has protocolVersion 1.0', async () => {
       hostCommunicationMock.messageStream$.next({
@@ -1552,46 +1644,6 @@ describe('CatalogManagement', () => {
       expect(service.handshakeState()).toBe('idle');
       expect(service.isHandshakeInProgress()).toBe(false);
       errorSpy.mockRestore();
-    });
-  });
-
-  describe('isCatalogHandshakeErrorPayload', () => {
-    it('accepts valid handshake error payloads with explicit message', () => {
-      expect(isCatalogHandshakeErrorPayload({error: {message: 'boom'}})).toBe(true);
-      expect(isCatalogHandshakeErrorPayload({error: {message: ''}})).toBe(true);
-    });
-
-    it('accepts valid handshake error payloads with optional or omitted message', () => {
-      expect(isCatalogHandshakeErrorPayload({error: {}})).toBe(true);
-      expect(isCatalogHandshakeErrorPayload({error: {message: undefined}})).toBe(true);
-    });
-
-    it('rejects null, undefined, and non-object primitive values', () => {
-      expect(isCatalogHandshakeErrorPayload(null)).toBe(false);
-      expect(isCatalogHandshakeErrorPayload(undefined)).toBe(false);
-      expect(isCatalogHandshakeErrorPayload(123)).toBe(false);
-      expect(isCatalogHandshakeErrorPayload('error')).toBe(false);
-      expect(isCatalogHandshakeErrorPayload(true)).toBe(false);
-    });
-
-    it('rejects arrays and objects without an error object property', () => {
-      expect(isCatalogHandshakeErrorPayload([])).toBe(false);
-      expect(isCatalogHandshakeErrorPayload(['error'])).toBe(false);
-      expect(isCatalogHandshakeErrorPayload({catalogId: 'x'})).toBe(false);
-      expect(isCatalogHandshakeErrorPayload({error: null})).toBe(false);
-      expect(isCatalogHandshakeErrorPayload({error: 'string'})).toBe(false);
-      expect(isCatalogHandshakeErrorPayload({error: []})).toBe(false);
-      expect(isCatalogHandshakeErrorPayload({error: {message: 123}})).toBe(false);
-    });
-
-    it('rejects prototype-polluted payload structures', () => {
-      const pollutedRoot = JSON.parse('{"error":{},"__proto__":{"polluted":true}}') as unknown;
-      expect(isCatalogHandshakeErrorPayload(pollutedRoot)).toBe(false);
-
-      const pollutedChild = JSON.parse(
-        '{"error":{"message":"bad","__proto__":{"polluted":true}}}',
-      ) as unknown;
-      expect(isCatalogHandshakeErrorPayload(pollutedChild)).toBe(false);
     });
   });
 });

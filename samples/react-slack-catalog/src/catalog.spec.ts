@@ -691,12 +691,36 @@ describe('Slack catalog schema payload', () => {
     expect(defs.anyFunction?.oneOf?.length).toBeGreaterThan(0);
   });
 
-  it('emits zero warnings when generating the catalog schema', () => {
+  it('emits zero warnings and resolves component/function refs when generating the catalog schema', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const generated = createSlackCatalogJson(slackCatalog);
       expect(warnSpy).not.toHaveBeenCalled();
-      expect(generated).toEqual(slackCatalogJson);
+
+      expect(generated.catalogId).toBe(slackCatalog.id);
+      const componentNames = Object.keys(generated.components ?? {});
+      expect(componentNames.sort()).toEqual(EXPECTED_COMPONENTS);
+
+      const anyComponentOneOf = (generated.$defs?.['anyComponent'] as {oneOf: unknown[]})?.oneOf;
+      expect(anyComponentOneOf).toHaveLength(EXPECTED_COMPONENTS.length);
+      expect(anyComponentOneOf).toEqual(
+        expect.arrayContaining(EXPECTED_COMPONENTS.map(name => ({$ref: `#/components/${name}`}))),
+      );
+
+      const textSchema = generated.components?.['Text'] as {
+        allOf: [unknown, {properties: {text: unknown}}];
+      };
+      expect(textSchema.allOf[1].properties.text).toEqual(
+        expect.objectContaining({
+          $ref: 'common_types.json#/$defs/DynamicString',
+        }),
+      );
+
+      const functionCount = generated.functions?.length ?? 0;
+      expect(functionCount).toBeGreaterThan(0);
+      expect((generated.$defs?.['anyFunction'] as {oneOf: unknown[]})?.oneOf).toHaveLength(
+        functionCount,
+      );
     } finally {
       warnSpy.mockRestore();
     }

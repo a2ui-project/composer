@@ -88,13 +88,17 @@ export class StateSync {
   private readonly cancelPendingDraftSync$ = new Subject<void>();
 
   constructor() {
+    let previousEmittedCatalog = this.catalogManagement.activeCatalog();
     toObservable(this.catalogManagement.activeCatalog)
-      .pipe(
-        filter(catalog => !!catalog),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe(() => {
-        this.syncCatalogDraft();
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(catalog => {
+        // An empty-catalog renderer clears activeCatalog to null rather than emitting a new
+        // catalog object, so sync on that transition to clear previousCatalogId.
+        const transitionedToNull = previousEmittedCatalog !== null && catalog === null;
+        previousEmittedCatalog = catalog;
+        if (catalog || transitionedToNull) {
+          this.syncCatalogDraft();
+        }
       });
 
     toObservable(this.catalogManagement.activeProtocolVersion)
@@ -109,7 +113,7 @@ export class StateSync {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(() => {
-        this.handleProtocolVersionChange(this.getActiveProtocolVersion());
+        this.syncCatalogDraft();
       });
 
     const sharedA2uiPayload$ = this.startupConfigState.sharedA2uiPayload
@@ -220,13 +224,11 @@ export class StateSync {
     const activeRenderer = this.startupConfigState.activeRenderer();
     if (!activeRenderer?.samplePayload && !catalogId) {
       catalogId =
-        this.getActiveProtocolVersion() === 'v1.0' ? BASIC_CATALOG_ID_V1_0 : BASIC_CATALOG_ID_V0_9;
+        this.catalogManagement.activeProtocolVersion() === 'v1.0'
+          ? BASIC_CATALOG_ID_V1_0
+          : BASIC_CATALOG_ID_V0_9;
     }
-    const initial = this.getInitialDraft(catalogId);
-    this._activeDraft.set(initial);
-    if (initial) {
-      this.userDraftInput$.next(initial);
-    }
+    this.applyInitialDraft(catalogId, /* emitEmpty= */ false);
   }
 
   /**
@@ -238,7 +240,7 @@ export class StateSync {
   resetToBlankDraft(): void {
     this.cancelPendingDraftSync$.next();
     const catalog = this.catalogManagement.activeCatalog();
-    const version = this.getActiveProtocolVersion();
+    const version = this.catalogManagement.activeProtocolVersion();
     const defaultCatalogId = version === 'v1.0' ? BASIC_CATALOG_ID_V1_0 : BASIC_CATALOG_ID_V0_9;
     const effectiveCatalogId = (catalog && getCatalogId(catalog)) || defaultCatalogId;
     this.isDraftEdited = false;
@@ -256,7 +258,7 @@ export class StateSync {
    * Synchronously reconciles the active draft against activeCatalog and protocol
    * version changes when the draft has not been edited by the user.
    */
-  syncCatalogDraft(): string {
+  syncCatalogDraft(): void {
     const catalog = this.catalogManagement.activeCatalog();
     if (catalog) {
       const catalogId = getCatalogId(catalog) || '';
@@ -265,21 +267,30 @@ export class StateSync {
         this.previousCatalogId !== null && this.previousCatalogId !== catalogId;
 
       if ((isInitialHandshake || isCatalogChange) && !this.isDraftEdited) {
-        const initial = this.getInitialDraft(catalogId);
-        this._activeDraft.set(initial);
-        this.userDraftInput$.next(initial);
+        this.applyInitialDraft(catalogId);
       }
 
       this.previousCatalogId = catalogId;
+    } else {
+      // Clear cached catalog ID whenever no catalog is active so switching to an
+      // empty-catalog renderer and back to the prior catalog re-applies its initial draft.
+      this.previousCatalogId = null;
     }
-    if (this.hasReceivedCatalogResponse()) {
-      this.handleProtocolVersionChange(this.getActiveProtocolVersion());
+    if (this.catalogManagement.hasReceivedCatalogResponse()) {
+      this.handleProtocolVersionChange(this.catalogManagement.activeProtocolVersion());
     }
-    return this._activeDraft();
+  }
+
+  private applyInitialDraft(catalogId: string, emitEmpty = true): void {
+    const initial = this.getInitialDraft(catalogId);
+    this._activeDraft.set(initial);
+    if (initial || emitEmpty) {
+      this.userDraftInput$.next(initial);
+    }
   }
 
   private handleProtocolVersionChange(version: A2uiProtocolVersion): void {
-    if (!this.hasReceivedCatalogResponse()) {
+    if (!this.catalogManagement.hasReceivedCatalogResponse()) {
       return;
     }
 
@@ -290,19 +301,25 @@ export class StateSync {
     const currentDraft = this._activeDraft();
     const strategy = this.getStrategy(version);
     const catalog = this.catalogManagement.activeCatalog();
-    let targetCatalogId = (catalog?.catalogId || catalog?.$id || '') as string;
+    let targetCatalogId = (catalog && getCatalogId(catalog)) || '';
     if (targetCatalogId === BASIC_CATALOG_ID_V0_9 && version === 'v1.0') {
       targetCatalogId = BASIC_CATALOG_ID_V1_0;
     } else if (targetCatalogId === BASIC_CATALOG_ID_V1_0 && version === 'v0.9') {
       targetCatalogId = BASIC_CATALOG_ID_V0_9;
     }
 
+    const activeSample = this.startupConfigState.activeRenderer()?.samplePayload;
     if (this.lastSamplePayload !== null && currentDraft === this.lastSamplePayload) {
-      if (this.startupConfigState.activeRenderer()?.samplePayload !== currentDraft) {
-        const initial = this.getInitialDraft(targetCatalogId);
-        this._activeDraft.set(initial);
-        this.userDraftInput$.next(initial);
+      // Renderer changed away from the sample whose payload is still unedited in the editor.
+      if (activeSample !== currentDraft) {
+        this.applyInitialDraft(targetCatalogId);
       }
+      return;
+    }
+
+    if (currentDraft === '' && activeSample) {
+      // Switched from an empty-catalog renderer with no draft to one providing a samplePayload.
+      this.applyInitialDraft(targetCatalogId);
       return;
     }
 
@@ -322,16 +339,8 @@ export class StateSync {
   }
 
   private getStrategy(version?: A2uiProtocolVersion): DraftProtocolStrategy {
-    const v = version ?? this.getActiveProtocolVersion();
+    const v = version ?? this.catalogManagement.activeProtocolVersion();
     return v === 'v1.0' ? this.v10Strategy : this.v09Strategy;
-  }
-
-  private getActiveProtocolVersion(): A2uiProtocolVersion {
-    return this.catalogManagement.activeProtocolVersion();
-  }
-
-  private hasReceivedCatalogResponse(): boolean {
-    return this.catalogManagement.hasReceivedCatalogResponse();
   }
 
   private getInitialDraft(catalogId: string): string {
@@ -344,7 +353,7 @@ export class StateSync {
     if (!catalogId) {
       return '';
     }
-    const version = this.getActiveProtocolVersion();
+    const version = this.catalogManagement.activeProtocolVersion();
     const strategy = this.getStrategy(version);
     if (
       catalogId === BASIC_CATALOG_ID_V0_9 ||

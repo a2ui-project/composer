@@ -36,7 +36,7 @@ import {
 } from './settings/app-config-provider/app-config-provider';
 import {LlmClient} from './chat/llm-client/llm-client';
 import {CatalogManagement} from './storage/catalog-management/catalog-management';
-import {createMockCatalogManagement} from './storage/catalog-management/testing/catalog-management-fake';
+import {createFakeCatalogManagement} from './storage/catalog-management/testing/catalog-management-fake';
 import {LocalStorageInteractions} from './storage/local-storage-interactions/local-storage-interactions';
 import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
 import {UsageTrackingService} from './usage-tracking/usage-tracking.service';
@@ -80,7 +80,7 @@ class MockStateSync {
   readonly sessionResetNonce = signal(0);
   updateDraft = vi.fn();
   hydrateActiveDraft = vi.fn(() => '{}');
-  syncCatalogDraft = vi.fn(() => '{}');
+  syncCatalogDraft = vi.fn();
 }
 
 class MockAppConfigProvider {
@@ -115,7 +115,7 @@ describe('App Routes Active Verification', () => {
         {provide: LlmClient, useValue: {chat: vi.fn(), chatStream: vi.fn()}},
         {
           provide: CatalogManagement,
-          useValue: createMockCatalogManagement(),
+          useValue: createFakeCatalogManagement(),
         },
         {
           provide: LocalStorageInteractions,

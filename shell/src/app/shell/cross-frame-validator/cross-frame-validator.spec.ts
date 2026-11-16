@@ -1723,6 +1723,38 @@ describe('CrossFrameValidator', () => {
         ),
       ).toBe(false);
     });
+
+    it('validates incoming MCP_REQUEST payloads and rejects null, primitive, and malformed payloads', () => {
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.MCP_REQUEST,
+            payload: {requestId: 'req-1', toolName: 'read_file', args: {path: '/'}},
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(true);
+
+      for (const badPayload of [
+        null,
+        'bad',
+        {requestId: '', toolName: 'read_file'},
+        {requestId: 'req-1', toolName: '   '},
+        {requestId: 'req-1', toolName: 'read_file', args: 'not-an-object'},
+      ]) {
+        expect(
+          CrossFrameValidator.validateIncomingMessage(
+            {
+              type: PreviewBridgeMessageType.MCP_REQUEST,
+              payload: badPayload,
+            },
+            undefined,
+            mockLogger,
+          ),
+        ).toBe(false);
+      }
+    });
   });
 
   describe('stripPrototypePollutionKeys', () => {
@@ -1781,5 +1813,10 @@ describe('isCatalogHandshakeErrorPayload', () => {
   it('rejects payloads with prototype pollution', () => {
     const polluted = JSON.parse('{"error": {}, "__proto__": {"polluted": true}}');
     expect(isCatalogHandshakeErrorPayload(polluted)).toBe(false);
+
+    const pollutedChild = JSON.parse(
+      '{"error":{"message":"bad","__proto__":{"polluted":true}}}',
+    ) as unknown;
+    expect(isCatalogHandshakeErrorPayload(pollutedChild)).toBe(false);
   });
 });

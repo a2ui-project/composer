@@ -28,6 +28,7 @@ import {
   SLACK_CATALOG_ID,
   slackPreviewFrame,
   slackPreviewSurface,
+  waitForPreviewToSettle,
 } from './slack-renderer.helpers';
 import {getMonacoContent, waitForMonacoEditor} from './helpers';
 
@@ -246,37 +247,51 @@ test.describe('Slack examples in the JSON editor', () => {
     await expect(slackPreviewSurface(page)).toBeVisible();
     await expect(slackPreviewSurface(page).getByText('Book a Car')).toBeVisible();
 
-    // Verify Errors tab has 0 errors/warnings (no "Recursive reference detected" warnings)
+    // Verify Errors tab has 0 errors and no unexpected warnings (in particular no
+    // "Recursive reference detected" warnings; React StrictMode / Vite dev mode
+    // may still emit the known duplicate RENDERER_READY or Lit dev-mode notices).
     const errorsTab = page.locator('.dv-tab', {hasText: /^Errors/});
-    await expect(errorsTab).toHaveText('Errors');
     await errorsTab.click();
-    await expect(page.locator('.errors-container .level-badge.warn')).toHaveCount(0);
     await expect(page.locator('.errors-container .level-badge.error')).toHaveCount(0);
     await expect(page.locator('.errors-container')).not.toContainText(
       'Recursive reference detected',
     );
+    await expectOnlyDevModeWarnings(page);
 
     // Switch to Angular Basic renderer via Settings
     await page.getByRole('link', {name: 'Settings', exact: true}).click();
     await page.locator('a2ui-composer-renderer-selector mat-select').click();
-    await page
-      .locator('mat-option', {hasText: /Angular Basic/})
-      .first()
-      .click();
+    await page.locator('mat-option', {hasText: 'Angular Basic (local)'}).click();
     await page.getByRole('link', {name: 'Composer Workspace'}).click();
     await waitForMonacoEditor(page);
+    await expect.poll(() => getMonacoContent(page)).toContain('"version": "1.0"');
+    await waitForPreviewToSettle(page);
 
-    // Verify preview renders Angular Basic and Errors tab has 0 errors/warnings
-    await expect(errorsTab).toHaveText('Errors');
+    // Verify preview renders Angular Basic and Errors tab gained 0 new errors/warnings
     await errorsTab.click();
-    await expect(page.locator('.errors-container .level-badge.warn')).toHaveCount(0);
     await expect(page.locator('.errors-container .level-badge.error')).toHaveCount(0);
+    await expectOnlyDevModeWarnings(page);
     await expect(page.locator('.errors-container')).not.toContainText('PROTOCOL_VERSION_MISMATCH');
     await expect(page.locator('.errors-container')).not.toContainText('Payload protocol version');
 
     expect(unexpectedErrors).toEqual([]);
   });
 });
+
+/** Asserts that any warnings shown in the Errors tab are strictly known dev-mode notices. */
+async function expectOnlyDevModeWarnings(page: Page): Promise<void> {
+  const warnMessages = await page
+    .locator('.errors-container tr.element-row', {
+      has: page.locator('.level-badge.warn'),
+    })
+    .locator('.error-message-text')
+    .allTextContents();
+  for (const msg of warnMessages) {
+    expect(msg.trim()).toMatch(
+      /^(Handshake already in progress\. Ignoring RENDERER_READY\.|Lit is in dev mode\.)/,
+    );
+  }
+}
 
 /** Opens Composer on the Slack renderer and shows the Components Gallery. */
 async function openSlackGallery(page: Page): Promise<void> {

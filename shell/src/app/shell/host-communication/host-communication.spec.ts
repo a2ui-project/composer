@@ -21,6 +21,7 @@ import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {describe, it, expect, beforeEach, afterEach, vi, type Mock} from 'vitest';
 import {effect, signal, WritableSignal} from '@angular/core';
 
@@ -2569,6 +2570,68 @@ describe('HostCommunication', () => {
       window.dispatchEvent(validEvent);
       expect(service.getEnvelopeHistory().length).toBe(1);
       expect(service.getEnvelopeHistory()[0].payload).toEqual({index: 1});
+    });
+
+    it('drops prototype-polluted MCP_REQUEST before invoking mcpManager.callTool or posting MCP_RESPONSE', () => {
+      const postMessageSpy = vi.fn();
+      const iframeWin = {postMessage: postMessageSpy} as unknown as Window;
+      service.registerIframe(iframeWin);
+
+      const callToolSpy = vi.spyOn(TestBed.inject(McpClientManagerService), 'callTool');
+
+      const emittedMessages: MessageEnvelope[] = [];
+      service.messageStream$.subscribe(e => emittedMessages.push(e));
+
+      const pollutedMcpPayload = JSON.parse(
+        '{"requestId":"req-evil","toolName":"list_directory","args":{"__proto__":{"polluted":true}}}',
+      ) as unknown;
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: iframeWin,
+          origin: 'http://localhost:3000',
+          data: {
+            type: PreviewBridgeMessageType.MCP_REQUEST,
+            payload: pollutedMcpPayload,
+          },
+        }),
+      );
+
+      expect(callToolSpy).not.toHaveBeenCalled();
+      expect(postMessageSpy).not.toHaveBeenCalled();
+      expect(emittedMessages).toEqual([]);
+      expect(service.getEnvelopeHistory()).toEqual([]);
+    });
+
+    it('drops null and primitive MCP_REQUEST payloads cleanly without throwing or invoking mcpManager.callTool', () => {
+      const postMessageSpy = vi.fn();
+      const iframeWin = {postMessage: postMessageSpy} as unknown as Window;
+      service.registerIframe(iframeWin);
+
+      const callToolSpy = vi.spyOn(TestBed.inject(McpClientManagerService), 'callTool');
+
+      const emittedMessages: MessageEnvelope[] = [];
+      service.messageStream$.subscribe(e => emittedMessages.push(e));
+
+      for (const badPayload of [null, 'bad']) {
+        expect(() => {
+          window.dispatchEvent(
+            new MessageEvent('message', {
+              source: iframeWin,
+              origin: 'http://localhost:3000',
+              data: {
+                type: PreviewBridgeMessageType.MCP_REQUEST,
+                payload: badPayload,
+              },
+            }),
+          );
+        }).not.toThrow();
+      }
+
+      expect(callToolSpy).not.toHaveBeenCalled();
+      expect(postMessageSpy).not.toHaveBeenCalled();
+      expect(emittedMessages).toEqual([]);
+      expect(service.getEnvelopeHistory()).toEqual([]);
     });
 
     it('forwards A2UI_CATALOG with multi-catalog array on messageStream$', () => {

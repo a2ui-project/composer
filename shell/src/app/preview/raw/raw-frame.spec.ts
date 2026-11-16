@@ -294,7 +294,7 @@ class MockStateSync {
     this.activeDraftSignal.set(val);
   });
   hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
-  syncCatalogDraft = vi.fn(() => this.activeDraftSignal());
+  syncCatalogDraft = vi.fn();
 }
 
 describe('RawFrame JSON Source Editor View', () => {
@@ -1677,7 +1677,6 @@ describe('RawFrame JSON Source Editor View', () => {
       // Configure stateSyncMock.syncCatalogDraft to simulate switching to the v1.0 draft
       stateSyncMock.syncCatalogDraft.mockImplementation(() => {
         stateSyncMock.activeDraftSignal.set(v10Draft);
-        return v10Draft;
       });
 
       // Switch activeProtocolVersion to v1.0 and trigger catalog effect
