@@ -156,6 +156,94 @@ describe('extractErrorDetails', () => {
     expect(result).toEqual({line: 1, column: 1});
   });
 
+  it('extracts line and column from modern V8 unexpected token snippet format without line/col', () => {
+    const rawText = '{\n  "version": "v0.9",\n  "invalid": \n}';
+    const error = new SyntaxError('Unexpected token \'}\', ..."nvalid": \n}" is not valid JSON');
+    const result = extractErrorDetails(error, rawText);
+    expect(result).toEqual({line: 4, column: 1});
+  });
+
+  it('extracts line and column from non-trailing-truncated multiline snippet', () => {
+    const rawText = '{\n  "version": "v0.9",\n  "invalid": bad\n}';
+    const error = new SyntaxError(
+      'Unexpected token \'b\', ..."invalid": bad\n}" is not valid JSON',
+    );
+    const result = extractErrorDetails(error, rawText);
+    expect(result).toEqual({line: 3, column: 14});
+  });
+
+  it('extracts line and column from short <= 20-char JSON without ellipses', () => {
+    const rawText = '{"b": bad}';
+    const error = new SyntaxError('Unexpected token \'b\', "{"b": bad}" is not valid JSON');
+    const result = extractErrorDetails(error, rawText);
+    expect(result).toEqual({line: 1, column: 7});
+  });
+
+  it('extracts line and column from trailing-truncated snippet with repeated token outside string literals', () => {
+    const rawText = '{"b": bad, "bbb": 1, "c": "12345678901234567890"}';
+    const error = new SyntaxError(
+      'Unexpected token \'b\', "{"b": bad, "bbb": "... is not valid JSON',
+    );
+    const result = extractErrorDetails(error, rawText);
+    expect(result).toEqual({line: 1, column: 7});
+  });
+
+  it('extracts line and column from modern V8 unexpected token snippet format with trailing dots', () => {
+    const rawText = '{"a": 1, "b": bad_value, "c": 2, "d": 3, "e": 4}';
+    const error = new SyntaxError(
+      'Unexpected token \'b\', ...": 1, "b": bad_value,"... is not valid JSON',
+    );
+    const result = extractErrorDetails(error, rawText);
+    expect(result).toEqual({line: 1, column: 15});
+  });
+
+  it('extracts line and column for unexpected structural tokens matching earlier valid tokens', () => {
+    const rawText1 = '{\n  {"a": 1}\n}';
+    const error1 = new SyntaxError(
+      'Unexpected token \'{\', "{\\n  {\\"a\\": 1}\\n}" is not valid JSON',
+    );
+    expect(extractErrorDetails(error1, rawText1)).toEqual({line: 2, column: 3});
+
+    const rawText2 = '[{"a": 1}}]';
+    const error2 = new SyntaxError('Unexpected token \'}\', "[{\\"a\\": 1}}]" is not valid JSON');
+    expect(extractErrorDetails(error2, rawText2)).toEqual({line: 1, column: 10});
+  });
+
+  it('extracts exact line and column for trailing commas in arrays', () => {
+    const rawShort = '[1,]';
+    let shortErr: SyntaxError | null = null;
+    try {
+      JSON.parse(rawShort);
+    } catch (e) {
+      shortErr = e as SyntaxError;
+    }
+    expect(shortErr).not.toBeNull();
+    expect(extractErrorDetails(shortErr!, rawShort)).toEqual({line: 1, column: 4});
+
+    const rawEmptyComma = '[,]';
+    let emptyCommaErr: SyntaxError | null = null;
+    try {
+      JSON.parse(rawEmptyComma);
+    } catch (e) {
+      emptyCommaErr = e as SyntaxError;
+    }
+    expect(emptyCommaErr).not.toBeNull();
+    expect(extractErrorDetails(emptyCommaErr!, rawEmptyComma)).toEqual({line: 1, column: 2});
+
+    const rawNested = '[[1,],\n]]';
+    let nestedErr: SyntaxError | null = null;
+    try {
+      JSON.parse(rawNested);
+    } catch (e) {
+      nestedErr = e as SyntaxError;
+    }
+    expect(nestedErr).not.toBeNull();
+    expect(extractErrorDetails(nestedErr!, rawNested)).toEqual({line: 1, column: 5});
+
+    expect(tryParseJsonArray('[]')).toEqual({success: true, data: []});
+    expect(tryParseJsonArray('[1, 2]')).toEqual({success: true, data: [1, 2]});
+  });
+
   it('returns empty object for unrecognized error formats', () => {
     const error = new SyntaxError('Unexpected token');
     const result = extractErrorDetails(error, 'some text');

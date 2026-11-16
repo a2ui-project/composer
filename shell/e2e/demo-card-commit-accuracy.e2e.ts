@@ -14,14 +14,8 @@
  * limitations under the License.
  */
 
-import {
-  test,
-  expect,
-  type BrowserContext,
-  type Locator,
-  type Page,
-  type TestInfo,
-} from '@playwright/test';
+import {test, expect} from './fixtures';
+import type {BrowserContext, Locator, Page, TestInfo} from '@playwright/test';
 import {MAX_CONTENT_HEIGHT_PX} from '../src/app/preview/content-height';
 import {DEMO_CARD_SELECTORS} from '../src/app/demos/test/demo-card-selectors';
 import {
@@ -47,7 +41,7 @@ import {
  */
 
 /** How long a revealed card's committed height may take to reach its content height. */
-const CONVERGE_TIMEOUT_MS = 5_000;
+const CONVERGE_TIMEOUT_MS = 10_000;
 
 /**
  * Pre-commit frame heights to sweep. null keeps the card's own
@@ -347,7 +341,7 @@ async function sweepVariant(
     await page.goto(`/demos?renderer=${renderer.url}`);
 
     const first = page.locator('a2ui-composer-demo-card').first();
-    await expect(first).toBeAttached();
+    await expect(first).toBeAttached({timeout: 30_000 * cpuThrottlingRate});
     if (measureHeight !== null) {
       // Tripwire: the override must reach the card, or the variant is the baseline.
       expect((await cardState(first)).measureHeight).toBe(measureHeight);

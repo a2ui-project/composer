@@ -17,6 +17,13 @@
 import {defineConfig, devices} from '@playwright/test';
 
 /**
+ * Headless and CI runs must own their dev servers so they never adopt a stale
+ * or foreign `ng serve`/Vite instance and fail fast if a port is already taken.
+ * Interactive `yarn e2e` keeps reusing a developer's running `yarn start`.
+ */
+const reuseExistingServer = !process.env['CI'] && !process.env['E2E_HEADLESS'];
+
+/**
  * Configuration for Playwright automated testing.
  * Setting CI=true cleanly enforces deterministic environments by forbidding .only tests,
  * adding retry policies, preventing trace viewers from automatically springing open,
@@ -27,14 +34,14 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 2 : 0,
-  workers: process.env['CI'] ? 1 : undefined,
+  workers: process.env['CI'] ? 1 : 4,
   outputDir: './e2e/test-results',
   reporter: [
     ['list'],
     [
       'html',
       {
-        open: process.env['CI'] || process.env['E2E_HEADLESS'] ? 'never' : 'always',
+        open: 'never',
         outputFolder: './e2e/playwright-report',
       },
     ],
@@ -52,6 +59,7 @@ export default defineConfig({
     viewport: {width: 1280, height: 800},
     trace: 'on-first-retry',
     screenshot: 'on',
+    launchOptions: {args: ['--no-sandbox', '--disable-dev-shm-usage']},
   },
   projects: [
     {
@@ -62,7 +70,7 @@ export default defineConfig({
       testMatch: 'e2e/**/*.e2e.ts',
       use: {
         ...devices['Desktop Chrome'],
-        channel: 'chrome',
+        channel: process.env['CI'] ? 'chrome' : undefined,
       },
     },
     {
@@ -79,40 +87,39 @@ export default defineConfig({
         colorScheme: 'light',
         locale: 'en-US',
         timezoneId: 'UTC',
-        // Required when running Chromium as root inside the CI Docker container.
-        launchOptions: {args: ['--no-sandbox', '--disable-dev-shm-usage']},
       },
     },
   ],
   webServer: [
     {
-      command: 'corepack yarn start',
+      command:
+        "node -e \"const fs = require('fs'), {execSync} = require('child_process'); if (!fs.existsSync('../bridge/dist')) execSync('corepack yarn workspace a2ui-bridge build', {stdio: 'inherit'}); if (!fs.existsSync('../samples/ng-basic-catalog/dist')) execSync('corepack yarn workspace ng-basic-catalog build', {stdio: 'inherit'}); if (!fs.existsSync('../samples/lit-basic-catalog/dist')) execSync('corepack yarn workspace lit-basic-catalog build', {stdio: 'inherit'}); if (!fs.existsSync('../samples/react-basic-catalog/dist')) execSync('corepack yarn workspace react-basic-catalog build', {stdio: 'inherit'});\" && npx ng serve",
       url: 'http://localhost:4200',
-      reuseExistingServer: !process.env['CI'],
+      reuseExistingServer,
       timeout: 120 * 1000,
     },
     {
       command: 'corepack yarn workspace ng-basic-catalog start',
       url: 'http://localhost:3456',
-      reuseExistingServer: !process.env['CI'],
+      reuseExistingServer,
       timeout: 120 * 1000,
     },
     {
       command: 'corepack yarn workspace lit-basic-catalog start',
       url: 'http://localhost:3457',
-      reuseExistingServer: !process.env['CI'],
+      reuseExistingServer,
       timeout: 120 * 1000,
     },
     {
       command: 'corepack yarn workspace react-basic-catalog start',
       url: 'http://localhost:3458',
-      reuseExistingServer: !process.env['CI'],
+      reuseExistingServer,
       timeout: 120 * 1000,
     },
     {
       command: 'corepack yarn workspace react-slack-catalog start',
       url: 'http://localhost:3460',
-      reuseExistingServer: !process.env['CI'],
+      reuseExistingServer,
       timeout: 120 * 1000,
     },
   ],

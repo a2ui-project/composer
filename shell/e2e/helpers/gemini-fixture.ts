@@ -47,9 +47,13 @@ export interface GeminiFixtureScenario {
 
 /** Gemini request metadata captured by the browser fixture for test assertions. */
 export interface CapturedGeminiRequest {
+  /** The full requested Gemini API endpoint URL. */
   url: string;
+  /** HTTP method of the captured request (e.g. POST). */
   method: string;
+  /** Lower-cased request headers normalized for test assertions. */
   headers: Record<string, string>;
+  /** Parsed JSON request payload sent to the Gemini SDK endpoint. */
   body: unknown;
 }
 

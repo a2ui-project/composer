@@ -85,6 +85,21 @@ function registerSurfaceThemes(monacoInstance: typeof monaco): void {
     monacoInstance.editor.defineTheme(name, {base, inherit: true, rules: [], colors});
   }
 }
+/** Numeric values of `monaco.MarkerSeverity` (unavailable at runtime via AMD type-only import). */
+const MONACO_SEVERITY_WARNING = 4;
+const MONACO_SEVERITY_ERROR = 8;
+/** vscode-json-languageservice ErrorCode.CommentsNotPermitted/ValueExpected. */
+const JSON_COMMENT_NOT_PERMITTED_CODE = '521';
+
+/**
+ * Determines whether a Monaco diagnostic marker represents an error or warning.
+ *
+ * @param marker - The Monaco diagnostic marker to evaluate.
+ * @returns True if the marker has error or warning severity.
+ */
+export function isErrorOrWarningMarker(marker: monaco.editor.IMarker): boolean {
+  return marker.severity === MONACO_SEVERITY_ERROR || marker.severity === MONACO_SEVERITY_WARNING;
+}
 
 @Component({
   selector: 'a2ui-composer-monaco-editor',
@@ -610,7 +625,7 @@ export class MonacoEditor {
                 .sort()
                 .join('|');
 
-              const hasErrors = markers.some(m => m.severity === 8 || m.severity === 4);
+              const hasErrors = markers.some(isErrorOrWarningMarker);
               const hadPendingMarkers = this.pendingMarkers !== null;
 
               if (!hasErrors) {
@@ -671,23 +686,27 @@ export class MonacoEditor {
   }
 
   /**
-   * Retrieves line and column coordinates for the first active error or warning marker,
-   * or null if no diagnostics are present.
+   * Retrieves line and column coordinates for the first active JSON syntax error
+   * marker, or null if no syntax diagnostics are present.
    */
-  getFirstErrorMarker(): {line: number; column: number} | null {
+  getFirstSyntaxErrorMarker(): {line: number; column: number} | null {
     const monacoInstance = this.monacoInstance();
     if (!monacoInstance) {
       return null;
     }
     const modelUri = monacoInstance.Uri.parse(this.modelUri);
     const markers = monacoInstance.editor.getModelMarkers({resource: modelUri});
-    const firstError = markers.find(m => m.severity === 8 || m.severity === 4);
-    if (!firstError) {
+    const syntaxError = markers.find(
+      m =>
+        m.severity === MONACO_SEVERITY_ERROR &&
+        (m.source === 'json' || m.code === JSON_COMMENT_NOT_PERMITTED_CODE),
+    );
+    if (!syntaxError) {
       return null;
     }
     return {
-      line: firstError.startLineNumber,
-      column: firstError.startColumn,
+      line: syntaxError.startLineNumber,
+      column: syntaxError.startColumn,
     };
   }
 

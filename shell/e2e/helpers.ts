@@ -14,7 +14,16 @@
  * limitations under the License.
  */
 
-import {expect, type FrameLocator, type Locator, Page} from '@playwright/test';
+import {readFileSync} from 'node:fs';
+import {
+  expect,
+  type BrowserContext,
+  type Frame,
+  type FrameLocator,
+  type Locator,
+  type Page,
+  type Route,
+} from '@playwright/test';
 import {connectMockAgent, sseEvent} from '../src/app/agent-chat/test/mock-a2a-agent';
 import {
   CATALOG_WATCHDOG_MESSAGE,
@@ -24,18 +33,48 @@ import {RENDERED_FRAME_SELECTORS} from '../src/app/preview/rendered/test/rendere
 import {
   dockedPreview,
   inlineSurfaceFrame,
+  previewIframe,
   renderedFrameContainer,
 } from '../src/app/preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 
+import {tryParseJsonArray} from '../src/app/utils/json';
+
+/**
+ * Monaco editor model interface exposed on the test window.
+ */
 export interface MonacoModel {
+  /**
+   * Retrieves the current string value of the model.
+   */
   getValue(): string;
+  /**
+   * Sets the string value of the model.
+   *
+   * @param value The new text content to set.
+   */
   setValue(value: string): void;
+  uri?: unknown;
 }
 
+/**
+ * Window augmentation containing the Monaco editor instance during E2E testing.
+ */
 export interface WindowWithMonaco extends Window {
+  /**
+   * Optional global Monaco namespace attached to the window.
+   */
   monaco?: {
     editor: {
+      /**
+       * Returns all active text models registered with Monaco.
+       */
       getModels(): MonacoModel[];
+      getModelMarkers?(filter?: {resource?: unknown}): Array<{startLineNumber?: number}>;
+      getEditors?(): Array<{
+        getModel(): {getValue(): string} | null;
+        getPosition(): {lineNumber: number; column: number} | null;
+      }>;
     };
   };
 }
@@ -51,12 +90,6 @@ export const TAB_VISIBILITY_TIMEOUT_MS = 10_000;
 export const MONACO_MODEL_TIMEOUT_MS = 10_000;
 
 /**
- * Duration in milliseconds to wait for the shell's draft synchronization debouncer
- * (300ms) to process editor content changes before switching tabs.
- */
-export const MONACO_DRAFT_DEBOUNCE_MS = 350;
-
-/**
  * Waits until the Monaco editor is visible and has a model in either the
  * Workspace Dockview tab or the Components Gallery card.
  */
@@ -70,7 +103,7 @@ export async function waitForMonacoEditor(page: Page): Promise<void> {
       .or(editorLocator)
       .first()
       .waitFor({state: 'attached', timeout: TAB_VISIBILITY_TIMEOUT_MS});
-    if ((await editorTab.count()) > 0) {
+    if (await editorTab.isVisible().catch(() => false)) {
       const isActive = await editorTab.evaluate(el => el.classList.contains('dv-active-tab'));
       if (!isActive) {
         await editorTab.click();
@@ -109,14 +142,94 @@ export async function waitForPreviewTab(page: Page): Promise<void> {
   });
 }
 
+async function waitForLoadedPreviewFrame(page: Page): Promise<Frame> {
+  const iframeLocator = previewIframe(page).first();
+  await iframeLocator.waitFor({state: 'attached', timeout: TAB_VISIBILITY_TIMEOUT_MS});
+
+  let guestFrame: Frame | null = null;
+  await expect
+    .poll(
+      async () => {
+        const handle = await iframeLocator.elementHandle();
+        const frame = handle ? await handle.contentFrame() : null;
+        if (!frame) return false;
+        const frameUrl = frame.url();
+        if (!frameUrl || frameUrl === 'about:blank') return false;
+        guestFrame = frame;
+        return true;
+      },
+      {
+        timeout: TAB_VISIBILITY_TIMEOUT_MS,
+        message: 'Preview iframe did not finish navigating from about:blank',
+      },
+    )
+    .toBe(true);
+
+  await guestFrame!.waitForLoadState('load', {timeout: TAB_VISIBILITY_TIMEOUT_MS});
+  return guestFrame!;
+}
+
 /** Replaces the contents of the Raw A2UI editor. */
 export async function setMonacoContent(page: Page, contents: string): Promise<void> {
+  const url = new URL(page.url());
+  const isWorkspace = url.pathname === '/' || url.pathname === '/workspace' || url.pathname === '';
+
   const previewTab = page.locator('.dv-tab:has-text("Rendered A2UI Preview")');
   const wasPreviewActive =
-    (await previewTab.count()) > 0 &&
-    (await previewTab.evaluate(el => el.classList.contains('dv-active-tab')));
+    isWorkspace &&
+    (await previewTab.isVisible().catch(() => false)) &&
+    (await previewTab.evaluate(el => el.classList.contains('dv-active-tab')).catch(() => false));
+
+  const trimmed = contents.trim();
+  let willDispatchRender = false;
+  if (trimmed.length > 0 && trimmed !== '[]') {
+    const parseResult = tryParseJsonArray(trimmed);
+    willDispatchRender = parseResult.success && parseResult.data.length > 0;
+  }
+
+  if (willDispatchRender) {
+    const currentModelValue = await page
+      .evaluate(() => {
+        const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
+        return model?.getValue() ?? '';
+      })
+      .catch(() => '');
+    if (currentModelValue === contents) {
+      willDispatchRender = false;
+    }
+  }
+
+  const shouldAwaitRender = isWorkspace && wasPreviewActive && willDispatchRender;
+  const guestFrame = shouldAwaitRender ? await waitForLoadedPreviewFrame(page) : null;
 
   await waitForMonacoEditor(page);
+
+  let renderPromise: Promise<void> | null = null;
+  if (guestFrame) {
+    // The timeout lives inside the guest so the `message` listener is
+    // always removed, whether RENDER_A2UI arrives or the wait times out.
+    renderPromise = guestFrame.evaluate(
+      timeoutMs =>
+        new Promise<void>((resolve, reject) => {
+          const handler = (event: MessageEvent) => {
+            if ((event.data as {type?: string} | null)?.type === 'RENDER_A2UI') {
+              window.removeEventListener('message', handler);
+              clearTimeout(timeoutId);
+              resolve();
+            }
+          };
+          const timeoutId = setTimeout(() => {
+            window.removeEventListener('message', handler);
+            reject(new Error(`Timed out after ${timeoutMs}ms waiting for RENDER_A2UI`));
+          }, timeoutMs);
+          window.addEventListener('message', handler);
+        }),
+      10_000,
+    );
+    // Attach a no-op rejection handler so an early failure before `await renderPromise`
+    // does not trigger Node's UnhandledPromiseRejection warning.
+    renderPromise.catch(() => {});
+  }
 
   await page.evaluate(value => {
     const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
@@ -125,10 +238,177 @@ export async function setMonacoContent(page: Page, contents: string): Promise<vo
     }
   }, contents);
 
+  await page.waitForFunction(
+    expected => {
+      const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
+      return model?.getValue() === expected;
+    },
+    contents,
+    {timeout: MONACO_MODEL_TIMEOUT_MS},
+  );
+
+  if (renderPromise) {
+    await renderPromise;
+  }
+
   if (wasPreviewActive) {
-    await page.waitForTimeout(MONACO_DRAFT_DEBOUNCE_MS);
     await waitForPreviewTab(page);
   }
+}
+
+interface ConfigRendererEntry {
+  rendererUrl?: string;
+  displayName?: string;
+  samplePayload?: string;
+  [key: string]: unknown;
+}
+
+interface AppConfigPayload {
+  renderers?: Record<string, ConfigRendererEntry>;
+  [key: string]: unknown;
+}
+
+function mapSampleRendererUrl(url: string | undefined): string | undefined {
+  if (!url) return url;
+  if (url.includes('ng-basic-catalog')) return RENDERER_URLS.angular;
+  if (url.includes('lit-basic-catalog')) return RENDERER_URLS.lit;
+  if (url.includes('react-basic-catalog')) return RENDERER_URLS.react;
+  if (url.includes('react-slack-catalog')) return RENDERER_URLS.slack;
+  return url;
+}
+
+function loadLocalRenderersPayload(): AppConfigPayload {
+  const raw = JSON.parse(
+    readFileSync(new URL('../src/config.json', import.meta.url), 'utf-8'),
+  ) as AppConfigPayload;
+  const renderers: Record<string, ConfigRendererEntry> = {};
+  for (const [id, entry] of Object.entries(raw.renderers ?? {})) {
+    renderers[id] = {
+      ...entry,
+      rendererUrl: mapSampleRendererUrl(entry.rendererUrl),
+    };
+  }
+  return {
+    ...raw,
+    renderers,
+  };
+}
+
+/** Local renderers configuration for hermetic test mocking, derived from `src/config.json`. */
+export const LOCAL_RENDERERS_PAYLOAD = loadLocalRenderersPayload();
+
+/**
+ * Intercepts `config.json` requests to serve local renderer endpoints and installs
+ * a fail-fast route abort on any external GitHub Pages traffic.
+ */
+export async function mockLocalRenderersConfig(target: Page | BrowserContext): Promise<void> {
+  const context =
+    'context' in target && typeof target.context === 'function' ? target.context() : target;
+
+  await context.route('https://a2ui-project.github.io/**', route => {
+    route.abort('blockedbyclient');
+  });
+
+  const handleConfig = (route: Route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(LOCAL_RENDERERS_PAYLOAD),
+    });
+
+  await context.route('**/config.json', handleConfig);
+}
+
+/**
+ * Clears `localStorage` once per browser session (guarded by a `sessionStorage`
+ * sentinel on the top window) and optionally seeds initial entries.
+ */
+export async function resetStorageOnce(page: Page, seed?: Record<string, string>): Promise<void> {
+  await page.addInitScript(entries => {
+    try {
+      if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
+        sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
+        localStorage.clear();
+        if (entries) {
+          for (const [key, value] of Object.entries(entries)) {
+            localStorage.setItem(key, value);
+          }
+        }
+      }
+    } catch (e: unknown) {
+      if (!(e instanceof DOMException && e.name === 'SecurityError')) {
+        throw e;
+      }
+    }
+  }, seed);
+}
+
+/**
+ * HTML payload for stub guest renderer iframes that deterministically participates in
+ * the GET_CATALOG handshake and prevents watchdog timeouts.
+ */
+export function stubRendererHtml(
+  bodyContent = 'Preview',
+  options?: {
+    version?: 'v0.9' | 'v1.0';
+    title?: string;
+  },
+): string {
+  const version = options?.version ?? 'v0.9';
+  const title = options?.title ?? 'Stub Catalog';
+  const catalogId =
+    version === 'v1.0'
+      ? 'https://a2ui.org/specification/v1_0/stub_catalog.json'
+      : 'https://a2ui.org/specification/v0_9/stub_catalog.json';
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<script>
+  let answered = false;
+  let interval = null;
+  function clearIntervalSafe() {
+    if (interval) {
+      clearInterval(interval);
+      interval = null;
+    }
+  }
+  function respondCatalog() {
+    if (answered) return;
+    answered = true;
+    clearIntervalSafe();
+    window.parent.postMessage({
+      type: 'A2UI_CATALOG',
+      payload: {
+        catalogId: '${catalogId}',
+        title: '${title}',
+        description: 'Stub Catalog Description',
+        version: '${version}',
+        components: {}
+      }
+    }, '*');
+  }
+  interval = setInterval(() => {
+    if (answered) {
+      clearIntervalSafe();
+      return;
+    }
+    window.parent.postMessage({ type: 'RENDERER_READY' }, '*');
+  }, 100);
+  window.addEventListener('message', (event) => {
+    if (event.data?.type === 'GET_CATALOG') {
+      respondCatalog();
+    } else if (event.data?.type === 'RENDER_A2UI') {
+      clearIntervalSafe();
+    }
+  });
+  window.addEventListener('beforeunload', () => {
+    clearIntervalSafe();
+  });
+  window.parent.postMessage({ type: 'RENDERER_READY' }, '*');
+</script>
+</head>
+<body>${bodyContent}</body>
+</html>`;
 }
 
 /** Returns the contents of the Raw A2UI editor once it is no longer empty. */

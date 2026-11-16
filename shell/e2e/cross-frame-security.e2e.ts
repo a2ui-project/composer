@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect} from './fixtures';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 test.describe('Cross-Frame Security & Sandboxing', () => {

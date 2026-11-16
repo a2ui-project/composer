@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test} from './fixtures';
+import type {Page} from '@playwright/test';
 import {connectMockAgent} from '../src/app/agent-chat/test/mock-a2a-agent';
 import {inlineSurfaceFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';

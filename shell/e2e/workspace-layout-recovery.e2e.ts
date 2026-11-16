@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from './fixtures';
 import type {SerializedDockview} from 'dockview-core';
 import {LocalStorageKey} from '../src/app/storage/models/local-storage-keys';
 import {RENDERED_FRAME_SELECTORS} from '../src/app/preview/rendered/test/rendered-frame-selectors';

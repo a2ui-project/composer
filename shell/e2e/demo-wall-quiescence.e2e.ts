@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {test, expect, type Page} from '@playwright/test';
+import {test, expect} from './fixtures';
+import type {Page} from '@playwright/test';
 import {DEMO_CARD_SELECTORS} from '../src/app/demos/test/demo-card-selectors';
 import {DEMO_RENDERERS} from './demo-wall-helpers';
 
@@ -111,7 +112,12 @@ for (const renderer of DEMO_RENDERERS) {
       await page.emulateMedia({colorScheme: 'light'});
       await installProbe(page);
       await page.goto(`/demos?renderer=${renderer.url}`);
-      await expect(page.locator('a2ui-composer-demo-card')).not.toHaveCount(0);
+      await expect(
+        page.locator('[data-demo-id], [data-demo-key], a2ui-composer-demo-card').first(),
+      ).toBeVisible({timeout: 15_000});
+      await expect(page.locator('.demo-card-surface.is-measured').first()).toBeAttached({
+        timeout: 15_000,
+      });
       await expectQuiescent(page);
 
       // Scroll through the wall a screen at a time, so every card commits.

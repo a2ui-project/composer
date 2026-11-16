@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect} from './fixtures';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {

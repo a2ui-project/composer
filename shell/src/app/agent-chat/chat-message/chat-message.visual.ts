@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect} from '../../../../e2e/fixtures';
+import {resetStorageOnce} from '../../../../e2e/helpers';
 import {inlineSurfaceIframe} from '../../preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../../preview/testing/renderer-urls';
 import {connectMockAgent, mockAgentCard, sseEvent, sseFlightBody} from '../test/mock-a2a-agent';
@@ -164,8 +165,7 @@ test.describe('A2aChatMessage Visual Regression & Layout', () => {
       }
     });
 
-    await page.goto('/a2a');
-    await page.evaluate(() => localStorage.clear());
+    await resetStorageOnce(page);
     await page.goto('/a2a');
 
     const configPanel = page.locator('.agent-config-panel');

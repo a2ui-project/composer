@@ -158,6 +158,40 @@ describe('demo card sizing', () => {
         expect(state.kind).toBe('fallbackWindow');
         expect(elapse(state).height).toBe(240);
       });
+
+      it('drops in-flight reports laid out at an older frame width on an uncommitted card', () => {
+        const card = reduceAll(initialSizing(), [
+          VISIBLE,
+          {type: 'AvailableWidthChanged', width: 445},
+        ]);
+        // An in-flight report measured at viewportWidth 639 arrives
+        const updated = reduceSizing(card, ready(314, {width: 639, viewportWidth: 639}));
+        // Should remain awaiting and uncommitted (height null)
+        expect(updated.height).toBeNull();
+        expect(updated.frame.latest).toBeNull();
+      });
+
+      it('clears stale frame reports and resets pending state on an uncommitted card when available width changes', () => {
+        const card = reduceAll(initialSizing(), [
+          HIDDEN,
+          {type: 'AvailableWidthChanged', width: 639},
+          ready(314, {width: 639, viewportWidth: 639}),
+        ]);
+        expect(card.kind).toBe('awaiting');
+        expect(card.kind === 'awaiting' && card.pending).toBe(true);
+        expect(card.frame.latest).toBe(314);
+
+        // Width changes to 445 before becoming visible
+        const widthChanged = reduceSizing(card, {type: 'AvailableWidthChanged', width: 445});
+        expect(widthChanged.kind).toBe('awaiting');
+        expect(widthChanged.kind === 'awaiting' && widthChanged.pending).toBe(false);
+        expect(widthChanged.frame.latest).toBeNull();
+        expect(widthChanged.frame.latestReady).toBeNull();
+
+        // Becoming visible does not immediately commit the stale 314 report
+        const nowVisible = reduceSizing(widthChanged, VISIBLE);
+        expect(nowVisible.height).toBeNull();
+      });
     });
 
     it('commits the latest report when ready never arrives after RENDER_SUCCESS', () => {
@@ -478,6 +512,33 @@ describe('demo card sizing', () => {
       expect(state.height).toBe(500);
     });
 
+    it('ignores a stale laid-out-elsewhere report with contentReady=false or overflow while uncommitted', () => {
+      // Card has already widened to 500px; a stale report arrives from the 400px layout.
+      let state = reduceSizing(visibleCard(), ready(500, {width: 500, viewportWidth: 400}));
+      expect(state.kind).toBe('widening');
+
+      // Stale contentReady=false report at viewportWidth=400 must not overwrite recorded height.
+      const beforeNotReady = state;
+      state = reduceSizing(
+        state,
+        resize({height: 120, width: 400, viewportWidth: 400, contentReady: false}),
+      );
+      expect(state.frame.latest).toBe(beforeNotReady.frame.latest);
+
+      // On an awaiting card at 500px, a stale overflowing report at viewportWidth=400 must not widen.
+      const awaitingAt500 = reduceAll(initialSizing(), [
+        VISIBLE,
+        {type: 'AvailableWidthChanged', width: 500},
+      ]);
+      const afterStaleOverflow = reduceSizing(
+        awaitingAt500,
+        ready(260, {width: 450, viewportWidth: 400}),
+      );
+      expect(afterStaleOverflow.kind).toBe('awaiting');
+      expect(afterStaleOverflow.width.content).toBe(0);
+      expect(afterStaleOverflow.frame.latest).toBeNull();
+    });
+
     it('ignores overflow the demo causes after the commit', () => {
       const state = reduceAll(visibleCard(), [ready(300), ready(300, {width: 700})]);
       expect(state.kind).toBe('committed');
@@ -488,6 +549,7 @@ describe('demo card sizing', () => {
   describe('when the available width changes after the commit', () => {
     it('accepts one fresh commit from a report laid out at the new width', () => {
       let state = reduceAll(visibleCard(), [
+        {type: 'AvailableWidthChanged', width: 445},
         ready(241, {viewportWidth: 445}),
         {type: 'AvailableWidthChanged', width: 639},
       ]);

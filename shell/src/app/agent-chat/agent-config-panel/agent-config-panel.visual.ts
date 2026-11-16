@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-import {test, expect, type Locator} from '@playwright/test';
+import {test, expect} from '../../../../e2e/fixtures';
+import type {Locator} from '@playwright/test';
+import {resetStorageOnce} from '../../../../e2e/helpers';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 
 async function waitForImageLoad(locator: Locator): Promise<void> {
@@ -30,13 +32,8 @@ async function waitForImageLoad(locator: Locator): Promise<void> {
 
 test.describe('AgentConfigPanel Visual Regression & Layout', () => {
   test.beforeEach(async ({page}) => {
+    await resetStorageOnce(page);
     await page.goto('/a2a');
-    await page.evaluate(() => {
-      try {
-        localStorage.clear();
-      } catch (e) {}
-    });
-    await page.reload();
   });
 
   test('renders default modal configuration card with avatar, title, subtitle, and input hints', async ({

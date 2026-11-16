@@ -15,6 +15,7 @@
  */
 
 import type {Page} from '@playwright/test';
+import {resetStorageOnce} from '../../../../e2e/helpers';
 
 export const mockAgentCard = {
   name: 'Smart Travel Planner Agent',
@@ -297,12 +298,7 @@ export async function connectMockAgent(
   respond?: MockA2aResponder,
 ) {
   await setupMockA2aRoutes(page, agentUrl, respond);
-  await page.goto('/a2a');
-  await page.evaluate(() => {
-    try {
-      localStorage.clear();
-    } catch (e) {}
-  });
+  await resetStorageOnce(page);
   await page.goto('/a2a');
 
   const configPanel = page.locator('.agent-config-panel');

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect} from '../../../e2e/fixtures';
 import {sideCanvasFrame} from '../preview/testing/preview-frame-locators';
 import {connectMockAgent} from './test/mock-a2a-agent';
 

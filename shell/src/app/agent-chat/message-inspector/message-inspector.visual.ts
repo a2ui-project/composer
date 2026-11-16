@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect} from '../../../../e2e/fixtures';
 import {connectMockAgent, mockAgentCard} from '../test/mock-a2a-agent';
 
 test.describe('A2aMessageInspector Visual Regression & Layout', () => {

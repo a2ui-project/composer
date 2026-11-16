@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect} from '../../../../e2e/fixtures';
+import {resetStorageOnce} from '../../../../e2e/helpers';
 import {
   FAKE_GEMINI_API_KEY,
   installGeminiFixture,
@@ -35,10 +36,7 @@ test.describe('CopilotKitChatPanel Visual Regression', () => {
         },
       }),
     );
-    await page.addInitScript(() => {
-      localStorage.clear();
-      localStorage.setItem('a2ui_composer_force_3p', 'true');
-    });
+    await resetStorageOnce(page, {a2ui_composer_force_3p: 'true'});
   });
 
   // CopilotKit's own styles fade the message list into a white gradient above the

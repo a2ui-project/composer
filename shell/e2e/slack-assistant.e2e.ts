@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {expect, test} from './fixtures';
+import type {Locator, Page} from '@playwright/test';
 import type {RenderA2uiItem} from 'a2ui-bridge';
 import {
   FAKE_GEMINI_API_KEY,
@@ -85,6 +86,7 @@ test.describe('Slack assistant browser journey', () => {
 
   test('shows a calm empty Slack preview when a custom renderer has no starter', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
+    await mockCustomRendererWithoutStarterConfig(page);
     await openComposerWithSlackRenderer(page, {forceAuthMode: '3p'});
     const frame = slackPreviewFrame(page);
     const emptyState = frame.getByRole('status');
@@ -113,6 +115,7 @@ test.describe('Slack assistant browser journey', () => {
 
   test('applies the dark theme to the empty Slack preview', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
+    await mockCustomRendererWithoutStarterConfig(page);
     await openComposerWithSlackRenderer(page, {forceAuthMode: '3p'});
     const frame = slackPreviewFrame(page);
     await expect(
@@ -428,6 +431,19 @@ test.describe('Slack assistant browser journey', () => {
   });
 });
 
+/** Serves a config without a matching Slack profile so `/?renderer=...` has no starter payload. */
+async function mockCustomRendererWithoutStarterConfig(page: Page): Promise<void> {
+  await page.route('**/config.json', route =>
+    route.fulfill({
+      json: {
+        renderers: {
+          default: {},
+        },
+      },
+    }),
+  );
+}
+
 /**
  * Opens Composer on the built-in Slack renderer with a fake Gemini key, back on the
  * workspace, ready for a prompt.
@@ -436,6 +452,9 @@ async function openSlackAssistant(page: Page): Promise<void> {
   await openComposerWithSlackRenderer(page, {rendererId: 'slack', forceAuthMode: '3p'});
   await addFakeGeminiApiKeyThroughSettings(page);
   await page.getByRole('link', {name: 'Composer Workspace'}).click();
+  // Move the mouse off the navigation link so its tooltip overlay does not steal
+  // subsequent keyboard events dispatched through Angular CDK Overlay.
+  await page.mouse.move(0, 0);
 }
 
 /** Has the assistant generate the World Cup score table and waits for it to render. */

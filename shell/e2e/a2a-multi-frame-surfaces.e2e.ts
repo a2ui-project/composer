@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {expect, test, type FrameLocator, type Page} from '@playwright/test';
+import {expect, test} from './fixtures';
+import type {FrameLocator, Page} from '@playwright/test';
 import {connectMockAgent, sseEvent} from '../src/app/agent-chat/test/mock-a2a-agent';
 import {
   inlineSurfaceFrame,

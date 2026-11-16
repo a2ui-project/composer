@@ -969,25 +969,106 @@ describe('MonacoEditor component', () => {
     }
   });
 
-  it('returns line and column from getFirstErrorMarker when diagnostics are present', async () => {
+  it('prioritizes syntax error markers over schema validation markers in getFirstSyntaxErrorMarker', async () => {
     fixture = TestBed.createComponent(MonacoEditor);
     fixture.detectChanges();
 
     await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
     await Promise.resolve();
 
-    expect(fixture.componentInstance.getFirstErrorMarker()).toBeNull();
+    expect(fixture.componentInstance.getFirstSyntaxErrorMarker()).toBeNull();
 
     mockGetModelMarkers.mockReturnValue([
       {
         severity: 8,
-        message: 'Property not allowed',
-        startLineNumber: 7,
-        startColumn: 14,
+        message: 'Value is not accepted. Valid values: "v0.9", "v1.0".',
+        startLineNumber: 1,
+        startColumn: 1,
+        code: '1',
+      },
+      {
+        severity: 8,
+        message: 'Incorrect type. Expected array',
+        startLineNumber: 2,
+        startColumn: 1,
+      },
+      {
+        severity: 8,
+        message: 'Value expected',
+        startLineNumber: 4,
+        startColumn: 12,
+        source: 'json',
       },
     ]);
 
-    expect(fixture.componentInstance.getFirstErrorMarker()).toEqual({line: 7, column: 14});
+    expect(fixture.componentInstance.getFirstSyntaxErrorMarker()).toEqual({line: 4, column: 12});
+  });
+
+  it('returns null from getFirstSyntaxErrorMarker when only schema validation markers are present', async () => {
+    fixture = TestBed.createComponent(MonacoEditor);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    mockGetModelMarkers.mockReturnValue([
+      {
+        severity: 8,
+        message: 'Value is not accepted. Valid values: "v0.9", "v1.0".',
+        startLineNumber: 1,
+        startColumn: 1,
+        code: '1',
+      },
+      {
+        severity: 8,
+        message: 'Incorrect type. Expected array',
+        startLineNumber: 2,
+        startColumn: 1,
+      },
+    ]);
+
+    expect(fixture.componentInstance.getFirstSyntaxErrorMarker()).toBeNull();
+  });
+
+  it('does not treat DuplicateKey warnings as syntax errors in getFirstSyntaxErrorMarker', async () => {
+    fixture = TestBed.createComponent(MonacoEditor);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    mockGetModelMarkers.mockReturnValue([
+      {
+        severity: 4,
+        message: 'Duplicate object key',
+        startLineNumber: 2,
+        startColumn: 3,
+        source: 'json',
+        code: '520',
+      },
+      {
+        severity: 8,
+        message: 'Value expected',
+        startLineNumber: 3,
+        startColumn: 10,
+        source: 'json',
+        code: '521',
+      },
+    ]);
+
+    expect(fixture.componentInstance.getFirstSyntaxErrorMarker()).toEqual({line: 3, column: 10});
+
+    mockGetModelMarkers.mockReturnValue([
+      {
+        severity: 4,
+        message: 'Duplicate object key',
+        startLineNumber: 2,
+        startColumn: 3,
+        source: 'json',
+        code: '520',
+      },
+    ]);
+    expect(fixture.componentInstance.getFirstSyntaxErrorMarker()).toBeNull();
   });
 
   it('debounces and emits markers when warning markers (severity 4) are present', async () => {

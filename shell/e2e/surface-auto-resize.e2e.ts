@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {test, expect, type FrameLocator, type Page} from '@playwright/test';
+import {test, expect} from './fixtures';
+import type {FrameLocator, Page} from '@playwright/test';
 import {
   chatHistory,
   dockedPreviewGeometry,
