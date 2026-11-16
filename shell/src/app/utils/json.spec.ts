@@ -209,6 +209,41 @@ describe('extractErrorDetails', () => {
     expect(extractErrorDetails(error2, rawText2)).toEqual({line: 1, column: 10});
   });
 
+  it('extracts exact line and column for trailing commas in arrays', () => {
+    const rawShort = '[1,]';
+    let shortErr: SyntaxError | null = null;
+    try {
+      JSON.parse(rawShort);
+    } catch (e) {
+      shortErr = e as SyntaxError;
+    }
+    expect(shortErr).not.toBeNull();
+    expect(extractErrorDetails(shortErr!, rawShort)).toEqual({line: 1, column: 4});
+
+    const rawEmptyComma = '[,]';
+    let emptyCommaErr: SyntaxError | null = null;
+    try {
+      JSON.parse(rawEmptyComma);
+    } catch (e) {
+      emptyCommaErr = e as SyntaxError;
+    }
+    expect(emptyCommaErr).not.toBeNull();
+    expect(extractErrorDetails(emptyCommaErr!, rawEmptyComma)).toEqual({line: 1, column: 2});
+
+    const rawNested = '[[1,],\n]]';
+    let nestedErr: SyntaxError | null = null;
+    try {
+      JSON.parse(rawNested);
+    } catch (e) {
+      nestedErr = e as SyntaxError;
+    }
+    expect(nestedErr).not.toBeNull();
+    expect(extractErrorDetails(nestedErr!, rawNested)).toEqual({line: 1, column: 5});
+
+    expect(tryParseJsonArray('[]')).toEqual({success: true, data: []});
+    expect(tryParseJsonArray('[1, 2]')).toEqual({success: true, data: [1, 2]});
+  });
+
   it('returns empty object for unrecognized error formats', () => {
     const error = new SyntaxError('Unexpected token');
     const result = extractErrorDetails(error, 'some text');

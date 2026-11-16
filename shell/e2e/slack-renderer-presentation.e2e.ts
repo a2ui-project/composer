@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test} from './fixtures';
+import type {Page} from '@playwright/test';
 import {
   collectUnexpectedErrors,
   DATA_BOUND_ACTION_JSON,

@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {test, expect, type Page} from '@playwright/test';
+import {test, expect} from './fixtures';
+import type {Page} from '@playwright/test';
 import {DEMO_CARD_SELECTORS} from '../src/app/demos/test/demo-card-selectors';
 import {RENDERED_FRAME_SELECTORS} from '../src/app/preview/rendered/test/rendered-frame-selectors';
 import {
@@ -25,19 +26,13 @@ import {
   firstPreviewFrame,
   previewFrame,
 } from '../src/app/preview/testing/preview-frame-locators';
-import {
-  WindowWithMonaco,
-  expectNoCatalogWatchdog,
-  mockLocalRenderersConfig,
-  trackRendererReady,
-} from './helpers';
+import {WindowWithMonaco, expectNoCatalogWatchdog, trackRendererReady} from './helpers';
 import {DEMO_CARD_COUNT, REVEAL_TIMEOUT_MS, cardTitled, revealCard} from './demo-wall-helpers';
 
 /** Text the first demo (Flight status) renders once its guest is live. */
 const FIRST_DEMO_MARKER = 'VIE';
 
-test.beforeEach(async ({page, context}) => {
-  await mockLocalRenderersConfig(context);
+test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
   });

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect} from './fixtures';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {CHAT_PANELS, stubRendererHtml, useChatPanel, type WindowWithMonaco} from './helpers';
 

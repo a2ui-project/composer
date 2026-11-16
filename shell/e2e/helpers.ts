@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
+import {readFileSync} from 'node:fs';
 import {
   expect,
   type BrowserContext,
+  type Frame,
   type FrameLocator,
   type Locator,
   type Page,
@@ -140,12 +142,35 @@ export async function waitForPreviewTab(page: Page): Promise<void> {
   });
 }
 
+async function waitForLoadedPreviewFrame(page: Page): Promise<Frame> {
+  const iframeLocator = previewIframe(page).first();
+  await iframeLocator.waitFor({state: 'attached', timeout: TAB_VISIBILITY_TIMEOUT_MS});
+
+  let guestFrame: Frame | null = null;
+  await expect
+    .poll(
+      async () => {
+        const handle = await iframeLocator.elementHandle();
+        const frame = handle ? await handle.contentFrame() : null;
+        if (!frame) return false;
+        const frameUrl = frame.url();
+        if (!frameUrl || frameUrl === 'about:blank') return false;
+        guestFrame = frame;
+        return true;
+      },
+      {
+        timeout: TAB_VISIBILITY_TIMEOUT_MS,
+        message: 'Preview iframe did not finish navigating from about:blank',
+      },
+    )
+    .toBe(true);
+
+  await guestFrame!.waitForLoadState('load', {timeout: TAB_VISIBILITY_TIMEOUT_MS});
+  return guestFrame!;
+}
+
 /** Replaces the contents of the Raw A2UI editor. */
-export async function setMonacoContent(
-  page: Page,
-  contents: string,
-  options: {awaitRender?: boolean} = {},
-): Promise<void> {
+export async function setMonacoContent(page: Page, contents: string): Promise<void> {
   const url = new URL(page.url());
   const isWorkspace = url.pathname === '/' || url.pathname === '/workspace' || url.pathname === '';
 
@@ -174,43 +199,37 @@ export async function setMonacoContent(
     }
   }
 
-  const shouldAwaitRender =
-    options.awaitRender ?? (isWorkspace && wasPreviewActive && willDispatchRender);
-
-  let renderPromise: Promise<void> | null = null;
-  if (shouldAwaitRender) {
-    const iframeHandle = await previewIframe(page)
-      .first()
-      .elementHandle()
-      .catch(() => null);
-    const guestFrame = iframeHandle ? await iframeHandle.contentFrame().catch(() => null) : null;
-    if (guestFrame) {
-      // The timeout lives inside the guest so the `message` listener is
-      // always removed, whether RENDER_A2UI arrives or the wait gives up.
-      renderPromise = guestFrame
-        .evaluate(
-          timeoutMs =>
-            new Promise<void>(resolve => {
-              const handler = (event: MessageEvent) => {
-                if ((event.data as {type?: string} | null)?.type === 'RENDER_A2UI') {
-                  window.removeEventListener('message', handler);
-                  clearTimeout(timeoutId);
-                  resolve();
-                }
-              };
-              const timeoutId = setTimeout(() => {
-                window.removeEventListener('message', handler);
-                resolve();
-              }, timeoutMs);
-              window.addEventListener('message', handler);
-            }),
-          10_000,
-        )
-        .catch(() => {});
-    }
-  }
+  const shouldAwaitRender = isWorkspace && wasPreviewActive && willDispatchRender;
+  const guestFrame = shouldAwaitRender ? await waitForLoadedPreviewFrame(page) : null;
 
   await waitForMonacoEditor(page);
+
+  let renderPromise: Promise<void> | null = null;
+  if (guestFrame) {
+    // The timeout lives inside the guest so the `message` listener is
+    // always removed, whether RENDER_A2UI arrives or the wait times out.
+    renderPromise = guestFrame.evaluate(
+      timeoutMs =>
+        new Promise<void>((resolve, reject) => {
+          const handler = (event: MessageEvent) => {
+            if ((event.data as {type?: string} | null)?.type === 'RENDER_A2UI') {
+              window.removeEventListener('message', handler);
+              clearTimeout(timeoutId);
+              resolve();
+            }
+          };
+          const timeoutId = setTimeout(() => {
+            window.removeEventListener('message', handler);
+            reject(new Error(`Timed out after ${timeoutMs}ms waiting for RENDER_A2UI`));
+          }, timeoutMs);
+          window.addEventListener('message', handler);
+        }),
+      10_000,
+    );
+    // Attach a no-op rejection handler so an early failure before `await renderPromise`
+    // does not trigger Node's UnhandledPromiseRejection warning.
+    renderPromise.catch(() => {});
+  }
 
   await page.evaluate(value => {
     const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
@@ -237,63 +256,50 @@ export async function setMonacoContent(
   }
 }
 
-/** Local renderers configuration for hermetic test mocking. */
-export const LOCAL_RENDERERS_PAYLOAD = {
-  renderers: {
-    default: {
-      rendererUrl: RENDERER_URLS.angular,
-      displayName: 'Angular Basic',
-    },
-    angular: {
-      rendererUrl: RENDERER_URLS.angular,
-      displayName: 'Angular Basic',
-    },
-    'angular-dev': {
-      rendererUrl: RENDERER_URLS.angular,
-      displayName: 'Angular Basic (local)',
-    },
-    lit: {
-      rendererUrl: RENDERER_URLS.lit,
-      displayName: 'Lit Basic',
-    },
-    'lit-dev': {
-      rendererUrl: RENDERER_URLS.lit,
-      displayName: 'Lit Basic (local)',
-    },
-    react: {
-      rendererUrl: RENDERER_URLS.react,
-      displayName: 'React Basic',
-    },
-    'react-dev': {
-      rendererUrl: RENDERER_URLS.react,
-      displayName: 'React Basic (local)',
-    },
-  },
-  apiKeys: {
-    fake: {
-      apiKey: 'this will not work',
-      displayName: 'Fake key',
-    },
-  },
-  models: [
-    {
-      model: 'gemini-flash-latest',
-      displayName: 'Gemini Flash',
-      thinkingLevels: ['low', 'medium', 'high'],
-      defaultThinkingLevel: 'medium',
-    },
-    {
-      model: 'gemini-pro-latest',
-      displayName: 'Gemini Pro',
-      thinkingLevels: ['low', 'medium', 'high'],
-      defaultThinkingLevel: 'medium',
-    },
-  ],
-};
+interface ConfigRendererEntry {
+  rendererUrl?: string;
+  displayName?: string;
+  samplePayload?: string;
+  [key: string]: unknown;
+}
+
+interface AppConfigPayload {
+  renderers?: Record<string, ConfigRendererEntry>;
+  [key: string]: unknown;
+}
+
+function mapSampleRendererUrl(url: string | undefined): string | undefined {
+  if (!url) return url;
+  if (url.includes('ng-basic-catalog')) return RENDERER_URLS.angular;
+  if (url.includes('lit-basic-catalog')) return RENDERER_URLS.lit;
+  if (url.includes('react-basic-catalog')) return RENDERER_URLS.react;
+  if (url.includes('react-slack-catalog')) return RENDERER_URLS.slack;
+  return url;
+}
+
+function loadLocalRenderersPayload(): AppConfigPayload {
+  const raw = JSON.parse(
+    readFileSync(new URL('../src/config.json', import.meta.url), 'utf-8'),
+  ) as AppConfigPayload;
+  const renderers: Record<string, ConfigRendererEntry> = {};
+  for (const [id, entry] of Object.entries(raw.renderers ?? {})) {
+    renderers[id] = {
+      ...entry,
+      rendererUrl: mapSampleRendererUrl(entry.rendererUrl),
+    };
+  }
+  return {
+    ...raw,
+    renderers,
+  };
+}
+
+/** Local renderers configuration for hermetic test mocking, derived from `src/config.json`. */
+export const LOCAL_RENDERERS_PAYLOAD = loadLocalRenderersPayload();
 
 /**
- * Intercepts config.json and renderers.json requests to serve local renderer endpoints
- * and installs a fail-fast route abort on any external GitHub Pages traffic.
+ * Intercepts `config.json` requests to serve local renderer endpoints and installs
+ * a fail-fast route abort on any external GitHub Pages traffic.
  */
 export async function mockLocalRenderersConfig(target: Page | BrowserContext): Promise<void> {
   const context =
@@ -310,7 +316,30 @@ export async function mockLocalRenderersConfig(target: Page | BrowserContext): P
     });
 
   await context.route('**/config.json', handleConfig);
-  await context.route('**/renderers.json', handleConfig);
+}
+
+/**
+ * Clears `localStorage` once per browser session (guarded by a `sessionStorage`
+ * sentinel on the top window) and optionally seeds initial entries.
+ */
+export async function resetStorageOnce(page: Page, seed?: Record<string, string>): Promise<void> {
+  await page.addInitScript(entries => {
+    try {
+      if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
+        sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
+        localStorage.clear();
+        if (entries) {
+          for (const [key, value] of Object.entries(entries)) {
+            localStorage.setItem(key, value);
+          }
+        }
+      }
+    } catch (e: unknown) {
+      if (!(e instanceof DOMException && e.name === 'SecurityError')) {
+        throw e;
+      }
+    }
+  }, seed);
 }
 
 /**

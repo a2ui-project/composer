@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {expect, test, type FrameLocator, type Page} from '@playwright/test';
+import {expect, test} from './fixtures';
+import type {FrameLocator, Page} from '@playwright/test';
 import {connectMockAgent, sseEvent} from '../src/app/agent-chat/test/mock-a2a-agent';
 import {
   inlineSurfaceFrame,
   sideCanvasFrame,
 } from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
-import {mockLocalRenderersConfig} from './helpers';
 
 const AGENT_URL = 'http://mock-agent.local';
 
@@ -94,8 +94,7 @@ async function expectSurface(frame: FrameLocator, text: string) {
   await expect(frame.locator('body')).toContainText(text, {timeout: SURFACE_RENDER_TIMEOUT_MS});
 }
 
-test.beforeEach(async ({page, context}) => {
-  await mockLocalRenderersConfig(context);
+test.beforeEach(async ({page}) => {
   // Point the default renderer at the local Angular guest so the inline and
   // canvas frames render real surfaces instead of the GitHub Pages build.
   await page.route('**/config.json', route =>

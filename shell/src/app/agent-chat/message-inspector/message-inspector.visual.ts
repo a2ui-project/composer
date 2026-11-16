@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
-import {mockLocalRenderersConfig} from '../../../../e2e/helpers';
+import {test, expect} from '../../../../e2e/fixtures';
 import {connectMockAgent, mockAgentCard} from '../test/mock-a2a-agent';
 
 test.describe('A2aMessageInspector Visual Regression & Layout', () => {
-  test.beforeEach(async ({context}) => {
-    await mockLocalRenderersConfig(context);
-  });
   test('renders protocol inspector drawer with filter chips, search bar, and events', async ({
     page,
   }) => {
@@ -47,9 +43,7 @@ test.describe('A2aMessageInspector Visual Regression & Layout', () => {
     await expect(inspector.locator('.filter-chips')).toBeVisible();
     await expect(inspector.locator('.search-input')).toBeVisible();
 
-    await expect(inspector).toHaveScreenshot('message-inspector-drawer.png', {
-      maxDiffPixelRatio: process.env['CI'] ? 0.02 : 0.05,
-    });
+    await expect(inspector).toHaveScreenshot('message-inspector-drawer.png');
   });
 
   test('renders empty inspector state when events are cleared', async ({page}) => {
@@ -164,8 +158,6 @@ test.describe('A2aMessageInspector Visual Regression & Layout', () => {
     );
 
     // Capture visual snapshot demonstrating kind chips and validation error banners
-    await expect(inspector).toHaveScreenshot('message-inspector-validation-errors.png', {
-      maxDiffPixelRatio: process.env['CI'] ? 0.02 : 0.05,
-    });
+    await expect(inspector).toHaveScreenshot('message-inspector-validation-errors.png');
   });
 });

@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
-import {mockLocalRenderersConfig} from '../../../../e2e/helpers';
+import {test, expect} from '../../../../e2e/fixtures';
 import {connectMockAgent} from '../test/mock-a2a-agent';
 
 test.describe('A2aChatHistory Visual Regression & Layout', () => {
-  test.beforeEach(async ({context}) => {
-    await mockLocalRenderersConfig(context);
-  });
   test('renders empty welcome showcase with capability badges and sample prompts', async ({
     page,
   }) => {

@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-import {test, expect, type Page} from '@playwright/test';
+import {test, expect} from './fixtures';
+import type {Page} from '@playwright/test';
 import {DEMO_CARD_SELECTORS} from '../src/app/demos/test/demo-card-selectors';
 import {DEMO_RENDERERS} from './demo-wall-helpers';
-import {mockLocalRenderersConfig} from './helpers';
-
-test.beforeEach(async ({context}) => {
-  await mockLocalRenderersConfig(context);
-});
 
 /**
  * The demo wall settles. A card accepts one fresh height commit when the wall

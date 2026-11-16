@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect} from './fixtures';
 import {RENDERED_FRAME_SELECTORS} from '../src/app/preview/rendered/test/rendered-frame-selectors';
 import {
   galleryPreview,
@@ -27,7 +27,6 @@ import {
   getMonacoContent,
   guestContentHeight,
   guestScrollRange,
-  mockLocalRenderersConfig,
   setMonacoContent,
   stubRendererHtml,
   trackRendererReady,
@@ -39,8 +38,7 @@ const PREVIEW_CARD_HEIGHT_PX = 400;
 /** Height of the content added to the guest to make it taller than the card. */
 const TALL_CONTENT_HEIGHT_PX = 1200;
 
-test.beforeEach(async ({page, context}) => {
-  await mockLocalRenderersConfig(context);
+test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
   });

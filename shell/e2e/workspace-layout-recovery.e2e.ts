@@ -14,17 +14,15 @@
  * limitations under the License.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from './fixtures';
 import type {SerializedDockview} from 'dockview-core';
 import {LocalStorageKey} from '../src/app/storage/models/local-storage-keys';
 import {RENDERED_FRAME_SELECTORS} from '../src/app/preview/rendered/test/rendered-frame-selectors';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
-import {mockLocalRenderersConfig} from './helpers';
 
 const rendererUrl = 'http://localhost:3456';
 
-test.beforeEach(async ({page, context}) => {
-  await mockLocalRenderersConfig(context);
+test.beforeEach(async ({page}) => {
   await page.route('**/config.json', route =>
     route.fulfill({
       contentType: 'application/json',

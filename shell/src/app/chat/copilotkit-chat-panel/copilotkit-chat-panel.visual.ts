@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
-import {mockLocalRenderersConfig} from '../../../../e2e/helpers';
+import {test, expect} from '../../../../e2e/fixtures';
+import {resetStorageOnce} from '../../../../e2e/helpers';
 import {
   FAKE_GEMINI_API_KEY,
   installGeminiFixture,
@@ -26,8 +26,7 @@ import {
 const RENDERER_URL = 'http://localhost:3456';
 
 test.describe('CopilotKitChatPanel Visual Regression', () => {
-  test.beforeEach(async ({page, context}) => {
-    await mockLocalRenderersConfig(context);
+  test.beforeEach(async ({page}) => {
     await installGeminiFixture(page);
     await page.route('**/config.json', route =>
       route.fulfill({
@@ -37,13 +36,7 @@ test.describe('CopilotKitChatPanel Visual Regression', () => {
         },
       }),
     );
-    await page.addInitScript(() => {
-      if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
-        sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
-        localStorage.clear();
-      }
-      localStorage.setItem('a2ui_composer_force_3p', 'true');
-    });
+    await resetStorageOnce(page, {a2ui_composer_force_3p: 'true'});
   });
 
   // CopilotKit's own styles fade the message list into a white gradient above the

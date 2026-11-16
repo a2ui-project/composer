@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {test, expect, type Locator, type Page} from '@playwright/test';
+import {test, expect} from './fixtures';
+import type {Locator, Page} from '@playwright/test';
 import {DEMO_CARD_SELECTORS} from '../src/app/demos/test/demo-card-selectors';
 import {demoCardFrame, demoCardIframe} from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
@@ -26,11 +27,6 @@ import {
   guestContentHeight,
   revealCard,
 } from './demo-wall-helpers';
-import {mockLocalRenderersConfig} from './helpers';
-
-test.beforeEach(async ({context}) => {
-  await mockLocalRenderersConfig(context);
-});
 
 /**
  * User journeys for demo cards that commit their height once and then lock it:

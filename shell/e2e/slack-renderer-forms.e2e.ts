@@ -16,7 +16,8 @@
 
 import {A2uiMessageListSchema} from '@a2ui/web_core/v0_9';
 import {readFileSync} from 'node:fs';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test} from './fixtures';
+import type {Page} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {
   collectUnexpectedErrors,

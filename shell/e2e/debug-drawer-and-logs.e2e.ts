@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect} from './fixtures';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
-import {stubRendererHtml} from './helpers';
+import {resetStorageOnce, stubRendererHtml} from './helpers';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -43,16 +43,9 @@ test.beforeEach(async ({page}) => {
     });
   });
 
-  await page.addInitScript(() => {
-    if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
-      sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
-      localStorage.clear();
-      localStorage.setItem('a2ui_composer_force_1p', 'true');
-      localStorage.setItem(
-        'a2ui_composer_allowed_origins',
-        JSON.stringify(['http://custom-renderer.com']),
-      );
-    }
+  await resetStorageOnce(page, {
+    a2ui_composer_force_1p: 'true',
+    a2ui_composer_allowed_origins: JSON.stringify(['http://custom-renderer.com']),
   });
   await page.goto('/?renderer=http://custom-renderer.com/index.html');
   await expect(page.locator('a2ui-composer-workspace')).toBeVisible();

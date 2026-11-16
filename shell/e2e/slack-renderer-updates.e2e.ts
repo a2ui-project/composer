@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from './fixtures';
 import {
   collectUnexpectedErrors,
   DATA_BOUND_ACTION_JSON,

@@ -969,33 +969,14 @@ describe('MonacoEditor component', () => {
     }
   });
 
-  it('returns line and column from getFirstErrorMarker when diagnostics are present', async () => {
+  it('prioritizes syntax error markers over schema validation markers in getFirstSyntaxErrorMarker', async () => {
     fixture = TestBed.createComponent(MonacoEditor);
     fixture.detectChanges();
 
     await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
     await Promise.resolve();
 
-    expect(fixture.componentInstance.getFirstErrorMarker()).toBeNull();
-
-    mockGetModelMarkers.mockReturnValue([
-      {
-        severity: 8,
-        message: 'Property not allowed',
-        startLineNumber: 7,
-        startColumn: 14,
-      },
-    ]);
-
-    expect(fixture.componentInstance.getFirstErrorMarker()).toEqual({line: 7, column: 14});
-  });
-
-  it('prioritizes syntax error markers over schema validation markers in getFirstErrorMarker', async () => {
-    fixture = TestBed.createComponent(MonacoEditor);
-    fixture.detectChanges();
-
-    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
-    await Promise.resolve();
+    expect(fixture.componentInstance.getFirstSyntaxErrorMarker()).toBeNull();
 
     mockGetModelMarkers.mockReturnValue([
       {
@@ -1020,11 +1001,10 @@ describe('MonacoEditor component', () => {
       },
     ]);
 
-    expect(fixture.componentInstance.getFirstErrorMarker()).toEqual({line: 4, column: 12});
-    expect(fixture.componentInstance.getFirstErrorMarker(true)).toEqual({line: 4, column: 12});
+    expect(fixture.componentInstance.getFirstSyntaxErrorMarker()).toEqual({line: 4, column: 12});
   });
 
-  it('returns null when syntaxOnly is true and only schema validation markers are present', async () => {
+  it('returns null from getFirstSyntaxErrorMarker when only schema validation markers are present', async () => {
     fixture = TestBed.createComponent(MonacoEditor);
     fixture.detectChanges();
 
@@ -1047,11 +1027,10 @@ describe('MonacoEditor component', () => {
       },
     ]);
 
-    expect(fixture.componentInstance.getFirstErrorMarker()).toEqual({line: 1, column: 1});
-    expect(fixture.componentInstance.getFirstErrorMarker(true)).toBeNull();
+    expect(fixture.componentInstance.getFirstSyntaxErrorMarker()).toBeNull();
   });
 
-  it('does not treat DuplicateKey warnings as syntax errors in getFirstErrorMarker', async () => {
+  it('does not treat DuplicateKey warnings as syntax errors in getFirstSyntaxErrorMarker', async () => {
     fixture = TestBed.createComponent(MonacoEditor);
     fixture.detectChanges();
 
@@ -1077,10 +1056,8 @@ describe('MonacoEditor component', () => {
       },
     ]);
 
-    expect(fixture.componentInstance.getFirstErrorMarker(true)).toEqual({line: 3, column: 10});
-    expect(fixture.componentInstance.getFirstErrorMarker(false)).toEqual({line: 3, column: 10});
+    expect(fixture.componentInstance.getFirstSyntaxErrorMarker()).toEqual({line: 3, column: 10});
 
-    // When only the warning is present, syntaxOnly returns null
     mockGetModelMarkers.mockReturnValue([
       {
         severity: 4,
@@ -1091,8 +1068,7 @@ describe('MonacoEditor component', () => {
         code: '520',
       },
     ]);
-    expect(fixture.componentInstance.getFirstErrorMarker(true)).toBeNull();
-    expect(fixture.componentInstance.getFirstErrorMarker(false)).toEqual({line: 2, column: 3});
+    expect(fixture.componentInstance.getFirstSyntaxErrorMarker()).toBeNull();
   });
 
   it('debounces and emits markers when warning markers (severity 4) are present', async () => {

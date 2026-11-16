@@ -14,14 +14,8 @@
  * limitations under the License.
  */
 
-import {
-  test,
-  expect,
-  type BrowserContext,
-  type Locator,
-  type Page,
-  type TestInfo,
-} from '@playwright/test';
+import {test, expect} from './fixtures';
+import type {BrowserContext, Locator, Page, TestInfo} from '@playwright/test';
 import {MAX_CONTENT_HEIGHT_PX} from '../src/app/preview/content-height';
 import {DEMO_CARD_SELECTORS} from '../src/app/demos/test/demo-card-selectors';
 import {
@@ -33,11 +27,6 @@ import {
   REVEAL_TIMEOUT_MS,
   revealCard,
 } from './demo-wall-helpers';
-import {mockLocalRenderersConfig} from './helpers';
-
-test.beforeEach(async ({context}) => {
-  await mockLocalRenderersConfig(context);
-});
 
 /**
  * Commit-accuracy sweep for the demo wall.

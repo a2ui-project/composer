@@ -1179,11 +1179,11 @@ describe('RawFrame JSON Source Editor View', () => {
     dispatchSpy.mockRestore();
   });
 
-  it('falls back to Monaco getFirstErrorMarker when syntax error coordinates are missing from V8', async () => {
+  it('falls back to Monaco getFirstSyntaxErrorMarker when syntax error coordinates are missing from V8', async () => {
     const {component} = await setup(false);
     const editor = component.monacoEditor();
     expect(editor).toBeTruthy();
-    vi.spyOn(editor!, 'getFirstErrorMarker').mockReturnValue({line: 5, column: 12});
+    vi.spyOn(editor!, 'getFirstSyntaxErrorMarker').mockReturnValue({line: 5, column: 12});
     const navigateSpy = vi.spyOn(editor!, 'navigateToPosition');
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
 
@@ -1233,13 +1233,15 @@ describe('RawFrame JSON Source Editor View', () => {
     );
   });
 
-  it('backfills coordinates from getFirstErrorMarker(true) and refreshes syntax snackbar when onMarkersChange arrives with invalid JSON', async () => {
+  it('backfills coordinates from getFirstSyntaxErrorMarker and refreshes syntax snackbar when onMarkersChange arrives with invalid JSON', async () => {
     const {fixture, harness, component} = await setup(false);
     vi.useFakeTimers();
 
     const editor = component.monacoEditor();
     expect(editor).toBeTruthy();
-    const getFirstErrorMarkerSpy = vi.spyOn(editor!, 'getFirstErrorMarker').mockReturnValue(null);
+    const getFirstSyntaxErrorMarkerSpy = vi
+      .spyOn(editor!, 'getFirstSyntaxErrorMarker')
+      .mockReturnValue(null);
 
     // Incomplete JSON with no resolvable coordinates from V8
     await harness.setJsonText('{"a": ');
@@ -1258,7 +1260,7 @@ describe('RawFrame JSON Source Editor View', () => {
     );
 
     snackBarMock.open.mockClear();
-    getFirstErrorMarkerSpy.mockReturnValue({line: 3, column: 7});
+    getFirstSyntaxErrorMarkerSpy.mockReturnValue({line: 3, column: 7});
 
     // Monaco syntax markers now arrive
     const syntaxMarker = {
@@ -1345,7 +1347,7 @@ describe('RawFrame JSON Source Editor View', () => {
 
     const editor = component.monacoEditor();
     expect(editor).toBeTruthy();
-    vi.spyOn(editor!, 'getFirstErrorMarker').mockReturnValue({line: 3, column: 7});
+    vi.spyOn(editor!, 'getFirstSyntaxErrorMarker').mockReturnValue({line: 3, column: 7});
 
     // Incomplete JSON with no coordinates from V8
     await harness.setJsonText('{"a": ');
@@ -1355,7 +1357,7 @@ describe('RawFrame JSON Source Editor View', () => {
     vi.advanceTimersByTime(3000);
     fixture.detectChanges();
 
-    // showJsonSyntaxError fetched coordinates from getFirstErrorMarker and persisted lastSyntaxError
+    // showJsonSyntaxError fetched coordinates from getFirstSyntaxErrorMarker and persisted lastSyntaxError
     expect(component['lastSyntaxError']).toEqual({line: 3, column: 7});
     expect(snackBarMock.open).toHaveBeenCalledTimes(1);
     expect(snackBarMock.open).toHaveBeenCalledWith(

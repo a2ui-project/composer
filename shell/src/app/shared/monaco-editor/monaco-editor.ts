@@ -686,38 +686,27 @@ export class MonacoEditor {
   }
 
   /**
-   * Retrieves line and column coordinates for the first active error or warning marker,
-   * or null if no diagnostics are present.
-   *
-   * @param syntaxOnly When true, returns coordinates only if a syntax error marker
-   * is present, avoiding premature fallback to schema validation markers.
+   * Retrieves line and column coordinates for the first active JSON syntax error
+   * marker, or null if no syntax diagnostics are present.
    */
-  getFirstErrorMarker(syntaxOnly = false): {line: number; column: number} | null {
+  getFirstSyntaxErrorMarker(): {line: number; column: number} | null {
     const monacoInstance = this.monacoInstance();
     if (!monacoInstance) {
       return null;
     }
     const modelUri = monacoInstance.Uri.parse(this.modelUri);
     const markers = monacoInstance.editor.getModelMarkers({resource: modelUri});
-    const errorMarkers = markers.filter(isErrorOrWarningMarker);
-    if (errorMarkers.length === 0) {
-      return null;
-    }
-    const syntaxError = errorMarkers.find(
+    const syntaxError = markers.find(
       m =>
         m.severity === MONACO_SEVERITY_ERROR &&
         (m.source === 'json' || m.code === JSON_COMMENT_NOT_PERMITTED_CODE),
     );
-    if (syntaxOnly && !syntaxError) {
+    if (!syntaxError) {
       return null;
     }
-    const targetError =
-      syntaxError ??
-      errorMarkers.find(m => m.severity === MONACO_SEVERITY_ERROR) ??
-      errorMarkers[0];
     return {
-      line: targetError.startLineNumber,
-      column: targetError.startColumn,
+      line: syntaxError.startLineNumber,
+      column: syntaxError.startColumn,
     };
   }
 

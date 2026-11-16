@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect} from './fixtures';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
-import {mockLocalRenderersConfig} from './helpers';
+import {resetStorageOnce} from './helpers';
 
-test.beforeEach(async ({page, context}) => {
-  await mockLocalRenderersConfig(context);
+test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
   });
@@ -64,15 +63,7 @@ test.describe('Settings and Client Configuration', () => {
         });
       });
 
-      await page.addInitScript(() => {
-        if (window === window.top) {
-          if (!sessionStorage.getItem('init_cleared')) {
-            sessionStorage.setItem('init_cleared', 'true');
-            localStorage.clear();
-            localStorage.setItem('a2ui_composer_force_3p', 'true');
-          }
-        }
-      });
+      await resetStorageOnce(page, {a2ui_composer_force_3p: 'true'});
       await page.goto('/settings');
     });
 
@@ -331,12 +322,7 @@ test.describe('Settings and Client Configuration', () => {
     test('verifies auth section is hidden when IS_1P_AUTH_ENABLED is false and API key provisioning panel visibility', async ({
       page,
     }) => {
-      await page.addInitScript(() => {
-        if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
-          sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
-          localStorage.clear();
-        }
-      });
+      await resetStorageOnce(page);
       await page.goto('/settings');
 
       // Verify connection badges (part of the settings view tests)

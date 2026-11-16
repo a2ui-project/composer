@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test} from './fixtures';
+import type {Page} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {
   inlineSurfaceFrame,
@@ -23,7 +24,7 @@ import {
   sideCanvasFrame,
 } from '../src/app/preview/testing/preview-frame-locators';
 import {cardTitled, DEMO_RENDERERS, revealCard} from './demo-wall-helpers';
-import {mockLocalRenderersConfig, showInlineSurface} from './helpers';
+import {showInlineSurface} from './helpers';
 
 /**
  * Counts what each guest document receives from the shell, to pin down
@@ -354,8 +355,7 @@ async function setThemeCountsAfterToggle(
 }
 
 test.describe('GuestFrame sends', () => {
-  test.beforeEach(async ({page, context}) => {
-    await mockLocalRenderersConfig(context);
+  test.beforeEach(async ({page}) => {
     await instrument(page);
   });
 

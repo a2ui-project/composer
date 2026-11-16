@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {test, expect, Locator, FrameLocator, Page, JSHandle} from '@playwright/test';
+import {test, expect} from './fixtures';
+import type {Locator, FrameLocator, Page, JSHandle} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {
   dockedPreviewGeometry,

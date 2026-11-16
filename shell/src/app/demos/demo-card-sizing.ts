@@ -504,6 +504,7 @@ function onResizeUncommitted(
     next = openWindow(next, 'renderSuccessNotReady');
   }
   if (height === null) return next;
+  if (laidOutElsewhere(next.width, report)) return next;
   if (report.contentReady === false) {
     return {...next, frame: recordHeight(next.frame, report, height)};
   }
@@ -516,7 +517,6 @@ function onResizeUncommitted(
       return widening({...next, frame: recordHeight(next.frame, report, height)}, widened);
     }
   }
-  if (laidOutElsewhere(next.width, report)) return next;
   next = {...next, frame: recordHeight(next.frame, report, height)};
   if (next.kind === 'fallbackWindow' && next.reason === 'becameVisible') return next;
   // An older bridge can't say when its content has settled: wait for its reports to stop.

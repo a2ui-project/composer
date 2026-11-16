@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
-import {mockLocalRenderersConfig} from '../../../../e2e/helpers';
+import {test, expect} from '../../../../e2e/fixtures';
 import {connectMockAgent} from '../test/mock-a2a-agent';
 
 test.describe('A2aInputArea Visual Regression & Layout', () => {
-  test.beforeEach(async ({context}) => {
-    await mockLocalRenderersConfig(context);
-  });
   test('renders prompt input card with textarea, add button, and send action', async ({page}) => {
     await connectMockAgent(page);
 

@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test} from './fixtures';
+import type {Page} from '@playwright/test';
 import {type A2uiMessage, type UpdateComponentsMessage} from '@a2ui/web_core/v0_9';
 import {
   blockKitDetails,

@@ -56,7 +56,7 @@ function findFirstInvalidTokenOffset(jsonText: string, rawToken: string): number
   let i = 0;
   const len = jsonText.length;
   const stack: Array<'{' | '['> = [];
-  let state: 'value' | 'after_value' | 'prop_or_end' | 'colon' | 'prop' = 'value';
+  let state: 'value' | 'value_or_end' | 'after_value' | 'prop_or_end' | 'colon' | 'prop' = 'value';
 
   function skipWhitespace(): void {
     while (
@@ -109,6 +109,16 @@ function findFirstInvalidTokenOffset(jsonText: string, rawToken: string): number
     const tokenStart = i;
     const ch = jsonText[i];
 
+    if (state === 'value_or_end') {
+      if (ch === ']' && stack[stack.length - 1] === '[') {
+        i++;
+        stack.pop();
+        state = 'after_value';
+        continue;
+      }
+      state = 'value';
+    }
+
     if (state === 'value') {
       if (ch === '{') {
         i++;
@@ -117,11 +127,7 @@ function findFirstInvalidTokenOffset(jsonText: string, rawToken: string): number
       } else if (ch === '[') {
         i++;
         stack.push('[');
-        state = 'value';
-      } else if (ch === ']' && stack[stack.length - 1] === '[') {
-        i++;
-        stack.pop();
-        state = 'after_value';
+        state = 'value_or_end';
       } else if (
         readString() ||
         readNumber() ||

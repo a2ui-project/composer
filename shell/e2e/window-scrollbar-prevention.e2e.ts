@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
-import {mockLocalRenderersConfig} from './helpers';
+import {test, expect} from './fixtures';
 
-test.beforeEach(async ({page, context}) => {
-  await mockLocalRenderersConfig(context);
+test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
   });

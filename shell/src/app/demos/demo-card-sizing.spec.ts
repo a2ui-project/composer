@@ -512,6 +512,33 @@ describe('demo card sizing', () => {
       expect(state.height).toBe(500);
     });
 
+    it('ignores a stale laid-out-elsewhere report with contentReady=false or overflow while uncommitted', () => {
+      // Card has already widened to 500px; a stale report arrives from the 400px layout.
+      let state = reduceSizing(visibleCard(), ready(500, {width: 500, viewportWidth: 400}));
+      expect(state.kind).toBe('widening');
+
+      // Stale contentReady=false report at viewportWidth=400 must not overwrite recorded height.
+      const beforeNotReady = state;
+      state = reduceSizing(
+        state,
+        resize({height: 120, width: 400, viewportWidth: 400, contentReady: false}),
+      );
+      expect(state.frame.latest).toBe(beforeNotReady.frame.latest);
+
+      // On an awaiting card at 500px, a stale overflowing report at viewportWidth=400 must not widen.
+      const awaitingAt500 = reduceAll(initialSizing(), [
+        VISIBLE,
+        {type: 'AvailableWidthChanged', width: 500},
+      ]);
+      const afterStaleOverflow = reduceSizing(
+        awaitingAt500,
+        ready(260, {width: 450, viewportWidth: 400}),
+      );
+      expect(afterStaleOverflow.kind).toBe('awaiting');
+      expect(afterStaleOverflow.width.content).toBe(0);
+      expect(afterStaleOverflow.frame.latest).toBeNull();
+    });
+
     it('ignores overflow the demo causes after the commit', () => {
       const state = reduceAll(visibleCard(), [ready(300), ready(300, {width: 700})]);
       expect(state.kind).toBe('committed');

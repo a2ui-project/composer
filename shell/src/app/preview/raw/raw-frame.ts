@@ -314,7 +314,7 @@ export class RawFrame {
     } else {
       this.lastErrorSignature = null;
       if (this.lastSyntaxError?.line === undefined) {
-        const marker = this.monacoEditor()?.getFirstErrorMarker(true);
+        const marker = this.monacoEditor()?.getFirstSyntaxErrorMarker();
         if (marker) {
           this.lastSyntaxError = {line: marker.line, column: marker.column};
           if (this.isJsonInvalid()) {
@@ -454,7 +454,7 @@ export class RawFrame {
     let column = this.lastSyntaxError?.column;
 
     if (line === undefined) {
-      const marker = this.monacoEditor()?.getFirstErrorMarker(true);
+      const marker = this.monacoEditor()?.getFirstSyntaxErrorMarker();
       if (marker) {
         line = marker.line;
         column = marker.column;

@@ -15,7 +15,7 @@
  */
 
 import AxeBuilder from '@axe-core/playwright';
-import {expect, test} from '@playwright/test';
+import {expect, test} from './fixtures';
 import type {Page} from '@playwright/test';
 import type {RenderA2uiItem} from 'a2ui-bridge';
 import {deflateRawSync} from 'node:zlib';
@@ -29,7 +29,7 @@ import {
 } from './helpers/gemini-fixture';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
-import {mockLocalRenderersConfig} from './helpers';
+import {resetStorageOnce} from './helpers';
 
 const DRAFT_TEXT = 'Ready to use from my selected catalog';
 const MODEL_TEXT = 'Updated by deterministic Gemini fixture';
@@ -37,8 +37,7 @@ const RECOVERY_TEXT = 'Recovered by deterministic Gemini fixture';
 
 const pageErrors = new WeakMap<Page, string[]>();
 
-test.beforeEach(async ({page, context}) => {
-  await mockLocalRenderersConfig(context);
+test.beforeEach(async ({page}) => {
   pageErrors.set(page, []);
   page.on('pageerror', err => {
     pageErrors.get(page)?.push(err.message);
@@ -68,14 +67,7 @@ test.beforeEach(async ({page, context}) => {
       }),
     });
   });
-  await page.addInitScript(() => {
-    if (window === window.top && !sessionStorage.getItem('__a2ui_e2e_cleared__')) {
-      sessionStorage.setItem('__a2ui_e2e_cleared__', '1');
-      localStorage.clear();
-      localStorage.setItem('a2ui_composer_force_3p', 'true');
-      localStorage.removeItem('a2ui_composer_force_1p');
-    }
-  });
+  await resetStorageOnce(page, {a2ui_composer_force_3p: 'true'});
 });
 
 test.afterEach(async ({page}) => {
