@@ -31,6 +31,16 @@ test.describe('A2aErrorsInspector Visual Regression & Layout', () => {
       }),
     );
 
+    // Pre-initialize the IndexedDB credential stores on an initial visit so
+    // connectMockAgent()'s boot logs only the steady-state [Shell] entries
+    // expected by errors-inspector.png (matching the prior two-goto flow).
+    await page.goto('/a2a');
+    await page.locator('.agent-config-panel').waitFor({state: 'visible'});
+    await page.waitForFunction(async () => {
+      const dbs = await indexedDB.databases();
+      return dbs.some(db => db.name === 'a2ui_secure_credentials_db' && db.version === 2);
+    });
+
     await connectMockAgent(page);
 
     const errorsToggleBtn = page.locator('.errors-toggle-btn');
