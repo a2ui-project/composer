@@ -42,7 +42,7 @@ export type ComponentTreeNodeStatus = 'ok' | 'missing' | 'cycle';
 
 /** A component occurrence in the expanded tree. */
 export interface ComponentTreeNode {
-  /** Unique key of this occurrence (its reference path from the root). */
+  /** Unique key of this occurrence (surface-scoped reference path). */
   readonly key: string;
   /** The referenced component id. */
   readonly id: string;
@@ -349,7 +349,7 @@ function buildSurfaceTree(
   };
 
   const root = components.has(ROOT_COMPONENT_ID)
-    ? expand(ROOT_COMPONENT_ID, null, null, ROOT_COMPONENT_ID, new Set())
+    ? expand(ROOT_COMPONENT_ID, null, null, `${surfaceId}/${ROOT_COMPONENT_ID}`, new Set())
     : null;
 
   // Unreachable components: start from those no other unreachable component
@@ -370,7 +370,7 @@ function buildSurfaceTree(
       truncated = true;
       break;
     }
-    unreachable.push(expand(id, null, null, `~${id}`, new Set()));
+    unreachable.push(expand(id, null, null, `${surfaceId}/~${id}`, new Set()));
   }
 
   return {
