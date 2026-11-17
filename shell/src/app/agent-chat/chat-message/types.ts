@@ -16,6 +16,12 @@
 
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {A2aMessage} from '../../chat/a2a/a2a-types';
+import type {RenderedSurfaceDispatch} from '../../preview/rendered/rendered-frame';
+
+/** Payload and target window emitted once an inline surface in a message finishes rendering. */
+export interface InlineSurfaceDispatch extends RenderedSurfaceDispatch {
+  messageId: string;
+}
 
 /**
  * File attached to a chat message.
@@ -105,4 +111,15 @@ export interface UiMessage {
   toolCalls?: UiToolCall[];
   /** Workspace file artifacts generated or referenced in this turn. */
   artifacts?: Array<{id?: string; name?: string; type?: string}>;
+}
+
+/**
+ * Resolves a message's non-empty inline A2UI payload, preferring `inlineA2uiPayload` and
+ * falling back to legacy unpartitioned `a2uiPayload` when `hasCanvas` is falsy.
+ */
+export function resolveInlinePayload(message: UiMessage | undefined): RenderA2uiItem[] | undefined {
+  if (!message) return undefined;
+  const payload =
+    message.inlineA2uiPayload || (!message.hasCanvas ? message.a2uiPayload : undefined);
+  return Array.isArray(payload) && payload.length > 0 ? payload : undefined;
 }

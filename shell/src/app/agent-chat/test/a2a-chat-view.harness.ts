@@ -16,6 +16,7 @@
 
 import {ComponentHarness, HarnessPredicate} from '@angular/cdk/testing';
 import {UnitTestElement} from '@angular/cdk/testing/testbed';
+import {MatButtonHarness} from '@angular/material/button/testing';
 import {MatDialogHarness} from '@angular/material/dialog/testing';
 import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.harness';
 import {AgentConfigPanelHarness} from '../agent-config-panel/test/agent-config-panel.harness';
@@ -67,6 +68,18 @@ export class A2aChatViewHarness extends ComponentHarness {
   readonly getSideCanvasFrame = this.locatorForOptional(
     new HarnessPredicate(RenderedFrameHarness, {ancestor: '.side-canvas-viewport'}),
   );
+
+  private readonly getCloseSideCanvasButton = this.locatorForOptional(
+    MatButtonHarness.with({selector: 'button[aria-label="Close Canvas Preview"]'}),
+  );
+
+  async closeSideCanvas(): Promise<void> {
+    const btn = await this.getCloseSideCanvasButton();
+    if (!btn) {
+      throw new Error('Close Canvas Preview button is not rendered');
+    }
+    await btn.click();
+  }
 
   private readonly attachedIframes: HTMLIFrameElement[] = [];
 

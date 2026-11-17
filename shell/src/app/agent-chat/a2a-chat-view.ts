@@ -39,7 +39,7 @@ import {RenderA2uiItem} from 'a2ui-bridge';
 import {A2A_TRANSPORT} from '../chat/a2a/a2a-transport.token';
 import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../chat/a2a/a2a-types';
 import {ErrorLogger} from '../debug/error-logger.service';
-import {RenderedFrame} from '../preview/rendered/rendered-frame';
+import {RenderedFrame, RenderedSurfaceDispatch} from '../preview/rendered/rendered-frame';
 import {
   A2aBackendMode,
   AppConfigProvider,
@@ -59,6 +59,7 @@ import {CrossFrameValidator} from '../shell/cross-frame-validator/cross-frame-va
 import {hasPrototypePollution} from '../shell/cross-frame-validator/wire-version-validator';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {Catalog} from '../storage/models/catalog-storage.model';
+import {stableStringify} from '../storage/stable-stringify/stable-stringify';
 import {asRecord} from '../utils/json';
 import {isValidEndpointUrl, normalizeHttpUrl} from '../utils/url';
 import {generateUuid as uuid} from '../utils/uuid';
@@ -67,7 +68,12 @@ import {AgentConfigPanel, AgentConfigSaveEvent} from './agent-config-panel/agent
 import {A2aAgentHeader} from './agent-header/agent-header';
 import {UiAgentInfo} from './agent-header/types';
 import {A2aChatHistory} from './chat-history/chat-history';
-import {CanvasArtifact, UiMessage} from './chat-message/types';
+import {
+  CanvasArtifact,
+  InlineSurfaceDispatch,
+  resolveInlinePayload,
+  UiMessage,
+} from './chat-message/types';
 import {
   a2aCardToUiAgentInfo,
   createErrorEvent,
@@ -97,6 +103,16 @@ const THOUGHT_STEP_SEPARATOR = '\n\n';
 
 /** Text shown for a surface action that does not describe itself. */
 const DEFAULT_USER_ACTION_TEXT = 'User action triggered.';
+
+/** Frame kind and owning message (for inline surfaces) tracked per rendered iframe `Window`. */
+type SurfaceFrameBinding = {kind: 'inline'; messageId: string} | {kind: 'canvas'};
+
+/** Per-window render state retained to route streamed RPCs only to up-to-date frames. */
+interface TrackedSurfaceFrame {
+  binding: SurfaceFrameBinding;
+  surfaceIds: Set<string>;
+  lastRenderedPayloadJson: string;
+}
 
 /**
  * Key under which a surface may nest the action proper.
@@ -242,13 +258,12 @@ export class A2aChatView implements OnInit {
   >();
   private readonly pendingRendererFunctionResponses = new Set<AbortController>();
   private readonly ownedWindows = new WeakSet<Window>();
-  private readonly renderedSurfaceWindows = new Map<string, Window>();
-  private readonly renderedMessageWindows = new Map<string, Window>();
-  private lastRenderedSurfaceWindow: Window | null = null;
+  private readonly trackedFrames = new Map<Window, TrackedSurfaceFrame>();
   private readonly pendingSurfaceRpcs: Array<{
     agentMessageId: string;
     item: RenderA2uiItem;
     surfaceId?: string;
+    turnSignal: AbortSignal | null;
   }> = [];
   private readonly seenStreamedRpcKeysByMessage = new Map<string, Set<string>>();
   private activeAbortController?: AbortController;
@@ -534,12 +549,7 @@ export class A2aChatView implements OnInit {
 
     if (action === null || action === undefined) return;
 
-    if (this.activeAbortController) {
-      this.activeAbortController.abort();
-      this.activeAbortController = undefined;
-      this._isStreaming.set(false);
-      this.messages.update(msgs => msgs.map(m => (m.isStreaming ? {...m, isStreaming: false} : m)));
-    }
+    this.abortActiveTurn();
 
     let actionUserMessage: string | undefined;
     let actionMetadata: Record<string, unknown> | undefined;
@@ -633,7 +643,7 @@ export class A2aChatView implements OnInit {
     taskId?: string,
     contextId?: string,
   ): Promise<void> {
-    const controller = this.initTurnAbortController();
+    const controller = this.initTurnAbortController(agentMessageId);
 
     const url = this.configProvider.a2aAgentUrl();
     if (!url) {
@@ -652,11 +662,21 @@ export class A2aChatView implements OnInit {
     }
   }
 
-  private initTurnAbortController(): AbortController {
-    this._isStreaming.set(true);
+  private abortActiveTurn(preserveMessageId?: string): void {
     if (this.activeAbortController) {
       this.activeAbortController.abort();
+      this.activeAbortController = undefined;
     }
+    this.pruneAbortedPendingSurfaceRpcs();
+    this._isStreaming.set(false);
+    this.messages.update(msgs =>
+      msgs.map(m => (m.isStreaming && m.id !== preserveMessageId ? {...m, isStreaming: false} : m)),
+    );
+  }
+
+  private initTurnAbortController(agentMessageId: string): AbortController {
+    this.abortActiveTurn(agentMessageId);
+    this._isStreaming.set(true);
     const controller = new AbortController();
     this.activeAbortController = controller;
     return controller;
@@ -820,7 +840,6 @@ export class A2aChatView implements OnInit {
       parsed.a2uiItems.length > 0 ? normalizeA2uiItems(parsed.a2uiItems, this.errorLogger) : [];
     const surfaceItems = normalizedItems.filter(item => !isOneShotRpcEnvelope(item));
     const rpcItems = normalizedItems.filter(isOneShotRpcEnvelope);
-    const touchedSurfaceIds = this.extractSurfaceIds(surfaceItems);
 
     this.messages.update(msgs =>
       msgs.map((m, index) => {
@@ -899,7 +918,7 @@ export class A2aChatView implements OnInit {
     }
 
     if (rpcItems.length > 0) {
-      this.enqueueStreamedRpcs(rpcItems, agentMessageId, touchedSurfaceIds);
+      this.enqueueStreamedRpcs(rpcItems, agentMessageId);
     }
   }
 
@@ -949,18 +968,13 @@ export class A2aChatView implements OnInit {
   }
 
   protected cancelActiveGeneration(notifyWindows = true): void {
-    if (this.activeAbortController) {
-      this.activeAbortController.abort();
-      this.activeAbortController = undefined;
-    }
     for (const controller of this.pendingRendererFunctionResponses) {
       controller.abort();
     }
     this.pendingRendererFunctionResponses.clear();
     this.pendingSurfaceRpcs.length = 0;
     this.abortAllPendingFunctionCalls(notifyWindows);
-    this._isStreaming.set(false);
-    this.messages.update(msgs => msgs.map(m => (m.isStreaming ? {...m, isStreaming: false} : m)));
+    this.abortActiveTurn();
   }
 
   protected resetActiveSession(): void {
@@ -983,22 +997,24 @@ export class A2aChatView implements OnInit {
   protected closeCanvasSurface(): void {
     this.isCanvasOpen.set(false);
     this.activeCanvasPayload.set(null);
+    // Evict Canvas entries synchronously before Angular detaches the @if iframe.
+    for (const [win, frame] of this.trackedFrames.entries()) {
+      if (frame.binding.kind === 'canvas') {
+        this.trackedFrames.delete(win);
+      }
+    }
     this.pruneDetachedSurfaceWindows();
   }
 
-  protected onInlineSurfacePayloadDispatched(event: {
-    messageId: string;
-    payload: unknown[];
-    sourceWindow: Window;
-  }): void {
-    this.handleSurfacePayloadDispatched(event.payload, event.sourceWindow, event.messageId);
+  protected onInlineSurfacePayloadRendered(event: InlineSurfaceDispatch): void {
+    this.handleSurfacePayloadRendered(event.payload, event.sourceWindow, {
+      kind: 'inline',
+      messageId: event.messageId,
+    });
   }
 
-  protected onCanvasSurfacePayloadDispatched(event: {
-    payload: unknown[];
-    sourceWindow: Window;
-  }): void {
-    this.handleSurfacePayloadDispatched(event.payload, event.sourceWindow);
+  protected onCanvasSurfacePayloadRendered(event: RenderedSurfaceDispatch): void {
+    this.handleSurfacePayloadRendered(event.payload, event.sourceWindow, {kind: 'canvas'});
   }
 
   protected toggleMessageInspector(): void {
@@ -1130,9 +1146,15 @@ export class A2aChatView implements OnInit {
   private clearStreamedRpcState(): void {
     this.pendingSurfaceRpcs.length = 0;
     this.seenStreamedRpcKeysByMessage.clear();
-    this.renderedSurfaceWindows.clear();
-    this.renderedMessageWindows.clear();
-    this.lastRenderedSurfaceWindow = null;
+    this.trackedFrames.clear();
+  }
+
+  private pruneAbortedPendingSurfaceRpcs(): void {
+    for (let i = this.pendingSurfaceRpcs.length - 1; i >= 0; i--) {
+      if (this.pendingSurfaceRpcs[i].turnSignal?.aborted) {
+        this.pendingSurfaceRpcs.splice(i, 1);
+      }
+    }
   }
 
   private extractSurfaceIds(items: readonly unknown[]): Set<string> {
@@ -1193,31 +1215,21 @@ export class A2aChatView implements OnInit {
   }
 
   private pruneDetachedSurfaceWindows(): void {
-    for (const [surfaceId, win] of this.renderedSurfaceWindows.entries()) {
+    for (const win of this.trackedFrames.keys()) {
       if (!this.isLiveOwnedWindow(win)) {
-        this.renderedSurfaceWindows.delete(surfaceId);
+        this.trackedFrames.delete(win);
       }
-    }
-    for (const [messageId, win] of this.renderedMessageWindows.entries()) {
-      if (!this.isLiveOwnedWindow(win)) {
-        this.renderedMessageWindows.delete(messageId);
-      }
-    }
-    if (this.lastRenderedSurfaceWindow && !this.isLiveOwnedWindow(this.lastRenderedSurfaceWindow)) {
-      this.lastRenderedSurfaceWindow = null;
     }
   }
 
-  private enqueueStreamedRpcs(
-    rpcItems: readonly RenderA2uiItem[],
-    agentMessageId: string,
-    touchedSurfaceIds: ReadonlySet<string>,
-  ): void {
+  private enqueueStreamedRpcs(rpcItems: readonly RenderA2uiItem[], agentMessageId: string): void {
     let seenKeys = this.seenStreamedRpcKeysByMessage.get(agentMessageId);
     if (!seenKeys) {
       seenKeys = new Set<string>();
       this.seenStreamedRpcKeysByMessage.set(agentMessageId, seenKeys);
     }
+
+    const turnSignal = this.activeAbortController?.signal ?? null;
 
     for (const rawItem of rpcItems) {
       const item = this.normalizeRpcEnvelopeItem(rawItem);
@@ -1239,67 +1251,124 @@ export class A2aChatView implements OnInit {
       }
 
       const surfaceId = item.callRendererFunction?.surfaceId;
-      const targetWin = this.resolveReadyRpcTargetWindow(
-        surfaceId,
-        agentMessageId,
-        touchedSurfaceIds,
-      );
+      const targetWin = this.resolveReadyRpcTargetWindow(surfaceId, agentMessageId);
       if (targetWin) {
         this.hostCommunication.sendRenderA2UI([item], targetWin);
       } else {
-        this.pendingSurfaceRpcs.push({agentMessageId, item, surfaceId});
+        this.pendingSurfaceRpcs.push({agentMessageId, item, surfaceId, turnSignal});
       }
     }
+  }
+
+  private getTargetPayloadForBinding(binding: SurfaceFrameBinding): unknown[] | null | undefined {
+    if (binding.kind === 'canvas') {
+      return this.isCanvasOpen() ? this.activeCanvasPayload() : null;
+    }
+    const ownerMsg = this.messages().find(m => m.id === binding.messageId);
+    return resolveInlinePayload(ownerMsg);
+  }
+
+  private findLatestTrackedFrame(
+    predicate: (frame: TrackedSurfaceFrame) => boolean,
+  ): {window: Window; frame: TrackedSurfaceFrame} | null {
+    let latest: {window: Window; frame: TrackedSurfaceFrame} | null = null;
+    for (const [win, frame] of this.trackedFrames.entries()) {
+      if (predicate(frame) && this.isLiveOwnedWindow(win)) {
+        latest = {window: win, frame};
+      }
+    }
+    return latest;
+  }
+
+  private resolveCandidateTrackedFrame(
+    surfaceId: string | undefined,
+    agentMessageId: string,
+  ): {window: Window; frame: TrackedSurfaceFrame} | null {
+    const agentMsg = this.messages().find(m => m.id === agentMessageId);
+    const inlinePayload = resolveInlinePayload(agentMsg);
+
+    if (surfaceId) {
+      if (inlinePayload && this.extractSurfaceIds(inlinePayload).has(surfaceId)) {
+        return this.findLatestTrackedFrame(
+          f => f.binding.kind === 'inline' && f.binding.messageId === agentMessageId,
+        );
+      }
+      return this.findLatestTrackedFrame(f => f.surfaceIds.has(surfaceId));
+    }
+
+    if (inlinePayload) {
+      return this.findLatestTrackedFrame(
+        f => f.binding.kind === 'inline' && f.binding.messageId === agentMessageId,
+      );
+    }
+
+    if (agentMsg?.canvasArtifacts?.length) {
+      return this.findLatestTrackedFrame(f => f.binding.kind === 'canvas');
+    }
+
+    return (
+      this.findLatestTrackedFrame(
+        f => f.binding.kind === 'inline' && f.binding.messageId === agentMessageId,
+      ) ?? this.findLatestTrackedFrame(() => true)
+    );
   }
 
   private resolveReadyRpcTargetWindow(
     surfaceId: string | undefined,
     agentMessageId: string,
-    touchedSurfaceIds: ReadonlySet<string>,
   ): Window | null {
-    if (surfaceId) {
-      if (touchedSurfaceIds.has(surfaceId)) {
-        return null;
-      }
-      const win = this.renderedSurfaceWindows.get(surfaceId);
-      return this.isLiveOwnedWindow(win) ? win : null;
-    }
-    if (touchedSurfaceIds.size > 0) {
+    const candidate = this.resolveCandidateTrackedFrame(surfaceId, agentMessageId);
+    if (!candidate) {
       return null;
     }
-    const msgWin = this.renderedMessageWindows.get(agentMessageId);
-    if (this.isLiveOwnedWindow(msgWin)) {
-      return msgWin;
+
+    const targetPayload = this.getTargetPayloadForBinding(candidate.frame.binding);
+    if (!Array.isArray(targetPayload) || targetPayload.length === 0) {
+      return null;
     }
-    return this.isLiveOwnedWindow(this.lastRenderedSurfaceWindow)
-      ? this.lastRenderedSurfaceWindow
+
+    if (surfaceId && !this.extractSurfaceIds(targetPayload).has(surfaceId)) {
+      return null;
+    }
+
+    return candidate.frame.lastRenderedPayloadJson === stableStringify(targetPayload)
+      ? candidate.window
       : null;
   }
 
-  private handleSurfacePayloadDispatched(
+  private handleSurfacePayloadRendered(
     payload: unknown[],
     sourceWindow: Window,
-    messageId?: string,
+    source: SurfaceFrameBinding,
   ): void {
     this.ownedWindows.add(sourceWindow);
     const dispatchedSurfaceIds = this.extractSurfaceIds(payload);
-    for (const surfaceId of dispatchedSurfaceIds) {
-      this.renderedSurfaceWindows.set(surfaceId, sourceWindow);
-    }
-    if (messageId) {
-      this.renderedMessageWindows.set(messageId, sourceWindow);
-    }
-    this.lastRenderedSurfaceWindow = sourceWindow;
+    const renderedPayloadJson = stableStringify(payload);
+    // Re-insert so Map iteration order reflects the most recently rendered frame.
+    this.trackedFrames.delete(sourceWindow);
+    this.trackedFrames.set(sourceWindow, {
+      binding: source,
+      surfaceIds: dispatchedSurfaceIds,
+      lastRenderedPayloadJson: renderedPayloadJson,
+    });
 
     if (this.pendingSurfaceRpcs.length === 0) {
       return;
     }
 
+    const targetPayload = this.getTargetPayloadForBinding(source);
+    if (!Array.isArray(targetPayload) || stableStringify(targetPayload) !== renderedPayloadJson) {
+      return;
+    }
+
     const remaining: typeof this.pendingSurfaceRpcs = [];
     for (const entry of this.pendingSurfaceRpcs) {
+      if (entry.turnSignal?.aborted) {
+        continue;
+      }
       const matchesSurface = entry.surfaceId ? dispatchedSurfaceIds.has(entry.surfaceId) : false;
       const matchesUnscopedMessage =
-        !entry.surfaceId && (!messageId || entry.agentMessageId === messageId);
+        !entry.surfaceId && (source.kind === 'canvas' || entry.agentMessageId === source.messageId);
       if (matchesSurface || matchesUnscopedMessage) {
         this.hostCommunication.sendRenderA2UI([entry.item], sourceWindow);
       } else {

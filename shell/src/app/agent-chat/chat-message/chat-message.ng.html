@@ -81,8 +81,8 @@
               [payload]="inlinePayload()"
               sizing="content"
               [defaultTarget]="DefaultTarget.KEEP"
-              (payloadDispatched)="
-                inlinePayloadDispatched.emit({
+              (payloadRendered)="
+                inlinePayloadRendered.emit({
                   messageId: message().id,
                   payload: $event.payload,
                   sourceWindow: $event.sourceWindow,

@@ -32,7 +32,7 @@ import {AgentCard} from '../../chat/a2a/a2a-types';
 import {A2aChatMessage} from '../chat-message/chat-message';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 import {UiAgentInfo} from '../agent-header/types';
-import {UiMessage} from '../chat-message/types';
+import {InlineSurfaceDispatch, UiMessage} from '../chat-message/types';
 
 /**
  * Scrollable chat stream viewport displaying conversation turns, welcome showcase,
@@ -76,12 +76,8 @@ export class A2aChatHistory implements AfterViewChecked {
   readonly closeCanvas = output<void>();
   /** Emitted with the message ID when the user clicks to open the protocol inspector drawer. */
   readonly openInspector = output<string>();
-  /** Emitted when an inline message surface finishes dispatching its payload to an iframe. */
-  readonly inlinePayloadDispatched = output<{
-    messageId: string;
-    payload: unknown[];
-    sourceWindow: Window;
-  }>();
+  /** Emitted when an inline message surface finishes rendering its payload in an iframe. */
+  readonly inlinePayloadRendered = output<InlineSurfaceDispatch>();
 
   protected readonly scrollContainerRef = viewChild<ElementRef<HTMLDivElement>>('scrollContainer');
 

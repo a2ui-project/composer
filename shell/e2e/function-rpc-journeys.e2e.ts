@@ -63,6 +63,14 @@ function createStubV10RendererHtml(): string {
   window.__receivedRenderA2ui = [];
   window.__receivedResponses = [];
   window.__receivedMessages = [];
+  const holdRenderSuccess =
+    new URLSearchParams(window.location.search).get('holdRenderSuccess') === '1';
+  let heldRenderSuccessCount = 0;
+  window.__releaseHeldRenderSuccess = () => {
+    if (heldRenderSuccessCount <= 0) return;
+    heldRenderSuccessCount -= 1;
+    window.parent.postMessage({ type: 'RENDER_SUCCESS' }, '*');
+  };
   let answered = false;
   let interval = null;
 
@@ -114,6 +122,15 @@ function createStubV10RendererHtml(): string {
       }, '*');
     } else if (data?.type === 'RENDER_A2UI') {
       window.__receivedRenderA2ui.push(data.payload);
+      if (
+        holdRenderSuccess &&
+        Array.isArray(data.payload) &&
+        data.payload.some(i => i?.createSurface)
+      ) {
+        heldRenderSuccessCount += 1;
+      } else {
+        window.parent.postMessage({ type: 'RENDER_SUCCESS' }, '*');
+      }
       if (Array.isArray(data.payload)) {
         for (const item of data.payload) {
           if (item?.callRendererFunction?.functionCallId) {
@@ -144,15 +161,18 @@ function createStubV10RendererHtml(): string {
 </html>`;
 }
 
-async function setupV10Config(context: BrowserContext | Page): Promise<void> {
+async function setupV10Config(
+  context: BrowserContext | Page,
+  rendererUrl = V10_RENDERER_URL,
+): Promise<void> {
   const configPayload = {
     renderers: {
       default: {
-        rendererUrl: V10_RENDERER_URL,
+        rendererUrl,
         displayName: 'Mock V10',
       },
       v10: {
-        rendererUrl: V10_RENDERER_URL,
+        rendererUrl,
         displayName: 'Mock V10',
       },
     },
@@ -601,6 +621,122 @@ test.describe('A2UI v1.0 Function RPC Journeys Suite', () => {
     await expect(stopButton).toBeVisible();
     await stopButton.click();
     await expect(stopButton).toHaveCount(0);
+  });
+
+  test('b2. /a2a defers callRendererFunction until RENDER_SUCCESS is released', async ({page}) => {
+    await setupV10Config(page, `${V10_RENDERER_URL}?holdRenderSuccess=1`);
+
+    let capturedRendererFunctionResponse: Record<string, unknown> | null = null;
+    await connectMockAgent(page, 'http://mock-agent.local', async postData => {
+      if (postData.includes('rendererFunctionResponse')) {
+        try {
+          capturedRendererFunctionResponse = JSON.parse(postData) as Record<string, unknown>;
+        } catch {
+          capturedRendererFunctionResponse = {raw: postData};
+        }
+        return sseEvent({
+          taskId: 'task-gated-ack',
+          message: {role: 'agent', parts: [{text: 'Gated RPC completed.'}]},
+          final: true,
+        });
+      }
+
+      const gatedPayload = [
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 'v10-gated-surface',
+            catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+            components: [
+              {id: 'root', component: 'Column', children: ['status_text']},
+              {id: 'status_text', component: 'Text', text: 'Gated Surface'},
+            ],
+          },
+        },
+        {
+          version: '1.0',
+          callRendererFunction: {
+            functionCallId: 'crf-gated-1',
+            surfaceId: 'v10-gated-surface',
+            call: 'initializeGatedView',
+            args: {},
+          },
+        },
+      ];
+
+      return sseEvent({
+        taskId: 'task-gated-surface',
+        message: {
+          role: 'agent',
+          parts: [
+            {text: 'Gated surface response.'},
+            {data: {mimeType: 'application/a2ui+json', data: JSON.stringify(gatedPayload)}},
+          ],
+        },
+        final: true,
+      });
+    });
+
+    const prompt = page.locator('.prompt-textarea');
+    await prompt.fill('Test RENDER_SUCCESS gating');
+    await prompt.press('Enter');
+
+    const surface = inlineSurfaceFrame(page);
+    await expect(surface.locator('body')).toBeVisible();
+
+    // Wait for createSurface RENDER_A2UI to arrive in the stub iframe while RENDER_SUCCESS is held
+    await expect
+      .poll(async () =>
+        surface.locator('body').evaluate(() => {
+          const batches =
+            (window as unknown as {__receivedRenderA2ui?: unknown[][]}).__receivedRenderA2ui || [];
+          return batches.some(
+            b =>
+              Array.isArray(b) &&
+              b.some(i => Boolean((i as Record<string, unknown>)?.['createSurface'])),
+          );
+        }),
+      )
+      .toBe(true);
+
+    // While RENDER_SUCCESS is held, callRendererFunction must NOT arrive or be answered
+    const dispatchedWhileHeld = await surface.locator('body').evaluate(() => {
+      const batches =
+        (window as unknown as {__receivedRenderA2ui?: unknown[][]}).__receivedRenderA2ui || [];
+      return batches.some(
+        b =>
+          Array.isArray(b) &&
+          b.some(i => Boolean((i as Record<string, unknown>)?.['callRendererFunction'])),
+      );
+    });
+    expect(dispatchedWhileHeld).toBe(false);
+    expect(capturedRendererFunctionResponse).toBeNull();
+
+    // Release RENDER_SUCCESS and verify callRendererFunction flushes and completes
+    await surface.locator('body').evaluate(() => {
+      (window as unknown as {__releaseHeldRenderSuccess: () => void}).__releaseHeldRenderSuccess();
+    });
+
+    await expect
+      .poll(async () =>
+        surface.locator('body').evaluate(() => {
+          const batches =
+            (window as unknown as {__receivedRenderA2ui?: unknown[][]}).__receivedRenderA2ui || [];
+          return batches.some(
+            b =>
+              Array.isArray(b) &&
+              b.some(
+                i =>
+                  (
+                    (i as Record<string, unknown>)?.['callRendererFunction'] as
+                      Record<string, unknown> | undefined
+                  )?.['functionCallId'] === 'crf-gated-1',
+              ),
+          );
+        }),
+      )
+      .toBe(true);
+    await expect.poll(() => capturedRendererFunctionResponse).not.toBeNull();
   });
 
   test('c. /gallery and /demos auto-reject callAgentFunction with NO_AGENT_CONNECTED (< 1s)', async ({

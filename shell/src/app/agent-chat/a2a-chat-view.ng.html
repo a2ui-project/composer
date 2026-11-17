@@ -50,7 +50,7 @@
             (openCanvas)="openCanvasSurface($event)"
             (closeCanvas)="closeCanvasSurface()"
             (openInspector)="inspectMessage($event)"
-            (inlinePayloadDispatched)="onInlineSurfacePayloadDispatched($event)"
+            (inlinePayloadRendered)="onInlineSurfacePayloadRendered($event)"
           ></a2ui-composer-chat-history>
         </div>
 
@@ -87,7 +87,7 @@
               [payload]="activeCanvasPayload()"
               sizing="fill"
               [defaultTarget]="DefaultTarget.REPLACE"
-              (payloadDispatched)="onCanvasSurfacePayloadDispatched($event)"
+              (payloadRendered)="onCanvasSurfacePayloadRendered($event)"
             ></a2ui-composer-rendered-frame>
           </div>
         </div>

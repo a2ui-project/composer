@@ -16,6 +16,7 @@
 
 import {
   Component,
+  DestroyRef,
   inject,
   effect,
   computed,
@@ -35,6 +36,12 @@ import {StateSync} from '../../chat/state-sync/state-sync';
 
 /** How a {@link RenderedFrame} is sized; see {@link RenderedFrame.sizing}. */
 export type RenderedFrameSizing = 'fill' | 'content';
+
+/** Payload and target window emitted once a dispatched surface finishes rendering. */
+export interface RenderedSurfaceDispatch {
+  payload: unknown[];
+  sourceWindow: Window;
+}
 
 /**
  * Renders the active preview target in a {@link GuestFrame}, which owns the
@@ -61,6 +68,7 @@ export type RenderedFrameSizing = 'fill' | 'content';
 export class RenderedFrame {
   private readonly chatState = inject(ChatState);
   private readonly stateSync = inject(StateSync);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly guestFrame = viewChild(GuestFrame);
 
@@ -74,8 +82,11 @@ export class RenderedFrame {
    */
   readonly autoRejectAgentFunctions = input<boolean>(false);
 
-  /** Emits after the inner GuestFrame dispatches a RENDER_A2UI payload to its window. */
-  readonly payloadDispatched = output<{payload: unknown[]; sourceWindow: Window}>();
+  /**
+   * Emits after a dispatched RENDER_A2UI payload finishes rendering (`RENDER_SUCCESS`)
+   * in the inner GuestFrame.
+   */
+  readonly payloadRendered = output<RenderedSurfaceDispatch>();
 
   /**
    * The A2UI messages to render in the guest. Sent once the guest's document
@@ -119,7 +130,7 @@ export class RenderedFrame {
   private readonly reportedHeight = signal<number | null>(null);
 
   private lastHandledResetNonce = this.stateSync.sessionResetNonce();
-  private awaitingRender = false;
+  private readonly inFlightDispatches: RenderedSurfaceDispatch[] = [];
   private hasRenderError = false;
 
   /**
@@ -145,12 +156,14 @@ export class RenderedFrame {
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
   constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.resetRenderState({clearHeight: false});
+    });
+
     effect(() => {
       const payload = this.payload();
       if (payload !== undefined && (!Array.isArray(payload) || payload.length === 0)) {
-        this.awaitingRender = false;
-        this.hasRenderError = false;
-        untracked(() => this.reportedHeight.set(null));
+        this.resetRenderState();
       }
     });
 
@@ -159,41 +172,50 @@ export class RenderedFrame {
       const nonce = this.stateSync.sessionResetNonce();
       if (nonce > this.lastHandledResetNonce) {
         this.lastHandledResetNonce = nonce;
-        this.awaitingRender = false;
-        this.hasRenderError = false;
-        untracked(() => this.reportedHeight.set(null));
+        this.resetRenderState();
       }
     });
   }
 
-  protected onDocumentReplaced(): void {
-    this.awaitingRender = false;
+  private resetRenderState(options: {clearHeight?: boolean} = {}): void {
+    this.inFlightDispatches.length = 0;
     this.hasRenderError = false;
-    this.reportedHeight.set(null);
+    if (options.clearHeight !== false) {
+      untracked(() => this.reportedHeight.set(null));
+    }
+  }
+
+  protected onDocumentReplaced(): void {
+    this.resetRenderState();
   }
 
   protected onPayloadDispatched(initialForDocument: boolean): void {
-    this.awaitingRender = true;
     if (initialForDocument) {
+      this.inFlightDispatches.length = 0;
       this.hasRenderError = false;
       this.reportedHeight.set(null);
     }
     const payload = this.payload();
     const sourceWindow = this.contentWindow;
     if (Array.isArray(payload) && sourceWindow) {
-      this.payloadDispatched.emit({payload, sourceWindow});
+      this.inFlightDispatches.push({payload, sourceWindow});
     }
   }
 
   protected onRenderSuccess(): void {
-    this.awaitingRender = false;
+    const completed = this.inFlightDispatches.shift();
     this.hasRenderError = false;
+    if (completed) {
+      this.payloadRendered.emit(completed);
+    }
   }
 
   protected onRenderError(): void {
-    this.awaitingRender = false;
-    this.hasRenderError = true;
-    this.reportedHeight.set(null);
+    this.inFlightDispatches.shift();
+    if (this.inFlightDispatches.length === 0) {
+      this.hasRenderError = true;
+      this.reportedHeight.set(null);
+    }
   }
 
   /**
@@ -206,7 +228,7 @@ export class RenderedFrame {
     const currentPayload = untracked(() => this.payload());
     if (
       this.hasRenderError ||
-      this.awaitingRender ||
+      this.inFlightDispatches.length > 0 ||
       report.contentReady === false ||
       (currentPayload !== undefined &&
         (!Array.isArray(currentPayload) || currentPayload.length === 0))

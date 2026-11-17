@@ -66,6 +66,10 @@ export class A2aInputAreaHarness extends ComponentHarness {
     }
   }
 
+  async isStreaming(): Promise<boolean> {
+    return (await this.getStopButton()) !== null;
+  }
+
   async clickAttach(): Promise<void> {
     const btn = await this.getAddButton();
     return btn.click();
