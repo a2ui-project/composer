@@ -23,14 +23,11 @@ import {
   HostCommunication,
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
-import {PreviewBridgeMessageType, type Demo} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, type Demo, ThemePreference} from 'a2ui-bridge';
 import {DemosCatalog, type TrackedDemo} from './demos-catalog';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);

@@ -30,6 +30,8 @@ import {DEFAULT_PRESETS} from './default-presets';
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);
+  readonly activeCatalogs = signal<Catalog[]>([]);
+  readonly activeProtocolVersion = signal<'v0.9' | 'v1.0'>('v0.9');
 }
 
 class MockHostCommunication {
@@ -128,6 +130,41 @@ describe('GalleryCatalog', () => {
 
     catalogManagementMock.activeCatalog.set({});
     expect(service.componentsList()).toEqual([]);
+  });
+
+  it('merges components across activeCatalogs with provenance under v1.0', () => {
+    catalogManagementMock.activeProtocolVersion.set('v1.0');
+    const catalog1: Catalog = {
+      $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+      title: 'Basic Catalog',
+      components: {
+        Button: {type: 'object', properties: {label: {type: 'string'}}},
+      },
+    };
+    const catalog2: Catalog = {
+      $id: 'https://example.com/charts/catalog.json',
+      title: 'Charts Catalog',
+      components: {
+        PieChart: {type: 'object', properties: {slices: {type: 'array'}}},
+      },
+    };
+
+    catalogManagementMock.activeCatalogs.set([catalog1, catalog2]);
+    catalogManagementMock.activeCatalog.set(catalog1);
+
+    const list = service.componentsList();
+    const allKeys = list.flatMap(group => group.components);
+    expect(allKeys).toContain('Button');
+    expect(allKeys).toContain('PieChart');
+
+    service.selectComponent('PieChart');
+    const prov = service.selectedComponentProvenance();
+    expect(prov).toBeDefined();
+    expect(prov?.catalogId).toBe('https://example.com/charts/catalog.json');
+    expect(prov?.catalogTitle).toBe('Charts Catalog');
+
+    const props = service.selectedComponentProperties();
+    expect(props.some(p => p.name === 'slices')).toBe(true);
   });
 
   it('returns empty properties and null preset when no component is selected', () => {

@@ -24,6 +24,8 @@ import {
   inject,
   linkedSignal,
   signal,
+  untracked,
+  viewChild,
   OnInit,
   OnDestroy,
 } from '@angular/core';
@@ -46,7 +48,7 @@ import {CatalogManagement} from '../storage/catalog-management/catalog-managemen
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
 import {DefaultTarget, HostCommunication} from '../shell/host-communication/host-communication';
 import {formatJson} from '../utils/json';
-import {PreviewBridgeMessageType, ComponentUsage, RenderA2uiItem} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, ComponentUsage} from 'a2ui-bridge';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {stableStringify} from '../storage/stable-stringify/stable-stringify';
@@ -67,13 +69,14 @@ import {ErrorLogger, TaggedLogger} from '../debug/error-logger.service';
 import {GalleryLauncher} from './gallery-launcher';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
 import {MonacoEditor} from '../shared/monaco-editor/monaco-editor';
+import {validatePayloadProtocolVersion} from '../preview/protocol-version-mismatch';
 
 type PropertyPath = ReadonlyArray<string | number>;
 
 interface ExampleDraft {
   text: string;
   preset: ComponentUsage | null;
-  payload: RenderA2uiItem[] | null;
+  payload: unknown[] | null;
   error: string | null;
 }
 
@@ -144,6 +147,9 @@ export class Gallery implements OnInit, OnDestroy {
   protected readonly actionMessage = signal('');
   protected readonly activePlaygroundTab = signal<'preview' | 'json'>('preview');
   protected readonly rendererUrl: Signal<string | null> = this.startupResolution.resolvedUrl;
+  readonly renderedFrame = viewChild(RenderedFrame);
+
+  protected readonly galleryStrategy = this.catalogService.galleryStrategy;
 
   protected selectPlaygroundTab(tab: 'preview' | 'json'): void {
     this.activePlaygroundTab.set(tab);
@@ -153,7 +159,8 @@ export class Gallery implements OnInit, OnDestroy {
    * Memoized stringified catalog identity so switching components doesn't re-serialize the catalog.
    */
   private readonly catalogSignature: Signal<string | null> = computed(() => {
-    const catalog = this.catalogManagement.activeCatalog();
+    const catalog =
+      this.catalogManagement.mergedActiveCatalog() ?? this.catalogManagement.activeCatalog();
     return catalog ? stableStringify(catalog) : null;
   });
 
@@ -164,7 +171,11 @@ export class Gallery implements OnInit, OnDestroy {
     resolver: CatalogSchemaResolver;
     common: Set<string>;
   } | null> = computed(() => {
-    const catalog = this.catalogManagement.activeCatalog();
+    const prov = this.catalogService.selectedComponentProvenance();
+    const catalog =
+      this.catalogManagement.mergedActiveCatalog() ??
+      prov?.catalog ??
+      this.catalogManagement.activeCatalog();
     if (!catalog) {
       return null;
     }
@@ -194,7 +205,8 @@ export class Gallery implements OnInit, OnDestroy {
     catalog: Catalog | null;
     preset: ComponentUsage | null;
   }> = computed(() => {
-    const catalog = this.catalogManagement.activeCatalog();
+    const catalog =
+      this.catalogManagement.mergedActiveCatalog() ?? this.catalogManagement.activeCatalog();
     return {
       identity: JSON.stringify([
         this.rendererUrl(),
@@ -230,9 +242,7 @@ export class Gallery implements OnInit, OnDestroy {
       source: computed(() => this.draftSource().identity),
       computation: (): Partial<Record<string, JsonFieldError>> => ({}),
     });
-  private readonly validPayload: Signal<RenderA2uiItem[] | null> = computed(
-    () => this.draft().payload,
-  );
+  private readonly validPayload: Signal<unknown[] | null> = computed(() => this.draft().payload);
   protected readonly validPayloadJson: Signal<string> = computed(() => {
     const payload = this.validPayload();
     return payload ? formatJson(payload) : '';
@@ -320,8 +330,10 @@ export class Gallery implements OnInit, OnDestroy {
   }
 
   private createDraft(preset: ComponentUsage | null, catalog: Catalog | null): ExampleDraft {
-    const id = catalog && getCatalogId(catalog);
-    if (!preset || !Array.isArray(preset.usage) || !catalog || !id) {
+    const prov = this.catalogService.selectedComponentProvenance();
+    const effectiveCatalog = prov?.catalog ?? catalog;
+    const id = prov?.catalogId || (effectiveCatalog && getCatalogId(effectiveCatalog));
+    if (!preset || !Array.isArray(preset.usage) || !effectiveCatalog || !id) {
       return {text: '', preset: null, payload: null, error: null};
     }
     try {
@@ -350,8 +362,12 @@ export class Gallery implements OnInit, OnDestroy {
    * Retains every edit; preview and actions keep the last valid example when parsing fails.
    */
   protected editDraft(text: string, propertyEdit = false): string | null {
-    const catalog = this.catalogManagement.activeCatalog();
-    const id = this.catalogId();
+    const prov = this.catalogService.selectedComponentProvenance();
+    const catalog =
+      this.catalogManagement.mergedActiveCatalog() ??
+      prov?.catalog ??
+      this.catalogManagement.activeCatalog();
+    const id = prov?.catalogId || this.catalogId();
     if (!catalog || !id) {
       return null;
     }
@@ -641,12 +657,12 @@ export class Gallery implements OnInit, OnDestroy {
   protected resetDraft(): void {
     this.actionMessage.set('');
     this.jsonFieldErrors.set({});
-    this.draft.set(
-      this.createDraft(
-        this.catalogService.selectedComponentPreset(),
-        this.catalogManagement.activeCatalog(),
-      ),
-    );
+    const prov = this.catalogService.selectedComponentProvenance();
+    const catalog =
+      this.catalogManagement.mergedActiveCatalog() ??
+      prov?.catalog ??
+      this.catalogManagement.activeCatalog();
+    this.draft.set(this.createDraft(this.catalogService.selectedComponentPreset(), catalog));
   }
 
   protected async openInComposer(): Promise<void> {
@@ -679,48 +695,20 @@ export class Gallery implements OnInit, OnDestroy {
       });
 
     effect(() => {
-      this.dispatchSelectedComponentPayload();
+      this.catalogManagement.hasReceivedCatalogResponse();
+      this.catalogManagement.activeProtocolVersion();
+      this.validPayload();
+      untracked(() => {
+        this.dispatchSelectedComponentPayload();
+      });
     });
   }
 
   /**
-   * Constructs the A2UI layout and data model command payload.
-   *
-   * Note: Properties explicitly declared in `declare interface` definitions (like `RenderA2uiItem`,
-   * `CreateSurfaceDetails`, `UpdateComponentsDetails`, `UpdateDataModelDetails`) are emitted in externs
-   * by tsickle, so JSCompiler (Closure Compiler) preserves their names without needing bracket notation.
+   * Constructs the A2UI layout and data model command payload using the active protocol strategy.
    */
-  private buildA2UIPayload(preset: ComponentUsage, catalogId: string): RenderA2uiItem[] {
-    const payload: RenderA2uiItem[] = [
-      {
-        version: 'v0.9',
-        createSurface: {
-          surfaceId: 'gallery-preview',
-          catalogId: catalogId,
-        },
-      },
-      {
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId: 'gallery-preview',
-          components: this.getComponentsPayload(preset.usage),
-        },
-      },
-    ];
-
-    const dataObj = preset.data;
-    if (dataObj !== undefined) {
-      const cmd3: RenderA2uiItem = {
-        version: 'v0.9',
-        updateDataModel: {
-          surfaceId: 'gallery-preview',
-          value: dataObj,
-        },
-      };
-      payload.push(cmd3);
-    }
-
-    return payload;
+  private buildA2UIPayload(preset: ComponentUsage, catalogId: string): unknown[] {
+    return this.galleryStrategy().buildPreviewPayload(preset, catalogId);
   }
 
   private dispatchSelectedComponentPayload(): void {
@@ -728,6 +716,24 @@ export class Gallery implements OnInit, OnDestroy {
     if (!payload) {
       return;
     }
+
+    if (!this.catalogManagement.hasReceivedCatalogResponse()) {
+      // Defer render until catalog discovery handshake settles
+      return;
+    }
+
+    const activeVersion = this.catalogManagement.activeProtocolVersion();
+
+    const validation = validatePayloadProtocolVersion(payload, activeVersion);
+    if (!validation.valid) {
+      this.errorLogger.error({
+        sourceTag: '[Gallery]',
+        code: 'PROTOCOL_VERSION_MISMATCH',
+        message: validation.message,
+      });
+      return;
+    }
+
     try {
       this.hostCommunication.sendRenderA2UI(payload);
     } catch (error) {
@@ -775,6 +781,10 @@ export class Gallery implements OnInit, OnDestroy {
     this.catalogService.selectedComponentUsage;
 
   protected readonly catalogId: Signal<string | null> = computed(() => {
+    const prov = this.catalogService.selectedComponentProvenance();
+    if (prov?.catalogId) {
+      return prov.catalogId;
+    }
     const catalog = this.catalogManagement.activeCatalog();
     if (!catalog) {
       return null;
@@ -798,7 +808,11 @@ export class Gallery implements OnInit, OnDestroy {
    */
   protected readonly selectedComponentDescription: Signal<string> = computed(() => {
     const key = this.selectedComponentKey();
-    const catalog = this.catalogManagement.activeCatalog();
+    const prov = this.catalogService.selectedComponentProvenance();
+    const catalog =
+      this.catalogManagement.mergedActiveCatalog() ??
+      prov?.catalog ??
+      this.catalogManagement.activeCatalog();
     const comp =
       key && catalog && catalog.components
         ? (catalog.components as Record<string, Record<string, unknown>>)[key]
@@ -813,19 +827,6 @@ export class Gallery implements OnInit, OnDestroy {
    */
   protected selectComponent(key: string | null): void {
     this.catalogService.selectComponent(key);
-  }
-
-  private getComponentsPayload(components: Record<string, unknown>[]): Record<string, unknown>[] {
-    if (components.some(component => component['id'] === 'root')) {
-      return components;
-    }
-
-    // Legacy usage examples name their root "target". Keep the authored tree and
-    // properties intact; A2UI v0.9 only requires its root component to be named "root".
-    // This allows 'target' as the id to work.
-    return components.map(component =>
-      component['id'] === 'target' ? {...component, id: 'root'} : component,
-    );
   }
 
   /**

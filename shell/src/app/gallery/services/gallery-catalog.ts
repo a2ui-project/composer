@@ -23,6 +23,15 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {UsageGenerator} from './usage-generator';
 import {PreviewBridgeMessageType, type ComponentUsage, type ComponentUsages} from 'a2ui-bridge';
 import {formatJson} from '../../utils/json';
+import {
+  type ComponentProvenance,
+  type GalleryProtocolStrategy,
+} from '../protocol/gallery-protocol-strategy';
+import {V09GalleryStrategy} from '../protocol/v0-9-gallery-strategy';
+import {V10GalleryStrategy} from '../protocol/v1-0-gallery-strategy';
+
+const defaultV09GalleryStrategy = new V09GalleryStrategy();
+const defaultV10GalleryStrategy = new V10GalleryStrategy();
 
 /**
  * Represents components grouped under a specific category name.
@@ -159,10 +168,38 @@ export class GalleryCatalog {
   private readonly destroyRef = inject(DestroyRef);
 
   /**
-   * Resolves schema for the active catalog.
+   * Resolves the active gallery protocol strategy based on CatalogManagement protocol version.
+   */
+  readonly galleryStrategy = computed<GalleryProtocolStrategy>(() => {
+    const version = this.catalogManagement.activeProtocolVersion();
+    return version === 'v1.0' ? defaultV10GalleryStrategy : defaultV09GalleryStrategy;
+  });
+
+  /**
+   * Maps component keys across active catalogs to their provenance and schema.
+   */
+  readonly componentProvenanceMap = computed<Map<string, ComponentProvenance>>(() => {
+    const strategy = this.galleryStrategy();
+    const catalogs = this.catalogManagement.activeCatalogs();
+    const activeCatalog = this.catalogManagement.activeCatalog();
+    const input = catalogs && catalogs.length > 0 ? catalogs : activeCatalog;
+    return strategy.extractComponents(input);
+  });
+
+  /**
+   * Resolves provenance for the currently selected component.
+   */
+  readonly selectedComponentProvenance = computed<ComponentProvenance | undefined>(() => {
+    const key = this.selectedComponentKey();
+    return key ? this.componentProvenanceMap().get(key) : undefined;
+  });
+
+  /**
+   * Resolves schema for the active catalog or selected component's owning catalog.
    */
   readonly catalogSchemaResolver = computed(() => {
-    const catalog = this.catalogManagement.activeCatalog();
+    const prov = this.selectedComponentProvenance();
+    const catalog = prov?.catalog ?? this.catalogManagement.activeCatalog();
     return catalog ? new CatalogSchemaResolver(catalog, this.errorLogger) : null;
   });
 
@@ -183,11 +220,11 @@ export class GalleryCatalog {
   private usageTimeoutId?: ReturnType<typeof setTimeout>;
 
   /**
-   * Sorts and groups all components in the active catalog into categories.
+   * Sorts and groups all components in the active catalog(s) into categories.
    */
   readonly componentsList = computed<CategorizedComponents[]>(() => {
-    const catalog = this.catalogManagement.activeCatalog();
-    if (catalog == null || catalog.components == null) {
+    const provenance = this.componentProvenanceMap();
+    if (provenance.size === 0) {
       return [];
     }
 
@@ -200,7 +237,7 @@ export class GalleryCatalog {
       'Other': [],
     };
 
-    for (const key of Object.keys(catalog.components || {})) {
+    for (const key of provenance.keys()) {
       const cat = getCategoryForComponent(key);
       grouped[cat].push(key);
     }
@@ -365,6 +402,13 @@ export class GalleryCatalog {
    */
   selectComponent(key: string | null): void {
     this._selectedComponentKey.set(key);
+  }
+
+  /**
+   * Retrieves the provenance details for a specific component key.
+   */
+  getComponentProvenance(key: string): ComponentProvenance | undefined {
+    return this.componentProvenanceMap().get(key);
   }
 
   setGalleryActive(active: boolean): void {

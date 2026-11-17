@@ -17,6 +17,7 @@
 import {Catalog, CatalogComponentSchema} from '../../storage/models/catalog-storage.model';
 import {ErrorLogger, TaggedLogger} from '../../debug/error-logger.service';
 import {COMMON_TYPES_SCHEMA} from './common-types-schema';
+import {V1_0_COMMON_TYPES_SCHEMA} from './v1-0/common-types-schema';
 import {BASIC_CATALOG_SCHEMA} from './basic-catalog-schema';
 
 /**
@@ -499,14 +500,29 @@ export class CatalogSchemaResolver {
       relativePointer = pointer.slice(hashIndex);
     }
 
+    const isV1 =
+      this.schema?.protocolVersion === '1.0' ||
+      this.schema?.protocolVersion === 'v1.0' ||
+      pointer.includes('/v1_0/common_types.json') ||
+      Boolean(this.schema?.$id?.includes('/v1_0/')) ||
+      Boolean(this.schema?.catalogId?.includes('/v1_0/'));
+
     const isCommonTypes =
       pointer === 'common_types.json' ||
       pointer.startsWith('common_types.json#') ||
-      pointer.includes('/common_types.json#');
+      pointer.includes('/common_types.json#') ||
+      pointer.includes('https://a2ui.org/specification/v0_9/common_types.json') ||
+      pointer.includes('https://a2ui.org/specification/v1_0/common_types.json');
     if (isCommonTypes) {
       const localResolved = this.resolveJsonPointerBase(schema, relativePointer);
       if (localResolved !== undefined) {
         return localResolved;
+      }
+      if (isV1) {
+        const v1Resolved = this.resolveJsonPointerBase(V1_0_COMMON_TYPES_SCHEMA, relativePointer);
+        if (v1Resolved !== undefined) {
+          return v1Resolved;
+        }
       }
       return this.resolveJsonPointerBase(COMMON_TYPES_SCHEMA, relativePointer);
     }
@@ -529,7 +545,13 @@ export class CatalogSchemaResolver {
     }
 
     if (relativePointer.startsWith('#/$defs/')) {
-      return this.resolveJsonPointerBase(COMMON_TYPES_SCHEMA, relativePointer);
+      const activeCommon = isV1 ? V1_0_COMMON_TYPES_SCHEMA : COMMON_TYPES_SCHEMA;
+      const commonResolved = this.resolveJsonPointerBase(activeCommon, relativePointer);
+      if (commonResolved !== undefined) {
+        return commonResolved;
+      }
+      const otherCommon = isV1 ? COMMON_TYPES_SCHEMA : V1_0_COMMON_TYPES_SCHEMA;
+      return this.resolveJsonPointerBase(otherCommon, relativePointer);
     }
 
     return undefined;

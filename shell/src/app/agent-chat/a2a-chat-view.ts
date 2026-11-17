@@ -34,7 +34,7 @@ import {MatDialog, MatDialogRef} from '@angular/material/dialog';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {PreviewBridgeMessageType, RenderA2uiItem} from 'a2ui-bridge';
+import {RenderA2uiItem} from 'a2ui-bridge';
 
 import {A2A_TRANSPORT} from '../chat/a2a/a2a-transport.token';
 import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../chat/a2a/a2a-types';
@@ -219,14 +219,12 @@ export class A2aChatView implements OnInit {
   private configDialogRef?: MatDialogRef<void, void>;
 
   constructor() {
-    this.hostCommunication.messageStream$
+    this.hostCommunication.sendToServer$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(envelope => {
-        if (!envelope) return;
-        if (envelope.timestamp && envelope.timestamp < this.initTimestamp) return;
-        if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER) {
-          this.handleSendToServerAction(envelope.payload);
-        }
+      .subscribe(event => {
+        if (!event) return;
+        if (event.timestamp && event.timestamp < this.initTimestamp) return;
+        this.handleSendToServerAction(event.payload);
       });
 
     this.errorLogger.errorStream$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(log => {

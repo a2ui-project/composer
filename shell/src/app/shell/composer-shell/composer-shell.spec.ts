@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {ThemePreference} from 'a2ui-bridge';
 import {DOCUMENT} from '@angular/common';
 import {Component, signal, WritableSignal} from '@angular/core';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
@@ -25,10 +26,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {HostCommunication} from '../host-communication/host-communication';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';

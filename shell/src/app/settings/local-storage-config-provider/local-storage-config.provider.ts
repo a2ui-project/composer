@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import {ThemePreference} from 'a2ui-bridge';
 import {Injectable, Signal, computed, inject, signal} from '@angular/core';
 import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
@@ -23,7 +24,6 @@ import {
   AuthType,
   A2aBackendMode,
   EnvMode,
-  ThemePreference,
 } from '../app-config-provider/app-config-provider';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
