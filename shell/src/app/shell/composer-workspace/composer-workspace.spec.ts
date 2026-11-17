@@ -406,17 +406,23 @@ describe('ComposerWorkspace Dashboard', () => {
         manager.setPanelTitle(ComposerPanelId.Rendered, 'My preview');
         manager.openPanel(ComposerPanelId.Events);
         const componentTreePanel = manager.api.getGroupPanel(ComposerPanelId.ComponentTree);
+        const propertyEditorPanel = manager.api.getGroupPanel(ComposerPanelId.PropertyEditor);
         expect(componentTreePanel).toBeDefined();
+        expect(propertyEditorPanel).toBeDefined();
         manager.api.removePanel(componentTreePanel!);
+        manager.api.removePanel(propertyEditorPanel!);
 
         const legacyLayout = manager.api.toJSON();
         expect(legacyLayout.panels[ComposerPanelId.ComponentTree]).toBeUndefined();
+        expect(legacyLayout.panels[ComposerPanelId.PropertyEditor]).toBeUndefined();
         fixture.destroy();
         storage.setItem(LocalStorageKey.DOCKVIEW_LAYOUT, JSON.stringify(legacyLayout));
 
         const restored = await returnToWorkspace();
         const restoredRendered = restored.api.getGroupPanel(ComposerPanelId.Rendered);
+        const restoredDataModel = restored.api.getGroupPanel(ComposerPanelId.DataModel);
         const restoredComponentTree = restored.api.getGroupPanel(ComposerPanelId.ComponentTree);
+        const restoredPropertyEditor = restored.api.getGroupPanel(ComposerPanelId.PropertyEditor);
 
         expect(restoredRendered?.title).toBe('My preview');
         expect(restoredRendered?.group.activePanel?.id).toBe(ComposerPanelId.Rendered);
@@ -424,6 +430,9 @@ describe('ComposerWorkspace Dashboard', () => {
         expect(restoredComponentTree).toBeDefined();
         expect(restoredComponentTree?.group).toBe(restoredRendered?.group);
         expect(restored.isPanelVisible(ComposerPanelId.ComponentTree)).toBe(false);
+        expect(restoredPropertyEditor).toBeDefined();
+        expect(restoredPropertyEditor?.group).toBe(restoredDataModel?.group);
+        expect(restored.isPanelVisible(ComposerPanelId.PropertyEditor)).toBe(false);
         expect(restored.api.panels.map(panel => panel.id).sort()).toEqual(
           Object.values(ComposerPanelId).sort(),
         );
@@ -901,7 +910,7 @@ describe('ComposerWorkspace Dashboard', () => {
 
     describe('Property Editor Panel', () => {
       const TITLE_NODE: ComponentTreeNode = {
-        key: 'root/0:title',
+        key: 's/root/0:title',
         id: 'title',
         type: 'Text',
         via: 'children',
