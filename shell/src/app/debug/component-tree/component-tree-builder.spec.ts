@@ -197,4 +197,24 @@ describe('buildComponentTrees', () => {
     ]);
     expect(tree.unreachable).toEqual([]);
   });
+
+  it('assigns distinct node keys across surfaces with identical component ids', () => {
+    const components = [
+      {id: 'root', component: 'Card', child: 'title'},
+      {id: 'title', component: 'Text', text: 'Hi'},
+      {id: 'orphan', component: 'Text', text: 'Unused'},
+    ];
+    const [first, second] = buildComponentTrees(
+      [
+        {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'test'}},
+        {version: 'v0.9', updateComponents: {surfaceId: 's1', components}},
+        {version: 'v0.9', createSurface: {surfaceId: 's2', catalogId: 'test'}},
+        {version: 'v0.9', updateComponents: {surfaceId: 's2', components}},
+      ],
+      CATALOG,
+    );
+    expect(first.root!.key).not.toBe(second.root!.key);
+    expect(first.root!.children[0].key).not.toBe(second.root!.children[0].key);
+    expect(first.unreachable[0].key).not.toBe(second.unreachable[0].key);
+  });
 });
