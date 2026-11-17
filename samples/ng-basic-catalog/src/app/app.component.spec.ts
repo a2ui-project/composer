@@ -31,6 +31,8 @@ vi.mock('a2ui-bridge', () => ({
     sendAction: vi.fn(),
   },
   ERROR_OVERLAY_DEBOUNCE_MS: 350,
+  isV1ProtocolVersion: (v: unknown) =>
+    typeof v === 'string' && (v.trim().startsWith('1.') || v.trim().startsWith('v1.')),
 }));
 
 describe('AppComponent', () => {

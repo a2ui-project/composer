@@ -29,7 +29,7 @@ import {
   readUiResourceUris,
   A2UI_MIME_TYPE,
 } from '../index.js';
-import {resolveDynamicValueDeep} from './dynamic-values.js';
+import {resolveDynamicValueDeep} from './dynamic-value-strategy.js';
 import {withSettledArgs} from './functions/common.js';
 
 describe('MCP Bridge & Catalog Functions', () => {
@@ -157,6 +157,20 @@ describe('MCP Bridge & Catalog Functions', () => {
         '42',
       ]);
       expect(captureFn.execute({value: 'no-match', pattern: 'user-(\\d+)'}, mockCtx)).toBeNull();
+      // Verifies advanced RE2 pattern constructs (named groups, case-insensitivity, nested repetition)
+      expect(
+        captureFn.execute(
+          {
+            value: '2026-11-13',
+            pattern: '(?P<year>\\d{4})-(?P<month>\\d{2})-(?P<day>\\d{2})',
+          },
+          mockCtx,
+        ),
+      ).toEqual(['2026', '11', '13']);
+      expect(captureFn.execute({value: 'HELLO world', pattern: '(?i)(hello)'}, mockCtx)).toEqual([
+        'HELLO',
+      ]);
+      expect(captureFn.execute({value: 'aaaaab', pattern: '(a+)+b'}, mockCtx)).toEqual(['aaaaa']);
       expect(
         replaceFn.execute({value: 'hello world', pattern: 'world', replacement: 'MCP'}, mockCtx),
       ).toBe('hello MCP');
@@ -167,6 +181,16 @@ describe('MCP Bridge & Catalog Functions', () => {
       expect(() =>
         updateFn.execute({updates: {'/a': 1}}, {resolveDynamicValue: (v: unknown) => v} as never),
       ).toThrow(/context\.set is not a function/);
+
+      expect(() => updateFn.execute({updates: {'/__proto__': 'bad'}}, mockCtx)).toThrow(
+        /prototype pollution key/,
+      );
+      expect(() => updateFn.execute({updates: {'/nested/__proto__/x': 1}}, mockCtx)).toThrow(
+        /prototype pollution key/,
+      );
+      expect(() => updateFn.execute({updates: {'/constructor/x': 'bad'}}, mockCtx)).toThrow(
+        /prototype pollution key/,
+      );
 
       const callMcpFn = mcpFunctions.find(f => f.name === 'callMcpTool')!;
       const toolRes = await callMcpFn.execute({name: 'list_dir', arguments: {path: '/'}}, mockCtx);
@@ -316,6 +340,14 @@ describe('MCP Bridge & Catalog Functions', () => {
         'primitive-entry',
         {version: 'v0.9', createSurface: {surfaceId: 's3'}},
       ]);
+    });
+
+    it('does not recurse 100x when resolveDynamicValue passes normalized function calls through unchanged', () => {
+      const resolveSpy = vi.fn((v: unknown) => v);
+      const mockCtx = {resolveDynamicValue: resolveSpy};
+      const result = resolveDynamicValueDeep({call: 'passthroughFn'}, mockCtx);
+      expect(result).toEqual({call: 'passthroughFn', args: {}, returnType: 'any'});
+      expect(resolveSpy).toHaveBeenCalledTimes(1);
     });
   });
 
