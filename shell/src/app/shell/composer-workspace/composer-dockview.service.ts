@@ -609,6 +609,16 @@ export class ComposerDockview {
       },
       inactive: true,
     });
+    addPanel({
+      id: ComposerPanelId.PropertyEditor,
+      component: ComposerPanelId.PropertyEditor,
+      title: 'Property Editor',
+      position: {
+        direction: 'within',
+        referencePanel: ComposerPanelId.DataModel,
+      },
+      inactive: true,
+    });
 
     if (!layoutRestored) {
       // Explicitly activate default primary tabs for each panel group.
