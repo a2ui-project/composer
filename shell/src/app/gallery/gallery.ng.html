@@ -130,7 +130,7 @@
                         [properties]="selectedComponentProperties()"
                         [disabled]="!!draft().error"
                         [resetKey]="draftSource().identity"
-                        (propertyChange)="editProperty($event.name, $event.value)"
+                        (componentChange)="updateEditableComponent($event)"
                         (statusMessage)="actionMessage.set($event)"
                       />
                       <div class="draft-actions">

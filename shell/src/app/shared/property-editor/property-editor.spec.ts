@@ -18,7 +18,7 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {PropertyEditor, PropertyChangeEvent} from './property-editor';
+import {PropertyEditor} from './property-editor';
 import {
   createDefaultPropertyValue,
   describeUneditableValue,
@@ -160,8 +160,8 @@ describe('PropertyEditor Component', () => {
   });
 
   it('blocks property edits when disabled input is true', async () => {
-    const propertyChanges: PropertyChangeEvent[] = [];
-    fixture.componentInstance.propertyChange.subscribe(event => propertyChanges.push(event));
+    const componentChanges: Array<Record<string, unknown>> = [];
+    fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
     fixture.componentRef.setInput('disabled', true);
     fixture.componentRef.setInput('component', {
       id: 'picker-1',
@@ -175,13 +175,11 @@ describe('PropertyEditor Component', () => {
 
     await harness.removeProperty('filterable');
 
-    expect(propertyChanges).toEqual([]);
+    expect(componentChanges).toEqual([]);
   });
 
-  it('emits propertyChange and componentChange when a property is edited', async () => {
-    const propertyChanges: PropertyChangeEvent[] = [];
+  it('emits componentChange when a property is edited', async () => {
     const componentChanges: Array<Record<string, unknown>> = [];
-    fixture.componentInstance.propertyChange.subscribe(event => propertyChanges.push(event));
     fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
     const initial = {
       id: 'picker-1',
@@ -196,17 +194,14 @@ describe('PropertyEditor Component', () => {
 
     await harness.editProperty('label', 'Updated Size');
 
-    expect(propertyChanges.at(-1)).toEqual({name: 'label', value: 'Updated Size'});
     expect(componentChanges.at(-1)).toEqual({
       ...initial,
       label: 'Updated Size',
     });
   });
 
-  it('emits propertyChange and componentChange without the removed key when an optional property is removed', async () => {
-    const propertyChanges: PropertyChangeEvent[] = [];
+  it('emits componentChange without the removed key when an optional property is removed', async () => {
     const componentChanges: Array<Record<string, unknown>> = [];
-    fixture.componentInstance.propertyChange.subscribe(event => propertyChanges.push(event));
     fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
     fixture.componentRef.setInput('component', {
       id: 'picker-1',
@@ -220,7 +215,6 @@ describe('PropertyEditor Component', () => {
 
     await harness.removeProperty('filterable');
 
-    expect(propertyChanges.at(-1)).toEqual({name: 'filterable', value: undefined});
     expect(componentChanges.at(-1)).toEqual({
       id: 'picker-1',
       component: 'ChoicePicker',
@@ -230,7 +224,7 @@ describe('PropertyEditor Component', () => {
     });
   });
 
-  it('surfaces inline error and suppresses propertyChange when a JSON field violates the catalog schema', async () => {
+  it('surfaces inline error and suppresses componentChange when a JSON field violates the catalog schema', async () => {
     catalogManagementMock.activeCatalog.set(jsonCatalog);
     fixture.componentRef.setInput('component', {
       id: 'box-1',
@@ -241,7 +235,7 @@ describe('PropertyEditor Component', () => {
     const statusSpy = vi.fn();
     const changeSpy = vi.fn();
     fixture.componentInstance.statusMessage.subscribe(statusSpy);
-    fixture.componentInstance.propertyChange.subscribe(changeSpy);
+    fixture.componentInstance.componentChange.subscribe(changeSpy);
 
     await harness.editJsonProperty('style', '123');
 

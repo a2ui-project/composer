@@ -270,24 +270,17 @@ export class Gallery implements OnInit, OnDestroy {
   }
 
   /**
-   * Sets one property on the selected component, or removes it when value is undefined.
+   * Replaces the editable component in the draft with its updated record.
    */
-  protected editProperty(name: string, value: unknown): string | null {
+  protected updateEditableComponent(updatedComponent: Record<string, unknown>): string | null {
     const preset = this.draft().preset;
     const target = this.editableComponent();
     if (!preset || !target || this.draft().error) {
       return null;
     }
-    const components = preset.usage.map(component => {
-      if (component !== target) {
-        return component;
-      }
-      if (value !== undefined) {
-        return {...component, [name]: value};
-      }
-      const {[name]: _removed, ...rest} = component;
-      return rest;
-    });
+    const components = preset.usage.map(component =>
+      component === target ? updatedComponent : component,
+    );
     return this.editDraft(
       formatJson({
         ['components']: components,

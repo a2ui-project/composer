@@ -47,14 +47,6 @@ import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 type PropertyPath = ReadonlyArray<string | number>;
 
 /**
- * Payload emitted when a top-level property on the target component is edited or removed.
- */
-export interface PropertyChangeEvent {
-  name: string;
-  value: unknown;
-}
-
-/**
  * Metadata and control state for one editable catalog property of the selected component.
  */
 interface EditableProperty {
@@ -118,9 +110,6 @@ export class PropertyEditor {
    * Optional identity key from the host that resets inline JSON field errors when changed.
    */
   readonly resetKey = input<unknown>(null);
-
-  /** Emits `{name, value}` when a top-level property is updated or removed (`undefined`). */
-  readonly propertyChange = output<PropertyChangeEvent>();
 
   /** Emits the updated component record when a property is updated or removed. */
   readonly componentChange = output<Record<string, unknown>>();
@@ -316,7 +305,6 @@ export class PropertyEditor {
       const {[name]: _removed, ...rest} = target;
       updatedComponent = rest;
     }
-    this.propertyChange.emit({name, value});
     this.componentChange.emit(updatedComponent);
     return null;
   }
