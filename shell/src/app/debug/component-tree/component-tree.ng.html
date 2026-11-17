@@ -14,7 +14,7 @@
  limitations under the License.
 -->
 
-<div class="component-tree-container" role="tree" aria-label="A2UI component tree">
+<div class="component-tree-container">
   @if (parseError(); as error) {
     <div class="tree-message error">The A2UI JSON is invalid: {{ error }}</div>
   } @else if (trees().length === 0) {
@@ -56,9 +56,6 @@
 <ng-template #nodeTemplate let-node let-depth="depth">
   <div
     class="tree-row"
-    role="treeitem"
-    [attr.aria-level]="depth + 1"
-    [attr.aria-expanded]="node.children.length > 0 ? isExpanded(node) : null"
     [class.missing]="node.status === 'missing'"
     [class.cycle]="node.status === 'cycle'"
     [style.padding-left.px]="8 + depth * 16"
@@ -71,6 +68,7 @@
       <button
         type="button"
         class="toggle"
+        [attr.aria-expanded]="isExpanded(node)"
         [attr.aria-label]="isExpanded(node) ? 'Collapse' : 'Expand'"
         (click)="toggle(node, $event)"
       >
