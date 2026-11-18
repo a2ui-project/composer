@@ -84,6 +84,7 @@ const COMPONENT_ID_DEF = 'ComponentId';
 const CHILD_DEF = 'Child';
 const CHILD_LIST_DEF = 'ChildList';
 const LOCAL_DEFS_PREFIX = '#/$defs/';
+const LOCAL_DEFINITIONS_PREFIX = '#/definitions/';
 const ANY_INDEX = '*';
 
 type ReferenceKind = 'single' | 'list';
@@ -176,7 +177,8 @@ class ReferenceSchema {
 
   slotsFor(type: string): readonly ReferenceSlot[] {
     if (!this.cache.has(type)) {
-      const schema = this.catalog?.components?.[type];
+      const components = this.catalog?.components;
+      const schema = components && Object.hasOwn(components, type) ? components[type] : undefined;
       let slots: ReferenceSlot[] | null = null;
       if (schema) {
         slots = [];
@@ -203,13 +205,11 @@ class ReferenceSchema {
         out.push({path, kind});
         return;
       }
-      if (ref.startsWith(LOCAL_DEFS_PREFIX)) {
-        const name = ref.slice(LOCAL_DEFS_PREFIX.length);
-        if (!visitingDefs.has(name)) {
-          visitingDefs.add(name);
-          this.walk(this.catalog?.$defs?.[name], path, out, visitingDefs);
-          visitingDefs.delete(name);
-        }
+      const target = this.resolveLocalDefinition(ref);
+      if (target !== undefined && !visitingDefs.has(ref)) {
+        visitingDefs.add(ref);
+        this.walk(target, path, out, visitingDefs);
+        visitingDefs.delete(ref);
       }
     }
     for (const key of ['allOf', 'anyOf', 'oneOf']) {
@@ -227,6 +227,20 @@ class ReferenceSchema {
     if (s['items'] !== undefined) {
       this.walk(s['items'], [...path, ANY_INDEX], out, visitingDefs);
     }
+  }
+
+  private resolveLocalDefinition(ref: string): unknown {
+    if (ref.startsWith(LOCAL_DEFS_PREFIX)) {
+      const name = ref.slice(LOCAL_DEFS_PREFIX.length);
+      const defs = this.catalog?.$defs;
+      return defs && Object.hasOwn(defs, name) ? defs[name] : undefined;
+    }
+    if (ref.startsWith(LOCAL_DEFINITIONS_PREFIX)) {
+      const name = ref.slice(LOCAL_DEFINITIONS_PREFIX.length);
+      const definitions = asRecord(asRecord(this.catalog)?.['definitions']);
+      return definitions && Object.hasOwn(definitions, name) ? definitions[name] : undefined;
+    }
+    return undefined;
   }
 }
 
