@@ -55,7 +55,9 @@ export class ComponentTree {
   protected readonly trees = computed<SurfaceComponentTree[]>(() => {
     const result = tryParseJsonArray(this.stateSync.activeDraft());
     if (!result.success) return [];
-    return buildComponentTrees(result.data, this.catalogManagement.activeCatalog());
+    const catalog =
+      this.catalogManagement.mergedActiveCatalog() ?? this.catalogManagement.activeCatalog();
+    return buildComponentTrees(result.data, catalog);
   });
 
   protected isExpanded(node: ComponentTreeNode): boolean {
