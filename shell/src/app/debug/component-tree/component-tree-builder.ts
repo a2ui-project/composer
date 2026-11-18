@@ -32,9 +32,9 @@ import {asRecord} from '../../utils/json';
  * - components not reachable from `root` (`unreachable`).
  *
  * Reference properties are discovered from the catalog's JSON schema
- * (`$ref`s to `ComponentId` / `ChildList`, at any depth, e.g. `tabs[].child`),
- * falling back to the conventional `child` / `children` properties for
- * components whose schema is unknown.
+ * (`$ref`s to `ComponentId` / `Child` / `ChildList`, at any depth, e.g.
+ * `tabs[].child`), falling back to the conventional `child` / `children`
+ * properties for components whose schema is unknown.
  */
 
 /** Reference status of a tree node. */
@@ -81,6 +81,7 @@ export const ROOT_COMPONENT_ID = 'root';
 const MAX_NODES = 5000;
 
 const COMPONENT_ID_DEF = 'ComponentId';
+const CHILD_DEF = 'Child';
 const CHILD_LIST_DEF = 'ChildList';
 const LOCAL_DEFS_PREFIX = '#/$defs/';
 const ANY_INDEX = '*';
@@ -96,7 +97,7 @@ type ReferenceKind = 'single' | 'list';
 function referenceKindOf(ref: string): ReferenceKind | null {
   const name = ref.slice(ref.lastIndexOf('/') + 1);
   const is = (def: string) => name === def || name.endsWith(`_${def}`);
-  if (is(COMPONENT_ID_DEF)) return 'single';
+  if (is(COMPONENT_ID_DEF) || is(CHILD_DEF)) return 'single';
   if (is(CHILD_LIST_DEF)) return 'list';
   return null;
 }

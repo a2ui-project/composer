@@ -271,4 +271,41 @@ describe('buildComponentTrees', () => {
     ]);
     expect(tree.componentCount).toBe(3);
   });
+
+  it('follows v1.0 Child references in unbundled catalogs', () => {
+    const v1Catalog: Catalog = {
+      catalogId: 'v1-basic',
+      components: {
+        Column: {properties: {children: {$ref: 'common_types.json#/$defs/ChildList'}}},
+        Card: {properties: {child: {$ref: 'common_types.json#/$defs/Child'}}},
+        Modal: {
+          properties: {
+            trigger: {$ref: 'common_types.json#/$defs/Child'},
+            content: {$ref: 'common_types.json#/$defs/Child'},
+          },
+        },
+        Text: {properties: {text: {type: 'string'}}},
+      },
+    };
+    const messages = surface([
+      {id: 'root', component: 'Column', children: ['card', 'modal']},
+      {id: 'card', component: 'Card', child: 'title'},
+      {id: 'title', component: 'Text'},
+      {id: 'modal', component: 'Modal', trigger: 'open', content: 'body'},
+      {id: 'open', component: 'Text'},
+      {id: 'body', component: 'Text'},
+    ]);
+
+    const [tree] = buildComponentTrees(messages, v1Catalog);
+
+    expect(outline(tree.root)).toEqual([
+      'Column#root',
+      '  children:Card#card',
+      '    child:Text#title',
+      '  children:Modal#modal',
+      '    trigger:Text#open',
+      '    content:Text#body',
+    ]);
+    expect(tree.unreachable).toEqual([]);
+  });
 });
