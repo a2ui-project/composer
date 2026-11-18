@@ -217,4 +217,58 @@ describe('buildComponentTrees', () => {
     expect(first.root!.children[0].key).not.toBe(second.root!.children[0].key);
     expect(first.unreachable[0].key).not.toBe(second.unreachable[0].key);
   });
+
+  it('builds a tree from inline v1.0 createSurface components', () => {
+    const messages = [
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's',
+          components: [
+            {id: 'root', component: 'Card', child: 'title'},
+            {id: 'title', component: 'Text'},
+          ],
+        },
+      },
+    ];
+
+    const [tree] = buildComponentTrees(messages, CATALOG);
+
+    expect(outline(tree.root)).toEqual(['Card#root', '  child:Text#title']);
+    expect(tree.componentCount).toBe(2);
+  });
+
+  it('merges subsequent updateComponents onto inline createSurface components', () => {
+    const messages = [
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's',
+          components: [
+            {id: 'root', component: 'Card', child: 'title'},
+            {id: 'title', component: 'Text'},
+          ],
+        },
+      },
+      {
+        version: '1.0',
+        updateComponents: {
+          surfaceId: 's',
+          components: [
+            {id: 'root', component: 'Column', children: ['title', 'extra']},
+            {id: 'extra', component: 'Text'},
+          ],
+        },
+      },
+    ];
+
+    const [tree] = buildComponentTrees(messages, CATALOG);
+
+    expect(outline(tree.root)).toEqual([
+      'Column#root',
+      '  children:Text#title',
+      '  children:Text#extra',
+    ]);
+    expect(tree.componentCount).toBe(3);
+  });
 });

@@ -137,6 +137,15 @@ function collectSurfaces(messages: readonly unknown[]): Map<string, SurfaceState
     }
     return state;
   };
+  const addComponents = (state: SurfaceState, components: unknown) => {
+    if (!Array.isArray(components)) return;
+    for (const component of components) {
+      const componentRecord = asRecord(component);
+      if (componentRecord && typeof componentRecord['id'] === 'string') {
+        state.components.set(componentRecord['id'], componentRecord);
+      }
+    }
+  };
   for (const message of messages) {
     const record = asRecord(message);
     if (!record) continue;
@@ -144,14 +153,11 @@ function collectSurfaces(messages: readonly unknown[]): Map<string, SurfaceState
     if (create && typeof create['surfaceId'] === 'string') {
       const state = surfaceFor(create['surfaceId']);
       state.components.clear();
+      addComponents(state, create['components']);
     }
     const update = asRecord(record['updateComponents']);
     if (update && typeof update['surfaceId'] === 'string' && Array.isArray(update['components'])) {
-      const state = surfaceFor(update['surfaceId']);
-      for (const component of update['components']) {
-        const c = asRecord(component);
-        if (c && typeof c['id'] === 'string') state.components.set(c['id'], c);
-      }
+      addComponents(surfaceFor(update['surfaceId']), update['components']);
     }
     const del = asRecord(record['deleteSurface']);
     if (del && typeof del['surfaceId'] === 'string') {
