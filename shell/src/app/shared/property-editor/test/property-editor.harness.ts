@@ -179,11 +179,7 @@ export class PropertyEditorHarness extends ComponentHarness {
    * Reads the inline error under a property, if any.
    */
   async getPropertyError(name: string): Promise<string | null> {
-    const byId = await this.locatorForOptional(`[id="gallery-property-error-${name}"]`)();
-    if (byId) {
-      return byId.text();
-    }
-    const error = await this.locatorForOptional(`[data-property-row="${name}"] .property-error`)();
+    const error = await this.locatorForOptional(`[data-property-error="${name}"]`)();
     return error ? error.text() : null;
   }
 
@@ -203,6 +199,30 @@ export class PropertyEditorHarness extends ComponentHarness {
       `[data-property-row="${name}"] > .property-name, [data-object-property="${name}"] > .object-property-label`,
     )();
     return label.getAttribute('for');
+  }
+
+  /**
+   * Reads the DOM `id` of a property's form control, if rendered.
+   */
+  async getPropertyControlId(name: string): Promise<string | null> {
+    const control = await this.locatorForOptional(`[data-property="${name}"]`)();
+    return control ? control.getAttribute('id') : null;
+  }
+
+  /**
+   * Reads the `aria-describedby` attribute of a property's form control, if set.
+   */
+  async getPropertyAriaDescribedBy(name: string): Promise<string | null> {
+    const control = await this.locatorForOptional(`[data-property="${name}"]`)();
+    return control ? control.getAttribute('aria-describedby') : null;
+  }
+
+  /**
+   * Reads the DOM `id` of a property's inline error element, if rendered.
+   */
+  async getPropertyErrorId(name: string): Promise<string | null> {
+    const error = await this.locatorForOptional(`[data-property-error="${name}"]`)();
+    return error ? error.getAttribute('id') : null;
   }
 
   /**

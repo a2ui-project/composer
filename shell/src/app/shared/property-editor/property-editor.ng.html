@@ -32,7 +32,7 @@
           [attr.for]="
             prop.note || prop.kind === 'array' || prop.kind === 'object'
               ? null
-              : 'gallery-property-' + prop.name
+              : idPrefix + prop.name
           "
         >
           <span>{{ prop.name }}</span>
@@ -69,7 +69,12 @@
           </button>
         }
         @if (jsonFieldErrors()[prop.name]; as fieldError) {
-          <p class="property-error" [id]="'gallery-property-error-' + prop.name" role="alert">
+          <p
+            class="property-error"
+            [id]="idPrefix + 'error-' + prop.name"
+            [attr.data-property-error]="prop.name"
+            role="alert"
+          >
             {{ fieldError.message }}
           </p>
         } @else if (prop.required && prop.value === undefined) {
@@ -100,7 +105,7 @@
     </p>
   } @else if (control.kind === 'enum') {
     <select
-      [id]="'gallery-property-' + pathKey"
+      [id]="idPrefix + pathKey"
       [attr.aria-label]="label"
       [attr.data-property]="pathKey"
       [ngModel]="value ?? null"
@@ -116,7 +121,7 @@
     </select>
   } @else if (control.kind === 'boolean') {
     <mat-slide-toggle
-      [id]="'gallery-property-' + pathKey"
+      [id]="idPrefix + pathKey"
       [attr.aria-label]="label"
       [attr.data-property]="pathKey"
       [ngModel]="value === true"
@@ -127,7 +132,7 @@
     <input
       matInput
       type="number"
-      [id]="'gallery-property-' + pathKey"
+      [id]="idPrefix + pathKey"
       [attr.aria-label]="label"
       [attr.data-property]="pathKey"
       [placeholder]="required ? '' : 'Not set'"
@@ -139,7 +144,7 @@
     <input
       matInput
       type="text"
-      [id]="'gallery-property-' + pathKey"
+      [id]="idPrefix + pathKey"
       [attr.aria-label]="label"
       [attr.data-property]="pathKey"
       [placeholder]="required ? '' : 'Not set'"
@@ -205,7 +210,7 @@
               subProp.control.kind === 'array' ||
               subProp.control.kind === 'object'
                 ? null
-                : 'gallery-property-' + pathKey + '.' + subProp.name
+                : idPrefix + pathKey + '.' + subProp.name
             "
           >
             <span>{{ subProp.name }}</span>
@@ -235,20 +240,23 @@
         #jsonField
         class="property-json"
         spellcheck="false"
-        [id]="'gallery-property-' + pathKey"
+        [id]="idPrefix + pathKey"
         [attr.aria-label]="label + ' (JSON)'"
         [attr.data-property]="pathKey"
         [placeholder]="required ? '' : 'Not set'"
         [value]="jsonFieldErrors()[pathKey]?.text ?? formatJson(value)"
         (change)="editJsonAtPath(path, pathKey, required, label, jsonField.value)"
         [attr.aria-invalid]="!!jsonFieldErrors()[pathKey]"
-        [attr.aria-describedby]="
-          jsonFieldErrors()[pathKey] ? 'gallery-property-error-' + pathKey : null
-        "
+        [attr.aria-describedby]="jsonFieldErrors()[pathKey] ? idPrefix + 'error-' + pathKey : null"
         [disabled]="disabled()"
       ></textarea>
       @if (path.length > 1 && jsonFieldErrors()[pathKey]; as nestedFieldError) {
-        <p class="property-error" [id]="'gallery-property-error-' + pathKey" role="alert">
+        <p
+          class="property-error"
+          [id]="idPrefix + 'error-' + pathKey"
+          [attr.data-property-error]="pathKey"
+          role="alert"
+        >
           {{ nestedFieldError.message }}
         </p>
       }

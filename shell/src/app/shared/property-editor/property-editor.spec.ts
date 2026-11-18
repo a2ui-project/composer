@@ -326,6 +326,46 @@ describe('PropertyEditor Component', () => {
 
     expect(await harness.getPropertyError('style')).toBeNull();
   });
+
+  it('assigns distinct DOM id prefixes per instance so label[for] and aria-describedby do not collide', async () => {
+    const secondFixture = TestBed.createComponent(PropertyEditor);
+    try {
+      const secondHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        secondFixture,
+        PropertyEditorHarness,
+      );
+      const sample = {
+        id: 'box-1',
+        component: 'StyledBox',
+        style: {padding: 8},
+      };
+      catalogManagementMock.activeCatalog.set(jsonCatalog);
+      fixture.componentRef.setInput('component', sample);
+      secondFixture.componentRef.setInput('component', sample);
+      fixture.detectChanges();
+      secondFixture.detectChanges();
+
+      await harness.editJsonProperty('style', '123');
+
+      const firstLabelFor = await harness.getPropertyLabelFor('style');
+      const secondLabelFor = await secondHarness.getPropertyLabelFor('style');
+      const firstControlId = await harness.getPropertyControlId('style');
+      const secondControlId = await secondHarness.getPropertyControlId('style');
+      const firstErrorId = await harness.getPropertyErrorId('style');
+      const firstDescribedBy = await harness.getPropertyAriaDescribedBy('style');
+
+      expect(firstLabelFor).toMatch(/^property-editor-\d+-style$/);
+      expect(secondLabelFor).toMatch(/^property-editor-\d+-style$/);
+      expect(firstLabelFor).not.toBe(secondLabelFor);
+      expect(firstControlId).toBe(firstLabelFor);
+      expect(secondControlId).toBe(secondLabelFor);
+      expect(firstErrorId).toMatch(/^property-editor-\d+-error-style$/);
+      expect(firstDescribedBy).toBe(firstErrorId);
+      expect(await secondHarness.getPropertyError('style')).toBeNull();
+    } finally {
+      secondFixture.destroy();
+    }
+  });
 });
 
 // Shapes as CatalogSchemaResolver returns them for the basic catalog's common types.

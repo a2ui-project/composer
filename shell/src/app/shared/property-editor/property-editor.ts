@@ -46,6 +46,8 @@ import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 
 type PropertyPath = ReadonlyArray<string | number>;
 
+let nextPropertyEditorId = 0;
+
 /**
  * Metadata and control state for one editable catalog property of the selected component.
  */
@@ -120,6 +122,7 @@ export class PropertyEditor {
   /** Emits a status or validation message when an edit requires user feedback. */
   readonly statusMessage = output<string>();
 
+  protected readonly idPrefix = `property-editor-${nextPropertyEditorId++}-`;
   protected readonly formatJson = formatJson;
   protected readonly describeUneditableValue = describeUneditableValue;
 
