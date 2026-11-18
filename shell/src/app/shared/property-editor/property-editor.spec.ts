@@ -158,6 +158,36 @@ describe('PropertyEditor Component', () => {
       'label',
     ]);
     expect(await harness.getPropertySectionHeadings()).toEqual(['Common properties']);
+    expect(await harness.getEmptyStateText()).toBeNull();
+  });
+
+  it('renders the selection prompt (or custom emptyMessage) when component is null or undefined', async () => {
+    expect(await harness.getEmptyStateText()).toBe('Select a component to inspect its properties.');
+
+    fixture.componentRef.setInput(
+      'emptyMessage',
+      'Click a component in the preview to edit its properties.',
+    );
+    fixture.detectChanges();
+
+    expect(await harness.getEmptyStateText()).toBe(
+      'Click a component in the preview to edit its properties.',
+    );
+  });
+
+  it('renders a zero-properties message when a component has no editable catalog properties', async () => {
+    fixture.componentRef.setInput('component', {
+      id: 'divider-1',
+      component: 'Divider',
+    });
+    fixture.componentRef.setInput('properties', [
+      {name: 'id', description: '', type: 'string', required: true},
+      {name: 'component', description: '', type: 'string', required: true},
+    ]);
+    fixture.detectChanges();
+
+    expect(await harness.getPropertyNames()).toEqual([]);
+    expect(await harness.getEmptyStateText()).toBe('No editable properties for this component.');
   });
 
   it('prefers mergedActiveCatalog over activeCatalog so secondary multi-catalog components resolve schemas', async () => {

@@ -111,6 +111,9 @@ export class PropertyEditor {
    */
   readonly resetKey = input<unknown>(null);
 
+  /** Message shown when no component is selected (`component()` is null or undefined). */
+  readonly emptyMessage = input<string>('Select a component to inspect its properties.');
+
   /** Emits the updated component record when a property is updated or removed. */
   readonly componentChange = output<Record<string, unknown>>();
 

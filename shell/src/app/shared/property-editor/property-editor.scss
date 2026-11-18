@@ -26,6 +26,13 @@
   margin-bottom: 20px;
 }
 
+.property-empty-state {
+  margin: 8px 0 16px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+}
+
 .property-section-heading {
   margin: 16px 0 4px;
   font: var(--mat-sys-title-small);

@@ -219,4 +219,12 @@ export class PropertyEditorHarness extends ComponentHarness {
     const row = await this.locatorFor(`[data-property-row="${name}"]`)();
     return !(await row.hasClass('property-row-multiline'));
   }
+
+  /**
+   * Reads the empty-state placeholder message when no editable properties are rendered, if any.
+   */
+  async getEmptyStateText(): Promise<string | null> {
+    const empty = await this.locatorForOptional('[data-property-empty-state]')();
+    return empty ? (await empty.text()).trim() : null;
+  }
 }

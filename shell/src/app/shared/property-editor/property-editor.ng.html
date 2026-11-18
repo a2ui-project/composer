@@ -80,6 +80,10 @@
       </div>
     }
   </div>
+} @else {
+  <p class="property-empty-state" data-property-empty-state>
+    {{ !component() ? emptyMessage() : 'No editable properties for this component.' }}
+  </p>
 }
 <ng-template
   #controlTemplate
