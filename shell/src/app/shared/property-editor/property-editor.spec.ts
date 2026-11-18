@@ -22,6 +22,7 @@ import {PropertyEditor} from './property-editor';
 import {
   createDefaultPropertyValue,
   describeUneditableValue,
+  matchesSimpleSchema,
   resolvePropertyControl,
 } from './property-control';
 import {PropertyEditorHarness} from './test/property-editor.harness';
@@ -113,6 +114,28 @@ const jsonCatalog: Catalog = {
           properties: {
             component: {const: 'StyledBox'},
             style: {type: 'object', additionalProperties: true},
+          },
+        },
+      ],
+    },
+    ActionBox: {
+      type: 'object',
+      allOf: [
+        {$ref: '#/$defs/ComponentCommon'},
+        {
+          type: 'object',
+          required: ['component', 'count', 'config'],
+          properties: {
+            component: {const: 'ActionBox'},
+            count: {type: 'number'},
+            config: {type: 'object', additionalProperties: true},
+            metadata: {
+              type: 'object',
+              properties: {
+                hint: {type: 'string'},
+                tag: {type: 'string'},
+              },
+            },
           },
         },
       ],
@@ -267,6 +290,284 @@ describe('PropertyEditor Component', () => {
       options: [{label: 'Small', value: 's'}],
       value: ['s'],
     });
+  });
+
+  it('updates nested object fields while preserving sibling fields', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    const componentChanges: Array<Record<string, unknown>> = [];
+    fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 3,
+      config: {retry: true},
+      metadata: {hint: 'Old', tag: 'v1'},
+    });
+    fixture.detectChanges();
+
+    await harness.editProperty('metadata.hint', 'Updated');
+
+    expect(componentChanges.at(-1)).toEqual({
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 3,
+      config: {retry: true},
+      metadata: {hint: 'Updated', tag: 'v1'},
+    });
+  });
+
+  it('prunes an optional parent object when its last nested field is cleared', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    const componentChanges: Array<Record<string, unknown>> = [];
+    fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 3,
+      config: {retry: true},
+      metadata: {hint: 'Only field'},
+    });
+    fixture.detectChanges();
+
+    await harness.editProperty('metadata.hint', '');
+
+    expect(componentChanges.at(-1)).toEqual({
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 3,
+      config: {retry: true},
+    });
+  });
+
+  it('clones the last entry when adding an item to a non-empty array', async () => {
+    const componentChanges: Array<Record<string, unknown>> = [];
+    fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
+    const lastOption = {label: 'Large', value: 'l'};
+    fixture.componentRef.setInput('component', {
+      id: 'picker-1',
+      component: 'ChoicePicker',
+      options: [{label: 'Small', value: 's'}, lastOption],
+      value: ['s'],
+    });
+    fixture.detectChanges();
+
+    await harness.addArrayItem('options');
+
+    const updatedOptions = componentChanges.at(-1)?.['options'] as Array<Record<string, unknown>>;
+    expect(updatedOptions).toEqual([
+      {label: 'Small', value: 's'},
+      {label: 'Large', value: 'l'},
+      {label: 'Large', value: 'l'},
+    ]);
+    expect(updatedOptions[2]).not.toBe(lastOption);
+  });
+
+  it('creates a default entry from the item control when adding to an empty array', async () => {
+    const componentChanges: Array<Record<string, unknown>> = [];
+    fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
+    fixture.componentRef.setInput('component', {
+      id: 'picker-1',
+      component: 'ChoicePicker',
+      options: [],
+      value: [],
+    });
+    fixture.detectChanges();
+
+    await harness.addArrayItem('options');
+
+    expect(componentChanges.at(-1)?.['options']).toEqual([{label: '', value: ''}]);
+  });
+
+  it('removes the targeted entry when deleting an array item', async () => {
+    const componentChanges: Array<Record<string, unknown>> = [];
+    fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
+    fixture.componentRef.setInput('component', {
+      id: 'picker-1',
+      component: 'ChoicePicker',
+      options: [{label: 'Small', value: 's'}],
+      value: ['s', 'm', 'l'],
+    });
+    fixture.detectChanges();
+
+    await harness.deleteArrayItem('value', 1);
+
+    expect(componentChanges.at(-1)?.['value']).toEqual(['s', 'l']);
+  });
+
+  it('removes optional text properties when cleared', async () => {
+    const componentChanges: Array<Record<string, unknown>> = [];
+    fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
+    fixture.componentRef.setInput('component', {
+      id: 'dt-1',
+      component: 'DateTimeInput',
+      value: '2026-01-01',
+      label: 'Start date',
+    });
+    fixture.detectChanges();
+
+    await harness.editProperty('label', '');
+
+    expect(componentChanges.at(-1)).toEqual({
+      id: 'dt-1',
+      component: 'DateTimeInput',
+      value: '2026-01-01',
+    });
+  });
+
+  it('keeps required text properties as empty string when cleared', async () => {
+    const componentChanges: Array<Record<string, unknown>> = [];
+    fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
+    fixture.componentRef.setInput('component', {
+      id: 'dt-1',
+      component: 'DateTimeInput',
+      value: '2026-01-01',
+    });
+    fixture.detectChanges();
+
+    await harness.editProperty('value', '');
+
+    expect(componentChanges.at(-1)).toEqual({
+      id: 'dt-1',
+      component: 'DateTimeInput',
+      value: '',
+    });
+  });
+
+  it('removes optional numbers when cleared', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    const componentChanges: Array<Record<string, unknown>> = [];
+    fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 5,
+      weight: 2,
+      config: {},
+    });
+    fixture.detectChanges();
+
+    await harness.editProperty('weight', '');
+
+    expect(componentChanges).toEqual([
+      {
+        id: 'action-1',
+        component: 'ActionBox',
+        count: 5,
+        config: {},
+      },
+    ]);
+  });
+
+  it('emits statusMessage without componentChange when a required number is cleared', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    const changeSpy = vi.fn();
+    const statuses: string[] = [];
+    fixture.componentInstance.componentChange.subscribe(changeSpy);
+    fixture.componentInstance.statusMessage.subscribe(msg => statuses.push(msg));
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 5,
+      config: {},
+    });
+    fixture.detectChanges();
+
+    await harness.editProperty('count', '');
+
+    expect(changeSpy).not.toHaveBeenCalled();
+    expect(statuses).toEqual(['Enter a number for count. Preview keeps its previous value.']);
+  });
+
+  it('surfaces inline syntax error and preserves raw text across same-component updates for invalid JSON edits', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    const changeSpy = vi.fn();
+    fixture.componentInstance.componentChange.subscribe(changeSpy);
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 1,
+      config: {retry: true},
+    });
+    fixture.detectChanges();
+
+    await harness.editJsonProperty('config', '{invalid');
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 1,
+      config: {retry: false},
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getPropertyError('config')).toBe(
+      'Invalid JSON. The example keeps its previous value.',
+    );
+    expect(await harness.getJsonPropertyText('config')).toBe('{invalid');
+    expect(changeSpy).not.toHaveBeenCalled();
+  });
+
+  it('surfaces required-field error when a required JSON field is blank', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    const changeSpy = vi.fn();
+    fixture.componentInstance.componentChange.subscribe(changeSpy);
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 1,
+      config: {retry: true},
+    });
+    fixture.detectChanges();
+
+    await harness.editJsonProperty('config', '   ');
+
+    expect(await harness.getPropertyError('config')).toBe('config is required.');
+    expect(changeSpy).not.toHaveBeenCalled();
+  });
+
+  it('removes an optional JSON property when cleared with whitespace', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    const componentChanges: Array<Record<string, unknown>> = [];
+    fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
+    fixture.componentRef.setInput('component', {
+      id: 'box-1',
+      component: 'StyledBox',
+      style: {padding: 8},
+    });
+    fixture.detectChanges();
+
+    await harness.editJsonProperty('style', '   ');
+
+    expect(await harness.getPropertyError('style')).toBeNull();
+    expect(componentChanges).toEqual([
+      {
+        id: 'box-1',
+        component: 'StyledBox',
+      },
+    ]);
+  });
+
+  it('clears inline JSON error and emits componentChange when valid JSON is entered after an error', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    const componentChanges: Array<Record<string, unknown>> = [];
+    fixture.componentInstance.componentChange.subscribe(comp => componentChanges.push(comp));
+    fixture.componentRef.setInput('component', {
+      id: 'box-1',
+      component: 'StyledBox',
+      style: {padding: 8},
+    });
+    fixture.detectChanges();
+    await harness.editJsonProperty('style', '{invalid');
+
+    await harness.editJsonProperty('style', '{"padding": 16}');
+
+    expect(await harness.getPropertyError('style')).toBeNull();
+    expect(componentChanges).toEqual([
+      {
+        id: 'box-1',
+        component: 'StyledBox',
+        style: {padding: 16},
+      },
+    ]);
   });
 
   it('surfaces inline error and suppresses componentChange when a JSON field violates the catalog schema', async () => {
@@ -554,5 +855,72 @@ describe('describeUneditableValue', () => {
     const webhookControl = resolvePropertyControl(webhookSchema);
     expect(webhookControl.kind).toBe('object');
     expect(describeUneditableValue({call: 'ping', timeoutMs: 500}, webhookControl)).toBeNull();
+  });
+});
+
+describe('matchesSimpleSchema', () => {
+  it('evaluates boolean JSON schemas directly', () => {
+    const allowAll = true as unknown as CatalogComponentSchema;
+    const denyAll = false as unknown as CatalogComponentSchema;
+    expect(matchesSimpleSchema('anything', allowAll)).toBe(true);
+    expect(matchesSimpleSchema(null, allowAll)).toBe(true);
+    expect(matchesSimpleSchema('anything', denyAll)).toBe(false);
+    expect(matchesSimpleSchema(123, denyAll)).toBe(false);
+  });
+
+  it('distinguishes integer and finite number types', () => {
+    expect(matchesSimpleSchema(4, {type: 'integer'})).toBe(true);
+    expect(matchesSimpleSchema(4.5, {type: 'integer'})).toBe(false);
+    expect(matchesSimpleSchema(Number.NaN, {type: 'integer'})).toBe(false);
+    expect(matchesSimpleSchema(4.5, {type: 'number'})).toBe(true);
+    expect(matchesSimpleSchema(Number.POSITIVE_INFINITY, {type: 'number'})).toBe(false);
+    expect(matchesSimpleSchema('4', {type: 'number'})).toBe(false);
+  });
+
+  it('validates null, primitive, array, object, and untyped schemas', () => {
+    expect(matchesSimpleSchema(null, {type: 'null'})).toBe(true);
+    expect(matchesSimpleSchema(undefined, {type: 'null'})).toBe(false);
+    expect(matchesSimpleSchema('ok', {type: 'string'})).toBe(true);
+    expect(matchesSimpleSchema(123, {type: 'string'})).toBe(false);
+    expect(matchesSimpleSchema(true, {type: 'boolean'})).toBe(true);
+    expect(matchesSimpleSchema('true', {type: 'boolean'})).toBe(false);
+    expect(matchesSimpleSchema([1, 2], {type: 'array'})).toBe(true);
+    expect(matchesSimpleSchema({}, {type: 'array'})).toBe(false);
+    expect(matchesSimpleSchema({a: 1}, {type: 'object'})).toBe(true);
+    expect(matchesSimpleSchema([1, 2], {type: 'object'})).toBe(false);
+    expect(matchesSimpleSchema(null, {type: 'object'})).toBe(false);
+    expect(matchesSimpleSchema('anything', {})).toBe(true);
+  });
+
+  it('validates array-valued type unions', () => {
+    const nullableString: CatalogComponentSchema = {type: ['string', 'null']};
+    expect(matchesSimpleSchema('hello', nullableString)).toBe(true);
+    expect(matchesSimpleSchema(null, nullableString)).toBe(true);
+    expect(matchesSimpleSchema(42, nullableString)).toBe(false);
+  });
+
+  it('validates const and enum constraints', () => {
+    expect(matchesSimpleSchema('info', {const: 'info'})).toBe(true);
+    expect(matchesSimpleSchema('warn', {const: 'info'})).toBe(false);
+
+    const enumSchema: CatalogComponentSchema = {type: 'string', enum: ['a', 'b']};
+    expect(matchesSimpleSchema('a', enumSchema)).toBe(true);
+    expect(matchesSimpleSchema('c', enumSchema)).toBe(false);
+  });
+
+  it('validates anyOf and oneOf union schemas', () => {
+    const anyOfSchema: CatalogComponentSchema = {
+      anyOf: [{type: 'integer'}, {type: 'object'}],
+    };
+    expect(matchesSimpleSchema(7, anyOfSchema)).toBe(true);
+    expect(matchesSimpleSchema({path: '/count'}, anyOfSchema)).toBe(true);
+    expect(matchesSimpleSchema(7.5, anyOfSchema)).toBe(false);
+
+    const oneOfSchema: CatalogComponentSchema = {
+      oneOf: [{type: 'string'}, {type: 'boolean'}],
+    };
+    expect(matchesSimpleSchema('ok', oneOfSchema)).toBe(true);
+    expect(matchesSimpleSchema(false, oneOfSchema)).toBe(true);
+    expect(matchesSimpleSchema(123, oneOfSchema)).toBe(false);
   });
 });
