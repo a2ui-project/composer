@@ -31,6 +31,7 @@ import {ErrorLogger} from '../../debug/error-logger.service';
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);
+  readonly mergedActiveCatalog = signal<Catalog | null>(null);
 }
 
 const dynamic = (literal: Record<string, unknown>) => ({
@@ -157,6 +158,20 @@ describe('PropertyEditor Component', () => {
       'label',
     ]);
     expect(await harness.getPropertySectionHeadings()).toEqual(['Common properties']);
+  });
+
+  it('prefers mergedActiveCatalog over activeCatalog so secondary multi-catalog components resolve schemas', async () => {
+    catalogManagementMock.activeCatalog.set(basicCatalog);
+    catalogManagementMock.mergedActiveCatalog.set(jsonCatalog);
+    fixture.componentRef.setInput('component', {
+      id: 'box-secondary',
+      component: 'StyledBox',
+      style: {padding: 8},
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getPropertyNames()).toEqual(['style', 'weight']);
+    expect(await harness.getPropertyControlKind('style')).toBe('json');
   });
 
   it('blocks property edits when disabled input is true', async () => {
@@ -289,6 +304,11 @@ const call: CatalogComponentSchema = {type: 'object', properties: {call: {type: 
 const dynamicSchema = (literal: CatalogComponentSchema): CatalogComponentSchema => ({
   oneOf: [literal, binding, call],
 });
+const v1Binding: CatalogComponentSchema = {type: 'object', properties: {'@path': {type: 'string'}}};
+const v1Call: CatalogComponentSchema = {type: 'object', properties: {'@call': {type: 'string'}}};
+const dynamicSchemaV1 = (literal: CatalogComponentSchema): CatalogComponentSchema => ({
+  anyOf: [literal, v1Binding, v1Call],
+});
 
 describe('resolvePropertyControl', () => {
   it.each([
@@ -297,8 +317,11 @@ describe('resolvePropertyControl', () => {
     ['an integer', {type: 'integer'}, 'number'],
     ['a string', {type: 'string'}, 'string'],
     ['a DynamicString', dynamicSchema({type: 'string'}), 'string'],
+    ['a v1.0 DynamicString', dynamicSchemaV1({type: 'string'}), 'string'],
     ['a DynamicBoolean', dynamicSchema({type: 'boolean'}), 'boolean'],
+    ['a v1.0 DynamicBoolean', dynamicSchemaV1({type: 'boolean'}), 'boolean'],
     ['a DynamicNumber', dynamicSchema({type: 'number'}), 'number'],
+    ['a v1.0 DynamicNumber', dynamicSchemaV1({type: 'number'}), 'number'],
     ['an enum inside a union', {anyOf: [{type: 'string', enum: ['a', 'b']}, binding]}, 'enum'],
     ['an array of options', {type: 'array', items: {type: 'object'}}, 'array'],
     ['a DynamicStringList', dynamicSchema({type: 'array', items: {type: 'string'}}), 'array'],
@@ -367,6 +390,8 @@ describe('resolvePropertyControl', () => {
     expect(resolvePropertyControl(undefined, ['a', 'b']).kind).toBe('array');
     expect(resolvePropertyControl(undefined, {label: 'Hi'}).kind).toBe('object');
     expect(resolvePropertyControl(undefined, {path: '/x'}).kind).toBe('json');
+    expect(resolvePropertyControl(undefined, {'@path': '/x'}).kind).toBe('json');
+    expect(resolvePropertyControl(undefined, {'@call': 'fn'}).kind).toBe('json');
   });
 
   it('keeps enum options in catalog order', () => {
@@ -419,9 +444,13 @@ describe('describeUneditableValue', () => {
 
   it('protects bindings, function calls and values outside the control', () => {
     expect(describeUneditableValue({path: '/user/name'}, text)).toContain('Bound to /user/name');
+    expect(describeUneditableValue({'@path': '/user/name'}, text)).toContain('Bound to /user/name');
     expect(describeUneditableValue({path: '/items'}, list)).toContain('Bound to /items');
+    expect(describeUneditableValue({'@path': '/items'}, list)).toContain('Bound to /items');
     expect(describeUneditableValue({path: '/group'}, group)).toContain('Bound to /group');
+    expect(describeUneditableValue({'@path': '/group'}, group)).toContain('Bound to /group');
     expect(describeUneditableValue({call: 'formatDate'}, text)).toContain('formatDate()');
+    expect(describeUneditableValue({'@call': 'formatDate'}, text)).toContain('formatDate()');
     expect(describeUneditableValue(3, text)).toContain('JSON editor');
     expect(describeUneditableValue('other', {kind: 'enum', options: ['a']})).toContain(
       'JSON editor',

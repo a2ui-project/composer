@@ -121,7 +121,8 @@ export class PropertyEditor {
   protected readonly describeUneditableValue = describeUneditableValue;
 
   private readonly catalogSignature: Signal<string | null> = computed(() => {
-    const catalog = this.catalogManagement.activeCatalog();
+    const catalog =
+      this.catalogManagement.mergedActiveCatalog() ?? this.catalogManagement.activeCatalog();
     return catalog ? stableStringify(catalog) : null;
   });
 
@@ -137,7 +138,8 @@ export class PropertyEditor {
     resolver: CatalogSchemaResolver;
     common: Set<string>;
   } | null> = computed(() => {
-    const catalog = this.catalogManagement.activeCatalog();
+    const catalog =
+      this.catalogManagement.mergedActiveCatalog() ?? this.catalogManagement.activeCatalog();
     if (!catalog) {
       return null;
     }
