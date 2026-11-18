@@ -23,7 +23,7 @@ import {
   createDefaultPropertyValue,
   describeUneditableValue,
   resolvePropertyControl,
-} from './property-editor-utils';
+} from './property-control';
 import {PropertyEditorHarness} from './test/property-editor.harness';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog, CatalogComponentSchema} from '../../storage/models/catalog-storage.model';

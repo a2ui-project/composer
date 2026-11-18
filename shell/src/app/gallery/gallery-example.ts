@@ -16,7 +16,7 @@
 
 import {ComponentUsage} from 'a2ui-bridge';
 import {ErrorLogger} from '../debug/error-logger.service';
-import {matchesSimpleSchema} from '../shared/property-editor/property-editor-utils';
+import {matchesSimpleSchema} from '../shared/property-editor/property-control';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {CatalogSchemaResolver} from './schema/catalog-schema-resolver';
 

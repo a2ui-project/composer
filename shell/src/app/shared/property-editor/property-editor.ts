@@ -39,7 +39,7 @@ import {
   matchesSimpleSchema,
   PropertyControl,
   resolvePropertyControl,
-} from './property-editor-utils';
+} from './property-control';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {formatJson} from '../../utils/json';
 import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
