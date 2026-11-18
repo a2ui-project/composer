@@ -308,4 +308,77 @@ describe('buildComponentTrees', () => {
     ]);
     expect(tree.unreachable).toEqual([]);
   });
+
+  it('resolves Draft-07 #/definitions/ references in custom catalogs', () => {
+    const draft07Catalog = {
+      catalogId: 'draft-07',
+      components: {
+        Modal: {$ref: '#/definitions/ModalProps'},
+        Text: {properties: {text: {type: 'string'}}},
+      },
+      definitions: {
+        ModalProps: {
+          properties: {
+            trigger: {$ref: `${COMMON}/ComponentId`},
+            content: {$ref: `${COMMON}/ComponentId`},
+          },
+        },
+      },
+    };
+    const messages = surface([
+      {id: 'root', component: 'Modal', trigger: 'open', content: 'body'},
+      {id: 'open', component: 'Text'},
+      {id: 'body', component: 'Text'},
+    ]);
+
+    const [tree] = buildComponentTrees(messages, draft07Catalog);
+
+    expect(outline(tree.root)).toEqual([
+      'Modal#root',
+      '  trigger:Text#open',
+      '  content:Text#body',
+    ]);
+    expect(tree.unreachable).toEqual([]);
+  });
+
+  it('ignores inherited prototype properties on catalog components and definitions', () => {
+    const inheritedDefs = Object.create({
+      InheritedSlot: {properties: {secret: {$ref: `${COMMON}/ComponentId`}}},
+    }) as Record<string, Record<string, unknown>>;
+    const catalog = {
+      catalogId: 'proto-guard',
+      components: {
+        Column: {properties: {children: {$ref: `${COMMON}/ChildList`}}},
+        UsesDefsProto: {$ref: '#/$defs/InheritedSlot'},
+        UsesDefinitionsProto: {$ref: '#/definitions/InheritedSlot'},
+        Text: {properties: {text: {type: 'string'}}},
+      },
+      $defs: inheritedDefs,
+      definitions: inheritedDefs,
+    };
+    const messages = surface([
+      {
+        id: 'root',
+        component: 'Column',
+        children: ['constructorComp', 'defsComp', 'definitionsComp'],
+      },
+      {id: 'constructorComp', component: 'constructor', child: 'fallbackLeaf'},
+      {id: 'fallbackLeaf', component: 'Text'},
+      {id: 'defsComp', component: 'UsesDefsProto', secret: 'hiddenA'},
+      {id: 'definitionsComp', component: 'UsesDefinitionsProto', secret: 'hiddenB'},
+      {id: 'hiddenA', component: 'Text'},
+      {id: 'hiddenB', component: 'Text'},
+    ]);
+
+    const [tree] = buildComponentTrees(messages, catalog);
+
+    expect(outline(tree.root)).toEqual([
+      'Column#root',
+      '  children:constructor#constructorComp',
+      '    child:Text#fallbackLeaf',
+      '  children:UsesDefsProto#defsComp',
+      '  children:UsesDefinitionsProto#definitionsComp',
+    ]);
+    expect(tree.unreachable.map(node => node.id)).toEqual(['hiddenA', 'hiddenB']);
+  });
 });
