@@ -27,6 +27,38 @@
   padding: 8px 12px;
 }
 
+.property-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.property-header-type {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: var(--mat-sys-title-small);
+  letter-spacing: var(--mat-sys-title-small-tracking);
+  color: var(--mat-sys-on-surface);
+}
+
+.property-header-id {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: var(--mat-sys-body-small);
+  font-family: 'Roboto Mono', monospace;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.property-status {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+
 // One property per row: property name stacked on top of its UI control.
 .property-list {
   display: flex;
@@ -203,20 +235,18 @@
   letter-spacing: var(--mat-sys-body-small-tracking);
 }
 
-.property-missing {
-  grid-column: 1 / -1;
-  margin: 0;
+.property-status,
+.property-missing,
+.property-error {
   color: var(--mat-sys-error);
   font: var(--mat-sys-body-small);
   letter-spacing: var(--mat-sys-body-small-tracking);
 }
 
+.property-missing,
 .property-error {
   grid-column: 1 / -1;
   margin: 0;
-  color: var(--mat-sys-error);
-  font: var(--mat-sys-body-small);
-  letter-spacing: var(--mat-sys-body-small-tracking);
 }
 
 .property-control input:focus-visible,

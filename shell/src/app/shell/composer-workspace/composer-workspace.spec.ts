@@ -960,6 +960,8 @@ describe('ComposerWorkspace Dashboard', () => {
         const propertyEditorPanel = manager.api.getGroupPanel(ComposerPanelId.PropertyEditor);
         expect(propertyEditorPanel?.group.activePanel?.id).toBe(ComposerPanelId.PropertyEditor);
         expect(propertyEditor.resetKey()).toBe('s');
+        expect(propertyEditor.showHeader()).toBe(true);
+        expect(propertyEditor.showStatus()).toBe(true);
         expect(propertyEditor.component()).toEqual({
           id: 'title',
           component: 'Text',

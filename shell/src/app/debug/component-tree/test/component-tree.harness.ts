@@ -32,6 +32,8 @@ export interface ComponentTreeRowSummary {
   readonly level: number | null;
   readonly tabIndex: number | null;
   readonly focused: boolean;
+  readonly hasNestedInteractive: boolean;
+  readonly toggleAriaHidden: string | null;
 }
 
 /**
@@ -213,6 +215,9 @@ class ComponentTreeRowHarness extends ComponentHarness {
   private readonly getIdElement = this.locatorFor('.id');
   private readonly getBadgeElements = this.locatorForAll('.badge');
   private readonly getToggleElement = this.locatorForOptional('.toggle');
+  private readonly getNestedInteractiveElements = this.locatorForAll(
+    'button, [role="button"], a[href]',
+  );
 
   async getSummary(): Promise<ComponentTreeRowSummary> {
     const host = await this.host();
@@ -220,6 +225,8 @@ class ComponentTreeRowHarness extends ComponentHarness {
     const typeElement = await this.getTypeElement();
     const idElement = await this.getIdElement();
     const badgeElements = await this.getBadgeElements();
+    const toggleElement = await this.getToggleElement();
+    const nestedInteractiveElements = await this.getNestedInteractiveElements();
 
     const expandedAttribute = await host.getAttribute('aria-expanded');
     const levelAttribute = await host.getAttribute('aria-level');
@@ -237,6 +244,8 @@ class ComponentTreeRowHarness extends ComponentHarness {
       level: levelAttribute === null ? null : Number(levelAttribute),
       tabIndex: tabIndexAttribute === null ? null : Number(tabIndexAttribute),
       focused: await host.isFocused(),
+      hasNestedInteractive: nestedInteractiveElements.length > 0,
+      toggleAriaHidden: toggleElement ? await toggleElement.getAttribute('aria-hidden') : null,
     };
   }
 

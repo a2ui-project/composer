@@ -667,6 +667,184 @@ describe('PropertyEditor Component', () => {
       secondFixture.destroy();
     }
   });
+
+  it('hides the component header by default', async () => {
+    fixture.componentRef.setInput('component', {
+      id: 'date-1',
+      component: 'DateTimeInput',
+      value: '2026-01-01',
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getHeaderText()).toBeNull();
+  });
+
+  it('renders Type #id when showHeader is true and trims id whitespace', async () => {
+    fixture.componentRef.setInput('showHeader', true);
+    fixture.componentRef.setInput('component', {
+      id: ' date-1 ',
+      component: 'DateTimeInput',
+      value: '2026-01-01',
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getHeaderText()).toBe('DateTimeInput #date-1');
+  });
+
+  it('renders only Type when showHeader is true and the component has no id', async () => {
+    fixture.componentRef.setInput('showHeader', true);
+    fixture.componentRef.setInput('component', {
+      component: 'DateTimeInput',
+      value: '2026-01-01',
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getHeaderText()).toBe('DateTimeInput');
+  });
+
+  it('hides the component header when no component is selected', async () => {
+    fixture.componentRef.setInput('showHeader', true);
+    fixture.componentRef.setInput('component', null);
+    fixture.detectChanges();
+
+    expect(await harness.getHeaderText()).toBeNull();
+  });
+
+  it('keeps inline status and its live region hidden by default when showStatus is false', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    const statuses: string[] = [];
+    fixture.componentInstance.statusMessage.subscribe(message => statuses.push(message));
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 5,
+      config: {},
+    });
+    fixture.detectChanges();
+
+    await harness.editProperty('count', '');
+
+    expect(await harness.hasStatusLiveRegion()).toBe(false);
+    expect(await harness.getStatusText()).toBeNull();
+    expect(statuses).toEqual(['Enter a number for count. Preview keeps its previous value.']);
+  });
+
+  it('keeps the status live region mounted and updates inline status on invalid and valid edits', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    fixture.componentRef.setInput('showStatus', true);
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 5,
+      config: {},
+    });
+    fixture.detectChanges();
+
+    expect(await harness.hasStatusLiveRegion()).toBe(true);
+    expect(await harness.getStatusText()).toBeNull();
+
+    await harness.editProperty('count', '');
+    expect(await harness.getStatusText()).toBe(
+      'Enter a number for count. Preview keeps its previous value.',
+    );
+
+    await harness.editProperty('count', '7');
+    expect(await harness.hasStatusLiveRegion()).toBe(true);
+    expect(await harness.getStatusText()).toBeNull();
+  });
+
+  it('clears inline status feedback and emits an empty statusMessage when clearErrors() is called', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    const statuses: string[] = [];
+    fixture.componentInstance.statusMessage.subscribe(message => statuses.push(message));
+    fixture.componentRef.setInput('showStatus', true);
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 5,
+      config: {},
+    });
+    fixture.detectChanges();
+    await harness.editProperty('count', '');
+    expect(await harness.getStatusText()).toBe(
+      'Enter a number for count. Preview keeps its previous value.',
+    );
+
+    fixture.componentInstance.clearErrors();
+    fixture.detectChanges();
+
+    expect(await harness.getStatusText()).toBeNull();
+    expect(statuses.at(-1)).toBe('');
+  });
+
+  it('clears inline status feedback when the target component identity changes', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    fixture.componentRef.setInput('showStatus', true);
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 5,
+      config: {},
+    });
+    fixture.detectChanges();
+    await harness.editProperty('count', '');
+    expect(await harness.getStatusText()).toBe(
+      'Enter a number for count. Preview keeps its previous value.',
+    );
+
+    fixture.componentRef.setInput('component', {
+      id: 'action-2',
+      component: 'ActionBox',
+      count: 1,
+      config: {},
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getStatusText()).toBeNull();
+  });
+
+  it('clears prior inline status feedback when a JSON property edit fails to parse', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    fixture.componentRef.setInput('showStatus', true);
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 5,
+      config: {},
+    });
+    fixture.detectChanges();
+    await harness.editProperty('count', '');
+    expect(await harness.getStatusText()).toBe(
+      'Enter a number for count. Preview keeps its previous value.',
+    );
+
+    await harness.editJsonProperty('config', '{invalid');
+
+    expect(await harness.getStatusText()).toBeNull();
+    expect(await harness.getPropertyError('config')).toBe(
+      'Invalid JSON. The example keeps its previous value.',
+    );
+  });
+
+  it('ignores clearing a required number when disabled', async () => {
+    catalogManagementMock.activeCatalog.set(jsonCatalog);
+    const statusSpy = vi.fn();
+    fixture.componentInstance.statusMessage.subscribe(statusSpy);
+    fixture.componentRef.setInput('showStatus', true);
+    fixture.componentRef.setInput('disabled', true);
+    fixture.componentRef.setInput('component', {
+      id: 'action-1',
+      component: 'ActionBox',
+      count: 5,
+      config: {},
+    });
+    fixture.detectChanges();
+
+    await harness.editProperty('count', '');
+
+    expect(await harness.getStatusText()).toBeNull();
+    expect(statusSpy).not.toHaveBeenCalled();
+  });
 });
 
 // Shapes as CatalogSchemaResolver returns them for the basic catalog's common types.

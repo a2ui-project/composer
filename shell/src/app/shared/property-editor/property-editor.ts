@@ -116,6 +116,12 @@ export class PropertyEditor {
   /** Message shown when no component is selected (`component()` is null or undefined). */
   readonly emptyMessage = input<string>('Select a component to inspect its properties.');
 
+  /** Whether to render a header showing the selected component's type and id. */
+  readonly showHeader = input<boolean>(false);
+
+  /** Whether to render emitted validation/status messages inline inside the editor. */
+  readonly showStatus = input<boolean>(false);
+
   /** Emits the updated component record when a property is updated or removed. */
   readonly componentChange = output<Record<string, unknown>>();
 
@@ -135,6 +141,11 @@ export class PropertyEditor {
   private readonly resolvedComponentKey: Signal<string | null> = computed(() => {
     const typeName = this.component()?.['component'];
     return typeof typeName === 'string' && typeName ? typeName : null;
+  });
+
+  private readonly resolvedComponentId: Signal<string | null> = computed(() => {
+    const rawId = this.component()?.['id'];
+    return typeof rawId === 'string' ? rawId.trim() || null : null;
   });
 
   /**
@@ -197,6 +208,23 @@ export class PropertyEditor {
     });
 
   /**
+   * Latest status or validation message emitted by the editor, resetting when the
+   * component context identity changes.
+   */
+  protected readonly inlineStatusMessage: WritableSignal<string> = linkedSignal({
+    source: this.contextIdentity,
+    computation: () => '',
+  });
+
+  /** Type and optional id of the active component for the optional header. */
+  protected readonly componentHeader: Signal<{type: string; id: string | null} | null> = computed(
+    () =>
+      this.component()
+        ? {type: this.resolvedComponentKey() ?? '?', id: this.resolvedComponentId()}
+        : null,
+  );
+
+  /**
    * Every catalog property of the selected component except its identity and constants.
    */
   protected readonly editableProperties: Signal<EditableProperty[]> = computed(() => {
@@ -240,10 +268,11 @@ export class PropertyEditor {
   });
 
   /**
-   * Clears any pending inline JSON field validation errors.
+   * Clears any pending inline JSON field validation errors and status feedback.
    */
   clearErrors(): void {
     this.jsonFieldErrors.set({});
+    this.setStatusMessage('');
   }
 
   /**
@@ -293,16 +322,13 @@ export class PropertyEditor {
         ),
       );
     }
-    this.statusMessage.emit('');
+    this.setStatusMessage('');
     const schema = this.selectedComponentSchemas()[name];
     if (value !== undefined && schema && !matchesSimpleSchema(value, schema)) {
-      const componentId =
-        typeof target['id'] === 'string' && target['id'].trim()
-          ? target['id']
-          : (this.resolvedComponentKey() ?? 'target');
+      const componentId = this.resolvedComponentId() ?? this.resolvedComponentKey() ?? 'target';
       const reason = `"${name}" on "${componentId}" does not match its catalog property type or choices.`;
       if (emitStatus) {
-        this.statusMessage.emit(`${reason} Preview keeps its previous value.`);
+        this.setStatusMessage(`${reason} Preview keeps its previous value.`);
       }
       return reason;
     }
@@ -359,13 +385,21 @@ export class PropertyEditor {
     required: boolean,
     label: string,
   ): void {
+    if (!this.component() || this.disabled()) {
+      return;
+    }
     if (value !== null && Number.isFinite(value)) {
       this.editAtPath(path, value);
     } else if (!required) {
       this.editAtPath(path, undefined);
     } else {
-      this.statusMessage.emit(`Enter a number for ${label}. Preview keeps its previous value.`);
+      this.setStatusMessage(`Enter a number for ${label}. Preview keeps its previous value.`);
     }
+  }
+
+  private setStatusMessage(message: string): void {
+    this.inlineStatusMessage.set(message);
+    this.statusMessage.emit(message);
   }
 
   /**
@@ -378,12 +412,16 @@ export class PropertyEditor {
     label: string,
     text: string,
   ): void {
+    if (!this.component() || this.disabled()) {
+      return;
+    }
     const setError = (message: string) => {
       this.jsonFieldErrors.update(errors => ({...errors, [pathKey]: {text, message}}));
     };
     let value: unknown;
     if (!text.trim()) {
       if (required) {
+        this.setStatusMessage('');
         setError(`${label} is required.`);
         return;
       }
@@ -392,6 +430,7 @@ export class PropertyEditor {
       try {
         value = JSON.parse(text);
       } catch {
+        this.setStatusMessage('');
         setError('Invalid JSON. The example keeps its previous value.');
         return;
       }

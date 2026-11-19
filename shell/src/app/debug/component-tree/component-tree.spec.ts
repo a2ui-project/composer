@@ -379,6 +379,23 @@ describe('ComponentTree', () => {
         expect(rows.map(row => row.level)).toEqual([1, 2, 3, 3]);
       });
 
+      it('hides branch toggles from the accessibility tree without nesting interactive elements inside treeitems', async () => {
+        const rows = await harness.getRows();
+
+        expect(
+          rows.map(row => ({
+            id: row.id,
+            hasNestedInteractive: row.hasNestedInteractive,
+            toggleAriaHidden: row.toggleAriaHidden,
+          })),
+        ).toEqual([
+          {id: '#root', hasNestedInteractive: false, toggleAriaHidden: 'true'},
+          {id: '#modal', hasNestedInteractive: false, toggleAriaHidden: 'true'},
+          {id: '#open', hasNestedInteractive: false, toggleAriaHidden: null},
+          {id: '#body', hasNestedInteractive: false, toggleAriaHidden: null},
+        ]);
+      });
+
       it('resets tabindex to the first row when the focused node is collapsed', async () => {
         await harness.focusRow('#open');
 

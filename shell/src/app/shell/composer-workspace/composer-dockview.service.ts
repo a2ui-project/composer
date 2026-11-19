@@ -453,6 +453,8 @@ export class ComposerDockview {
       inputBinding('component', () => this.componentTreeInstance()?.selectedComponent() ?? null),
       inputBinding('resetKey', () => this.componentTreeInstance()?.selected()?.surfaceId ?? null),
       inputBinding('disabled', () => this.chatState.isProgrammaticStreamActive()),
+      inputBinding('showHeader', () => true),
+      inputBinding('showStatus', () => true),
       outputBinding<Record<string, unknown>>('componentChange', updatedComponent => {
         this.componentTreeInstance()?.updateSelectedComponent(updatedComponent);
       }),
