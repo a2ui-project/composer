@@ -62,7 +62,7 @@ export class ComponentTree {
   readonly selectedComponent = computed<Record<string, unknown> | null>(() => {
     const selected = this.selected();
     if (!selected) return null;
-    const result = tryParseJsonArray(this.stateSync.activeDraft());
+    const result = this.parsedDraft();
     if (!result.success) return null;
     return getSurfaceComponent(result.data, selected.surfaceId, selected.id);
   });
@@ -136,7 +136,7 @@ export class ComponentTree {
   updateSelectedComponent(updatedComponent: Record<string, unknown>): void {
     const selected = this.selected();
     if (!selected) return;
-    const result = tryParseJsonArray(this.stateSync.activeDraft());
+    const result = this.parsedDraft();
     if (!result.success) return;
     const updatedMessages = updateSurfaceComponent(
       result.data,

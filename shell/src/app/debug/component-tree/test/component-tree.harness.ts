@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ComponentHarness} from '@angular/cdk/testing';
+import {ComponentHarness, TestKey} from '@angular/cdk/testing';
 import {MatTooltipHarness} from '@angular/material/tooltip/testing';
 
 /**
@@ -28,6 +28,10 @@ export interface ComponentTreeRowSummary {
   readonly missing: boolean;
   readonly cycle: boolean;
   readonly expanded: boolean | null;
+  readonly selected: boolean;
+  readonly level: number | null;
+  readonly tabIndex: number | null;
+  readonly focused: boolean;
 }
 
 /**
@@ -94,6 +98,41 @@ export class ComponentTreeHarness extends ComponentHarness {
   }
 
   /**
+   * Returns the `#id` label of the currently focused tree row, or null if none is focused.
+   */
+  async getFocusedRowId(): Promise<string | null> {
+    const rows = await this.getRows();
+    return rows.find(row => row.focused)?.id ?? null;
+  }
+
+  /**
+   * Clicks the matching `#id` row (at the given occurrence) to select it.
+   */
+  async selectRow(id: string, occurrence = 0): Promise<void> {
+    const index = await this.findRowIndex(id, occurrence);
+    const rows = await this.getRowHarnesses();
+    await rows[index].select();
+  }
+
+  /**
+   * Focuses the matching `#id` row (at the given occurrence).
+   */
+  async focusRow(id: string, occurrence = 0): Promise<void> {
+    const index = await this.findRowIndex(id, occurrence);
+    const rows = await this.getRowHarnesses();
+    await rows[index].focus();
+  }
+
+  /**
+   * Focuses the matching `#id` row (at the given occurrence) and dispatches the given key.
+   */
+  async pressKeyOnRow(id: string, key: string | TestKey, occurrence = 0): Promise<void> {
+    const index = await this.findRowIndex(id, occurrence);
+    const rows = await this.getRowHarnesses();
+    await rows[index].pressKey(key);
+  }
+
+  /**
    * Clicks the expand/collapse toggle button on the matching `#id` row (at the given occurrence).
    */
   async toggleRow(id: string, occurrence = 0): Promise<void> {
@@ -148,9 +187,10 @@ class ComponentTreeRowHarness extends ComponentHarness {
     const typeElement = await this.getTypeElement();
     const idElement = await this.getIdElement();
     const badgeElements = await this.getBadgeElements();
-    const toggleButton = await this.getToggleButton();
 
-    const expandedAttr = toggleButton ? await toggleButton.getAttribute('aria-expanded') : null;
+    const expandedAttribute = await host.getAttribute('aria-expanded');
+    const levelAttribute = await host.getAttribute('aria-level');
+    const tabIndexAttribute = await host.getAttribute('tabindex');
 
     return {
       via: viaElement ? await viaElement.text() : null,
@@ -159,12 +199,28 @@ class ComponentTreeRowHarness extends ComponentHarness {
       badges: await Promise.all(badgeElements.map(badge => badge.text())),
       missing: await host.hasClass('missing'),
       cycle: await host.hasClass('cycle'),
-      expanded: expandedAttr === null ? null : expandedAttr === 'true',
+      expanded: expandedAttribute === null ? null : expandedAttribute === 'true',
+      selected: (await host.getAttribute('aria-selected')) === 'true',
+      level: levelAttribute === null ? null : Number(levelAttribute),
+      tabIndex: tabIndexAttribute === null ? null : Number(tabIndexAttribute),
+      focused: await host.isFocused(),
     };
   }
 
   async getId(): Promise<string> {
     return (await this.getIdElement()).text();
+  }
+
+  async select(): Promise<void> {
+    await (await this.host()).click();
+  }
+
+  async focus(): Promise<void> {
+    await (await this.host()).focus();
+  }
+
+  async pressKey(key: string | TestKey): Promise<void> {
+    await (await this.host()).sendKeys(key);
   }
 
   async toggle(): Promise<void> {
