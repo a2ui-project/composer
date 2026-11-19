@@ -18,7 +18,7 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {Events} from './events';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {EventsHarness} from './test/events.harness';
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {Subject} from 'rxjs';
 import {
   HostCommunication,
@@ -78,7 +78,7 @@ describe('Events', () => {
       messageStream$: messageStreamSubject.asObservable(),
       callAgentFunction$: callAgentFunctionSubject.asObservable(),
       rendererFunctionResponse$: rendererFunctionResponseSubject.asObservable(),
-      sendRenderA2UI: () => {},
+      sendRenderA2UI: () => true,
       getEnvelopeHistory: () => [],
     };
 
@@ -600,7 +600,7 @@ describe('Events', () => {
           useValue: {
             messageStream: signal<MessageEnvelope | null>(null).asReadonly(),
             messageStream$: new Subject<MessageEnvelope>().asObservable(),
-            sendRenderA2UI: () => {},
+            sendRenderA2UI: () => true,
             getEnvelopeHistory: () => historicalEnvelopes,
           },
         },
@@ -625,5 +625,69 @@ describe('Events', () => {
     expect(row1.action).toContain('historicalCall');
     const form = await hydratedHarness.getRpcReplyFormAt(1);
     expect(form).not.toBeNull();
+  });
+
+  it('does not re-register or show cleared RPC or action envelopes when Events re-mounts, while keeping same-ms events', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(10_000);
+      const dummyWindow = {} as Window;
+      const historicalEnvelopes: MessageEnvelope[] = [
+        {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            callAgentFunction: {
+              surfaceId: 'surf-hist',
+              functionCallId: 'hist-cleared-rpc',
+              callFunction: {['@call']: 'clearedCall'},
+            },
+          },
+          origin: 'http://localhost',
+          timestamp: 9_000,
+          sourceWindow: dummyWindow,
+        },
+        {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            action: {
+              name: 'oldAction',
+              surfaceId: 'surf-hist',
+              sourceComponentId: 'btn-1',
+            },
+          },
+          origin: 'http://localhost',
+          timestamp: 9_500,
+        },
+        {
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
+          payload: {
+            action: {
+              name: 'sameMsAction',
+              surfaceId: 'surf-hist',
+              sourceComponentId: 'btn-2',
+            },
+          },
+          origin: 'http://localhost',
+          timestamp: 10_000,
+        },
+      ];
+
+      registry.registerFrame(dummyWindow);
+      fixture.componentInstance.clearLogs();
+      mockHostComm.getEnvelopeHistory = () => historicalEnvelopes;
+
+      const remountedFixture = TestBed.createComponent(Events);
+      remountedFixture.detectChanges();
+      const remountedHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        remountedFixture,
+        EventsHarness,
+      );
+
+      expect(await remountedHarness.getRowsCount()).toBe(1);
+      expect((await remountedHarness.getRowValuesAt(0)).action).toBe('sameMsAction');
+      expect(registry.getRpc('hist-cleared-rpc')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

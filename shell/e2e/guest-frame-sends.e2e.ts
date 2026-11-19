@@ -475,6 +475,7 @@ test.describe('GuestFrame sends', () => {
       test('a theme toggle reaches the gallery preview once', async ({page}) => {
         await page.goto(`/gallery?renderer=${renderer.url}`);
         await expect(page.locator('.gallery-container')).toBeVisible();
+        await expect(page.locator('.component-nav-item').first()).toBeVisible({timeout: 15_000});
         await waitForQuiet(page);
 
         for (let toggle = 0; toggle < 2; toggle++) {

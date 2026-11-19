@@ -385,6 +385,33 @@ export const A2UI_UPDATE_KEYS = [
 /** Type representing any one of the canonical A2UI update operation keys. */
 export type A2uiUpdateKey = (typeof A2UI_UPDATE_KEYS)[number];
 
+/** Canonical A2UI v1.0 one-shot RPC envelope keys dispatched via RENDER_A2UI. */
+export const A2UI_ONE_SHOT_RPC_KEYS = [
+  'callRendererFunction',
+  'agentFunctionResponse',
+  'callAgentFunctionResponse',
+] as const;
+
+/**
+ * Returns true if `item` is a non-array object with a non-nullish property
+ * for at least one key in `keys`.
+ */
+export function hasDefinedObjectKey(item: unknown, keys: readonly string[]): boolean {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) {
+    return false;
+  }
+  const obj = item as Record<string, unknown>;
+  return keys.some(key => obj[key] != null);
+}
+
+/**
+ * Returns true if `item` carries a non-nullish A2UI v1.0 one-shot RPC envelope key
+ * (`callRendererFunction`, `agentFunctionResponse`, or legacy `callAgentFunctionResponse`).
+ */
+export function isV10RpcEnvelopeItem(item: unknown): boolean {
+  return hasDefinedObjectKey(item, A2UI_ONE_SHOT_RPC_KEYS);
+}
+
 /**
  * Represents a component instance definition in the A2UI layout tree.
  *

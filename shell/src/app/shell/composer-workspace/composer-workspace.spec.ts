@@ -495,6 +495,36 @@ describe('ComposerWorkspace Dashboard', () => {
       vi.useRealTimers();
     });
 
+    it('cancels pending RPCs when RenderedFrame emits renderStateReset on same-URL reload', () => {
+      vi.useFakeTimers();
+      const pendingRpcRegistry = TestBed.inject(PendingRpcRegistry);
+      const hostComm = TestBed.inject(HostCommunication);
+      const sendSpy = vi.spyOn(hostComm, 'sendRenderA2UI');
+      const manager = fixture.componentRef.injector.get(ComposerDockview);
+      const renderedFrame = manager.getRenderedFrame();
+      const sharedProxyWindow = {} as Window;
+      vi.spyOn(renderedFrame!, 'contentWindow', 'get').mockReturnValue(sharedProxyWindow);
+
+      pendingRpcRegistry.registerFrame(sharedProxyWindow);
+      const entry = pendingRpcRegistry.registerRpc({
+        functionCallId: 'call-before-reload',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'slowOp'},
+        sourceWindow: sharedProxyWindow,
+      });
+      expect(entry.status).toBe('pending');
+
+      renderedFrame!.renderStateReset.emit(sharedProxyWindow);
+      fixture.detectChanges();
+
+      expect(pendingRpcRegistry.getRpc('call-before-reload')?.status).toBe('rejected');
+      expect(sendSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(35000);
+      expect(sendSpy).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
     it('rejects non-workspace iframes (/agent-chat, /demos, /gallery)', () => {
       const pendingRpcRegistry = TestBed.inject(PendingRpcRegistry);
       const manager = fixture.componentRef.injector.get(ComposerDockview);

@@ -558,5 +558,53 @@ describe('PendingRpcRegistry', () => {
       vi.advanceTimersByTime(35000);
       expect(mockHostComm.sendRenderA2UI).toHaveBeenCalledTimes(2);
     });
+
+    it('ignores replayed registerRpc calls whose startedAtMs < clearedAtMs while keeping same-ms calls', () => {
+      vi.setSystemTime(10_000);
+      service.registerFrame(dummyWindow);
+      service.registerRpc({
+        functionCallId: 'call-before-clear',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'op1'},
+        sourceWindow: dummyWindow,
+        startedAtMs: 9_500,
+      });
+
+      service.clearAll(10_000);
+      mockHostComm.sendRenderA2UI.mockClear();
+
+      // Replaying history strictly before clearedAtMs (10_000) must be ignored
+      const replayedBefore = service.registerRpc({
+        functionCallId: 'call-before-clear',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'op1'},
+        sourceWindow: dummyWindow,
+        startedAtMs: 9_999,
+      });
+
+      expect(replayedBefore.status).toBe('rejected');
+      expect(service.getRpc('call-before-clear')).toBeUndefined();
+      expect(mockHostComm.sendRenderA2UI).not.toHaveBeenCalled();
+
+      // Calls stamped in the exact same millisecond as clearedAtMs (10_000) or later register normally
+      const sameMs = service.registerRpc({
+        functionCallId: 'call-at-clear',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'op2'},
+        sourceWindow: dummyWindow,
+        startedAtMs: 10_000,
+      });
+      const fresh = service.registerRpc({
+        functionCallId: 'call-after-clear',
+        surfaceId: 'surf-1',
+        callFunction: {['@call']: 'op3'},
+        sourceWindow: dummyWindow,
+        startedAtMs: 10_001,
+      });
+      expect(sameMs.status).toBe('pending');
+      expect(fresh.status).toBe('pending');
+      expect(service.getRpc('call-at-clear')?.status).toBe('pending');
+      expect(service.getRpc('call-after-clear')?.status).toBe('pending');
+    });
   });
 });

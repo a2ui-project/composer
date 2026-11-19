@@ -108,7 +108,7 @@ function createStubV10RendererHtml(): string {
             id: 'demo-card-1',
             name: 'Demo Auto Reject',
             description: 'Hermetic test demo',
-            payload: [
+            a2ui: [
               {
                 version: '1.0',
                 createSurface: {

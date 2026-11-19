@@ -107,9 +107,12 @@ export function hasPrototypePollution(val: unknown, maxDepth = 64): boolean {
  * @param maxDepth Maximum recursion depth to guard against circular references.
  * @returns A sanitized copy of the input value.
  */
-export function stripPrototypePollutionKeys<T>(value: T, maxDepth = 20): T {
-  if (!value || typeof value !== 'object' || maxDepth <= 0) {
+export function stripPrototypePollutionKeys<T>(value: T, maxDepth = 64): T {
+  if (!value || typeof value !== 'object') {
     return value;
+  }
+  if (maxDepth <= 0) {
+    return (Array.isArray(value) ? [] : {}) as unknown as T;
   }
   if (Array.isArray(value)) {
     return value.map(item => stripPrototypePollutionKeys(item, maxDepth - 1)) as unknown as T;

@@ -64,6 +64,7 @@ export class PendingRpcRegistry implements OnDestroy {
   private readonly registeredFrames = new Set<Window>();
   private readonly pendingCalls = new Map<string, PendingRpcEntry>();
   private workspaceFrameResolver: WorkspaceFrameResolver | null = null;
+  private clearedAtMs = Number.NEGATIVE_INFINITY;
 
   private readonly _stateVersion = signal<number>(0);
   /** Reactive signal tracking the latest state change for fine-grained UI updates */
@@ -124,7 +125,7 @@ export class PendingRpcRegistry implements OnDestroy {
         changed = true;
       }
     }
-    if (changed || notifyWindow) {
+    if (changed) {
       this.bumpState();
     }
   }
@@ -169,6 +170,22 @@ export class PendingRpcRegistry implements OnDestroy {
    * an automatic 30s timeout.
    */
   registerRpc(params: RegisterRpcParams): PendingRpcEntry {
+    if (params.startedAtMs !== undefined && params.startedAtMs < this.clearedAtMs) {
+      return {
+        functionCallId: params.functionCallId,
+        surfaceId: params.surfaceId,
+        callFunction: params.callFunction,
+        sourceWindow: params.sourceWindow,
+        startedAtMs: params.startedAtMs,
+        deadlineMs: params.startedAtMs + DEFAULT_TIMEOUT_MS,
+        status: 'rejected',
+        error: {
+          code: 'CANCELLED',
+          message: 'Agent function call was cleared from debug logs.',
+        },
+      };
+    }
+
     const startedAtMs = params.startedAtMs ?? Date.now();
     const deadlineMs = startedAtMs + DEFAULT_TIMEOUT_MS;
 
@@ -308,7 +325,8 @@ export class PendingRpcRegistry implements OnDestroy {
   /**
    * Clears all entries and cancels all active timers (e.g. when Events.clearLogs() is called).
    */
-  clearAll(): void {
+  clearAll(clearedAtMs: number = Date.now()): void {
+    this.clearedAtMs = clearedAtMs;
     for (const [functionCallId, entry] of this.pendingCalls.entries()) {
       if (entry.status === 'pending') {
         this.cancelTimer(entry);
@@ -331,6 +349,7 @@ export class PendingRpcRegistry implements OnDestroy {
     this.pendingCalls.clear();
     this.registeredFrames.clear();
     this.workspaceFrameResolver = null;
+    this.clearedAtMs = Number.NEGATIVE_INFINITY;
   }
 
   private handleTimeout(functionCallId: string): void {

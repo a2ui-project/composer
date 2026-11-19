@@ -164,6 +164,8 @@ export class GuestFrame implements OnInit {
   readonly documentReplaced = output<void>();
   /** Emitted when a same-URL reload resets the guest document state before its next handshake. */
   readonly documentReset = output<void>();
+  /** Emitted when a payload dispatch is rejected on the current document without reloading. */
+  readonly renderRejected = output<void>();
 
   private readonly iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('guestIframe');
 
@@ -307,6 +309,7 @@ export class GuestFrame implements OnInit {
     } else if (this.readySinceLoad) {
       this.reloadedOnLoad = true;
       this.lastSentPayload = null;
+      this.documentReset.emit();
       this.syncPayload();
     } else {
       this.resetForNewDocument();
@@ -426,6 +429,9 @@ export class GuestFrame implements OnInit {
           code: 'PROTOCOL_VERSION_MISMATCH',
           message: validation.message,
         });
+        this.lastSentPayload = null;
+        this.renderRejected.emit();
+        this.renderError.emit(undefined);
         return;
       }
     }
@@ -434,8 +440,14 @@ export class GuestFrame implements OnInit {
     if (content === this.lastSentPayload) return;
     const initialForDocument = this.lastSentPayload === null;
     const renderId = `render-${++nextGuestRenderId}`;
+    const sent = this.hostCommunication.sendRenderA2UI(payload, iframe, renderId);
+    if (sent === false) {
+      this.lastSentPayload = null;
+      this.renderRejected.emit();
+      this.renderError.emit(undefined);
+      return;
+    }
     this.lastSentPayload = content;
-    this.hostCommunication.sendRenderA2UI(payload, iframe, renderId);
     this.payloadDispatched.emit({initialForDocument, renderId});
   }
 }

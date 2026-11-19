@@ -38,6 +38,7 @@ import {
   CreateSurfaceCommand,
   ThemePreference,
   McpResponsePayload,
+  isV10RpcEnvelopeItem,
 } from './bridge-message';
 
 import {IframeMcpClient} from './iframe-mcp-client';
@@ -971,6 +972,10 @@ export class PreviewBridge {
     const hasCreateSurface = surfaceIdsToReset.length > 0;
 
     if (hasCreateSurface) {
+      const priorPendingRenderId = this.pendingRenderId;
+      const preservedRpcFollowUps = this.extractRpcEnvelopeFollowUps(this.deferredFollowUpRenders);
+      const effectiveRenderId = renderId ?? priorPendingRenderId;
+
       // Step 1: Synchronously dispatch null to trigger unmounting/reset.
       // Omit resize measurement here since Step 2 will immediately mount and measure the new surface.
       try {
@@ -980,12 +985,13 @@ export class PreviewBridge {
       }
 
       // Step 2: Defer actual payload dispatch to the next event loop tick to
-      // trigger clean remount
+      // trigger clean remount, preserving any queued RPC envelopes across the reset.
       if (this.renderTimeoutId) {
         clearTimeout(this.renderTimeoutId);
       }
       this.deferredFollowUpRenders.length = 0;
-      this.pendingRenderId = renderId;
+      this.deferredFollowUpRenders.push(...preservedRpcFollowUps);
+      this.pendingRenderId = effectiveRenderId;
       this.renderTimeoutId = setTimeout(() => {
         const scheduledRenderId = this.pendingRenderId;
         const followUps = this.deferredFollowUpRenders.splice(0);
@@ -1021,6 +1027,26 @@ export class PreviewBridge {
         console.error('PreviewBridge: Error during direct RENDER_A2UI payload dispatch:', err);
       }
     }
+  }
+
+  private extractRpcEnvelopeFollowUps(
+    followUps: ReadonlyArray<{payload: unknown; isStreaming: boolean; renderId?: string}>,
+  ): Array<{payload: unknown; isStreaming: boolean; renderId?: string}> {
+    const preserved: Array<{payload: unknown; isStreaming: boolean; renderId?: string}> = [];
+    for (const entry of followUps) {
+      if (!Array.isArray(entry.payload)) {
+        continue;
+      }
+      const rpcItems = entry.payload.filter(isV10RpcEnvelopeItem);
+      if (rpcItems.length > 0) {
+        preserved.push({
+          payload: rpcItems,
+          isStreaming: entry.isStreaming,
+          renderId: entry.renderId,
+        });
+      }
+    }
+    return preserved;
   }
 
   /**

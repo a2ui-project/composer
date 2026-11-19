@@ -3240,6 +3240,170 @@ describe('PreviewBridge Core API Runtime', () => {
         vi.useRealTimers();
       }
     });
+
+    it('preserves queued RPC envelopes and pendingRenderId across a superseding createSurface', () => {
+      vi.useFakeTimers();
+      try {
+        const postSpy = vi.mocked(window.parent.postMessage);
+        postSpy.mockClear();
+        processMessagesMock.mockClear();
+
+        // 1. Tagged createSurface schedules deferred render
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              renderId: 'render-tagged-1',
+              payload: [{version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'c1'}}],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        // 2. Queued mixed payload with superseded surface update + RPC envelopes
+        const queuedRpcCall = {
+          version: '1.0',
+          callRendererFunction: {
+            surfaceId: 's1',
+            functionCallId: 'fn-queued-1',
+            callFunction: {['@call']: 'focusInput'},
+          },
+        };
+        const queuedAgentResp = {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId: 'agent-fn-1',
+            value: {ok: true},
+          },
+        };
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              renderId: 'render-rpc-2',
+              payload: [
+                {version: '1.0', updateDataModel: {surfaceId: 's1', value: {stale: true}}},
+                queuedRpcCall,
+                queuedAgentResp,
+              ],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        // 3. Superseding untagged createSurface coalesces in the same tick
+        const newSurfacePayload = [
+          {version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
+        ];
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              payload: newSurfacePayload,
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        vi.runAllTimers();
+
+        // Superseded updateDataModel was dropped, while new createSurface (with pre-delete) + queued RPC envelopes ran in order
+        const processedBatches = processMessagesMock.mock.calls.map(c => c[0]);
+        expect(processedBatches).toEqual([
+          [{version: '1.0', deleteSurface: {surfaceId: 's1'}}],
+          newSurfacePayload,
+          [queuedRpcCall, queuedAgentResp],
+        ]);
+
+        // Preserved renderId ('render-tagged-1' from superseded createSurface, and 'render-rpc-2' from RPC follow-up)
+        const successMsgs = postSpy.mock.calls
+          .filter(c => (c[0] as {type?: string})?.type === PreviewBridgeMessageType.RENDER_SUCCESS)
+          .map(c => c[0]);
+        expect(successMsgs).toEqual([
+          {type: PreviewBridgeMessageType.RENDER_SUCCESS, renderId: 'render-tagged-1'},
+          {type: PreviewBridgeMessageType.RENDER_SUCCESS, renderId: 'render-rpc-2'},
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('drops queued items whose RPC key is explicitly undefined when a superseding createSurface arrives', () => {
+      vi.useFakeTimers();
+      let unsubscribeHandle: {unsubscribe(): void} | undefined;
+      try {
+        const processMessagesMock = vi.fn();
+        const surfaceGroupMock = {onSurfaceCreated: {subscribe: vi.fn()}};
+        unsubscribeHandle = bridge.attachRenderer(
+          {processMessages: processMessagesMock} as unknown as Parameters<
+            typeof bridge.attachRenderer
+          >[0],
+          {
+            surfaceGroup: surfaceGroupMock as unknown as Parameters<
+              typeof bridge.attachRenderer
+            >[1]['surfaceGroup'],
+            onSurfaceReady: vi.fn(),
+          },
+        );
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              payload: [{version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'c1'}}],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        // Payload has an explicit `undefined` RPC key alongside a surface update
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              payload: [
+                {
+                  version: '1.0',
+                  updateDataModel: {surfaceId: 's1', value: {stale: true}},
+                  callRendererFunction: undefined,
+                },
+              ],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        const newSurfacePayload = [
+          {version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
+        ];
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              payload: newSurfacePayload,
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        vi.runAllTimers();
+
+        const processedBatches = processMessagesMock.mock.calls.map(c => c[0]);
+        expect(processedBatches).toEqual([
+          [{version: '1.0', deleteSurface: {surfaceId: 's1'}}],
+          newSurfacePayload,
+        ]);
+      } finally {
+        unsubscribeHandle?.unsubscribe();
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('Outbound RPC Channel and Processor Management', () => {

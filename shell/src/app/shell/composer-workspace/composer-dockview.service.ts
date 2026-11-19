@@ -21,6 +21,7 @@ import {
   ComponentRef,
   Type,
   ChangeDetectorRef,
+  OutputRefSubscription,
   inject,
 } from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
@@ -395,6 +396,8 @@ export class ComposerDockview {
     const componentRef = this.viewContainerRef.createComponent(type);
     this.componentRefs.push(componentRef);
 
+    let renderStateResetSub: OutputRefSubscription | undefined;
+
     // A docked preview fills its panel and the guest scrolls inside it. Dockview
     // gives the panel's overlay an explicit pixel size, so the frame's
     // `height: 100%` resolves. `sizing` and `defaultTarget` are required, so
@@ -403,6 +406,11 @@ export class ComposerDockview {
       componentRef.setInput('sizing', 'fill' satisfies RenderedFrameSizing);
       componentRef.setInput('defaultTarget', DefaultTarget.REPLACE);
       this.renderedFrameInstance = componentRef.instance as RenderedFrame;
+      renderStateResetSub = this.renderedFrameInstance.renderStateReset.subscribe(win => {
+        this.pendingRpcRegistry?.cancelPendingCalls(win, {
+          message: 'Originating workspace preview frame was reset.',
+        });
+      });
     }
     if (type === DataModel) this.dataModelInstance = componentRef.instance as DataModel;
     if (type === RawMessages) this.rawMessagesInstance = componentRef.instance as RawMessages;
@@ -415,6 +423,8 @@ export class ComposerDockview {
         componentRef.changeDetectorRef.detectChanges();
       },
       dispose: () => {
+        renderStateResetSub?.unsubscribe();
+        renderStateResetSub = undefined;
         if (componentRef.instance === this.dataModelInstance) {
           this.dataModelInstance = undefined;
         }

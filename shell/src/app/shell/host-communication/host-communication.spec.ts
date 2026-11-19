@@ -2576,5 +2576,31 @@ describe('HostCommunication', () => {
       const successEnvelope = emitted.find(e => e.type === PreviewBridgeMessageType.RENDER_SUCCESS);
       expect(successEnvelope?.renderId).toBe('render-42');
     });
+
+    it('returns true when sendMessage/sendRenderA2UI posts or queues and false on validation or missing target failure', () => {
+      const queued = service.sendRenderA2UI(
+        [{version: 'v0.9', updateDataModel: {surfaceId: 's-1', value: {a: 1}}}],
+        mockIframeWindow,
+      );
+      expect(queued).toBe(true);
+
+      const invalid = service.sendMessage({type: '' as PreviewBridgeMessageType}, mockIframeWindow);
+      expect(invalid).toBe(false);
+
+      // Mark mockIframeWindow ready so isRendererReady() is true, then pass a detached unregistered iframe
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      const detachedIframe = {contentWindow: null} as unknown as HTMLIFrameElement;
+      const missingTarget = service.sendRenderA2UI(
+        [{version: 'v0.9', updateDataModel: {surfaceId: 's-1', value: {a: 1}}}],
+        detachedIframe,
+      );
+      expect(missingTarget).toBe(false);
+    });
   });
 });

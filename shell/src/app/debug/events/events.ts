@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal, DestroyRef} from '@angular/core';
+import {Component, Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatTableModule} from '@angular/material/table';
 import {JsonPipe} from '@angular/common';
@@ -62,6 +62,23 @@ export declare interface DisplayEventLogItem {
 }
 
 /**
+ * Owns the debug-log clear watermark across `Events` tab unmount/remount cycles.
+ */
+@Injectable({providedIn: 'root'})
+export class EventsLogState {
+  private clearedAtMs = Number.NEGATIVE_INFINITY;
+
+  markCleared(atMs: number = Date.now()): number {
+    this.clearedAtMs = atMs;
+    return atMs;
+  }
+
+  isBeforeClear(timestampMs: number): boolean {
+    return timestampMs < this.clearedAtMs;
+  }
+}
+
+/**
  * A debug drawer component displaying interactive event hooks and custom
  * event transmissions triggered by layout elements.
  */
@@ -75,6 +92,7 @@ export declare interface DisplayEventLogItem {
 export class Events {
   private readonly hostComm = inject(HostCommunication);
   private readonly pendingRpcRegistry = inject(PendingRpcRegistry);
+  private readonly logState = inject(EventsLogState);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly eventsLog = signal<DisplayEventLogItem[]>([]);
@@ -125,6 +143,10 @@ export class Events {
   }
 
   private mapEnvelopeToEvent(envelope: MessageEnvelope): DisplayEventLogItem | null {
+    if (envelope.timestamp !== undefined && this.logState.isBeforeClear(envelope.timestamp)) {
+      return null;
+    }
+
     // NOTE: Bracket notation is used to access properties on the parsed postMessage payload
     // to prevent compiler minification renaming from breaking property reads.
     const payload = envelope.payload as RawServerPayload | undefined;
@@ -215,7 +237,8 @@ export class Events {
   }
 
   clearLogs(): void {
-    this.pendingRpcRegistry.clearAll();
+    const clearedAtMs = this.logState.markCleared(Date.now());
+    this.pendingRpcRegistry.clearAll(clearedAtMs);
     this.eventsLog.set([]);
   }
 }

@@ -16,6 +16,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach, type Mock} from 'vitest';
 import {CrossFrameValidator} from './cross-frame-validator';
+import {stripPrototypePollutionKeys} from './wire-version-validator';
 import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 
 describe('CrossFrameValidator', () => {
@@ -1701,6 +1702,38 @@ describe('CrossFrameValidator', () => {
           mockLogger,
         ),
       ).toBe(false);
+    });
+  });
+
+  describe('stripPrototypePollutionKeys', () => {
+    it('strips prototype pollution keys beyond depth 20 up to default maxDepth 64 and returns empty containers at maxDepth <= 0', () => {
+      // Build depth 25 object containing polluted key at leaf
+      const deep: Record<string, unknown> = {};
+      let cursor = deep;
+      for (let i = 0; i < 25; i++) {
+        const next: Record<string, unknown> = {};
+        cursor[`level${i}`] = next;
+        cursor = next;
+      }
+      Object.defineProperty(cursor, 'constructor', {
+        value: {polluted: true},
+        enumerable: true,
+        configurable: true,
+      });
+      cursor['safe'] = 'ok';
+
+      const sanitized = stripPrototypePollutionKeys(deep);
+      let out: Record<string, unknown> = sanitized;
+      for (let i = 0; i < 25; i++) {
+        out = out[`level${i}`] as Record<string, unknown>;
+      }
+      expect(out['safe']).toBe('ok');
+      expect(Object.prototype.hasOwnProperty.call(out, 'constructor')).toBe(false);
+
+      // When maxDepth <= 0, containers are truncated to empty object/array instead of returning unsanitized input
+      const pollutedObj = JSON.parse('{"__proto__": {"admin": true}, "a": 1}');
+      expect(stripPrototypePollutionKeys(pollutedObj, 0)).toEqual({});
+      expect(stripPrototypePollutionKeys([pollutedObj], 0)).toEqual([]);
     });
   });
 });

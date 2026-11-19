@@ -66,6 +66,7 @@ type FrameEvent =
       (renderError)="onRenderError($event)"
       (documentReplaced)="record({output: 'documentReplaced'})"
       (documentReset)="documentResetCount = documentResetCount + 1"
+      (renderRejected)="renderRejectedCount = renderRejectedCount + 1"
     >
       <p>No renderer</p>
     </a2ui-composer-guest-frame>
@@ -78,6 +79,7 @@ class TestHost {
   readonly events: FrameEvent[] = [];
   readonly renderAcks: Array<{type: 'success' | 'error'; renderId?: string}> = [];
   documentResetCount = 0;
+  renderRejectedCount = 0;
 
   /** Called with each emission as it happens, for checks on ordering. */
   onEvent: (event: FrameEvent) => void = () => {};
@@ -1253,6 +1255,108 @@ describe('GuestFrame', () => {
         iframe,
         expect.any(String),
       );
+    });
+
+    it('emits documentReset on readySinceLoad reload even when syncPayload returns early', async () => {
+      hasReceivedCatalogResponseSignal.set(false);
+      const {fixture, harness} = await mount(host => host.payload.set(PAYLOAD));
+      const iframe = await iframeOf(harness);
+      await harness.simulateFrameLoad();
+
+      // First RENDERER_READY + second RENDERER_READY without render ack sets readySinceLoad = true
+      messages.next(
+        bridgeEnvelope(
+          PreviewBridgeMessageType.RENDERER_READY,
+          {},
+          {sourceWindow: iframe.contentWindow!},
+        ),
+      );
+      messages.next(
+        bridgeEnvelope(
+          PreviewBridgeMessageType.RENDERER_READY,
+          {},
+          {sourceWindow: iframe.contentWindow!},
+        ),
+      );
+      fixture.detectChanges();
+      expect(fixture.componentInstance.documentResetCount).toBe(0);
+
+      // Same-URL reload hits the `else if (this.readySinceLoad)` branch while catalog is still unsettled
+      await harness.simulateFrameLoad();
+      fixture.detectChanges();
+
+      expect(hostCommunication.sendRenderA2UI).not.toHaveBeenCalled();
+      expect(fixture.componentInstance.documentResetCount).toBe(1);
+    });
+
+    it('treats sendRenderA2UI returning false as a rejected send without latching lastSentPayload', async () => {
+      hasReceivedCatalogResponseSignal.set(true);
+      activeProtocolVersionSignal.set('v0.9');
+      hostCommunication.sendRenderA2UI.mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+      const {fixture, harness} = await mount(host => host.payload.set(PAYLOAD));
+      const iframe = await iframeOf(harness);
+      await harness.simulateFrameLoad();
+
+      messages.next(
+        bridgeEnvelope(
+          PreviewBridgeMessageType.RENDERER_READY,
+          {},
+          {sourceWindow: iframe.contentWindow!},
+        ),
+      );
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.documentResetCount).toBe(0);
+      expect(fixture.componentInstance.renderRejectedCount).toBe(1);
+      expect(fixture.componentInstance.renderAcks).toContainEqual({
+        type: 'error',
+        renderId: undefined,
+      });
+
+      // Trigger syncPayload again with a fresh array of the same payload: must retry send since lastSentPayload was not latched
+      fixture.componentInstance.payload.set([...PAYLOAD]);
+      fixture.detectChanges();
+
+      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
+    });
+
+    it('emits renderRejected and renderError without documentReset on PROTOCOL_VERSION_MISMATCH and recovers on valid payload', async () => {
+      hasReceivedCatalogResponseSignal.set(true);
+      activeProtocolVersionSignal.set('v0.9');
+
+      const v1Payload = [{version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'cat-1'}}];
+
+      const {fixture, harness} = await mount(host => host.payload.set(PAYLOAD));
+      const iframe = await iframeOf(harness);
+      await harness.simulateFrameLoad();
+
+      messages.next(
+        bridgeEnvelope(
+          PreviewBridgeMessageType.RENDERER_READY,
+          {},
+          {sourceWindow: iframe.contentWindow!},
+        ),
+      );
+      fixture.detectChanges();
+      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
+
+      // Sending mismatched v1.0 payload while activeProtocolVersion is v0.9 rejects without firing documentReset
+      fixture.componentInstance.payload.set(v1Payload);
+      fixture.detectChanges();
+
+      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
+      expect(fixture.componentInstance.documentResetCount).toBe(0);
+      expect(fixture.componentInstance.renderRejectedCount).toBe(1);
+      expect(fixture.componentInstance.renderAcks).toContainEqual({
+        type: 'error',
+        renderId: undefined,
+      });
+
+      // Returning to the original PAYLOAD must dispatch again because lastSentPayload was cleared
+      fixture.componentInstance.payload.set([...PAYLOAD]);
+      fixture.detectChanges();
+      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -811,14 +811,15 @@ export class HostCommunication implements OnDestroy {
    * Validates and dispatches a structured postMessage payload to the registered guest frame.
    * @param message Structured message payload
    * @param target Optional explicit target iframe element or window reference
+   * @returns `true` if posted or queued in the outbound buffer; `false` if rejected or undeliverable
    */
   sendMessage(
     message: {type: PreviewBridgeMessageType; payload?: unknown; renderId?: string},
     target?: HTMLIFrameElement | Window | null,
-  ): void {
+  ): boolean {
     if (!CrossFrameValidator.validateOutgoingMessage(message, undefined, this.logger)) {
       this.logger.error('Blocked dispatch of malformed message type...', message);
-      return;
+      return false;
     }
 
     // Callers can run inside effects (GuestFrame's payload effect, this
@@ -829,14 +830,14 @@ export class HostCommunication implements OnDestroy {
     if (!untracked(() => this.isTargetReady(target))) {
       this.logger.info('Queueing outbound message; renderer is not yet ready.', message);
       this.outboundMessageBuffer.push({message, target});
-      return;
+      return true;
     }
 
     const targetWindow = this.resolveTargetWindow(target);
-    if (!targetWindow) return;
+    if (!targetWindow) return false;
 
     const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-    if (!expectedUrl) return;
+    if (!expectedUrl) return false;
 
     try {
       const targetOrigin = this.environmentContext.resolveRendererUrl(expectedUrl).origin;
@@ -850,8 +851,10 @@ export class HostCommunication implements OnDestroy {
           sourceWindow: targetWindow,
         });
       }
+      return true;
     } catch (err) {
       // Ignore malformed URL
+      return false;
     }
   }
 
@@ -895,13 +898,14 @@ export class HostCommunication implements OnDestroy {
    * @param payload Array of layout nodes or configuration objects
    * @param target Optional explicit target iframe element or window reference
    * @param renderId Optional dispatch ID echoed by PreviewBridge on render completion
+   * @returns `true` if posted or queued; `false` if rejected or undeliverable
    */
   sendRenderA2UI(
     payload: unknown[],
     target?: HTMLIFrameElement | Window | null,
     renderId?: string,
-  ): void {
-    this.sendMessage(
+  ): boolean {
+    return this.sendMessage(
       {
         type: PreviewBridgeMessageType.RENDER_A2UI,
         payload: payload,
