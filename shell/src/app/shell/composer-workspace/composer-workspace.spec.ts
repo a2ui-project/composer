@@ -959,7 +959,7 @@ describe('ComposerWorkspace Dashboard', () => {
 
         const propertyEditorPanel = manager.api.getGroupPanel(ComposerPanelId.PropertyEditor);
         expect(propertyEditorPanel?.group.activePanel?.id).toBe(ComposerPanelId.PropertyEditor);
-        expect(propertyEditor.resetKey()).toBe('s');
+        expect(propertyEditor.resetKey()).toBe('s:s/root/0:title:0');
         expect(propertyEditor.showHeader()).toBe(true);
         expect(propertyEditor.showStatus()).toBe(true);
         expect(propertyEditor.component()).toEqual({
@@ -986,6 +986,69 @@ describe('ComposerWorkspace Dashboard', () => {
           component: 'Text',
           text: 'Updated',
         });
+      });
+
+      it('changes resetKey when switching between occurrences of a shared component', () => {
+        stateSync.activeDraftSignal.set(
+          JSON.stringify([
+            {version: 'v0.9', createSurface: {surfaceId: 's', catalogId: 'basic'}},
+            {
+              version: 'v0.9',
+              updateComponents: {
+                surfaceId: 's',
+                components: [
+                  {id: 'root', component: 'Column', children: ['title', 'title']},
+                  {id: 'title', component: 'Text', text: 'Hello'},
+                ],
+              },
+            },
+          ]),
+        );
+        fixture.detectChanges();
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+        const firstResetKey = propertyEditor.resetKey();
+
+        componentTree.selectNode('s', {...TITLE_NODE, key: 's/root/1:title'});
+        fixture.detectChanges();
+
+        expect(propertyEditor.resetKey()).not.toBe(firstResetKey);
+      });
+
+      it('changes resetKey when the active draft is modified externally', () => {
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+        const initialResetKey = propertyEditor.resetKey();
+
+        stateSync.activeDraftSignal.set(
+          JSON.stringify([
+            {version: 'v0.9', createSurface: {surfaceId: 's', catalogId: 'basic'}},
+            {
+              version: 'v0.9',
+              updateComponents: {
+                surfaceId: 's',
+                components: [
+                  {id: 'root', component: 'Column', children: ['title']},
+                  {id: 'title', component: 'Text', text: 'External edit'},
+                ],
+              },
+            },
+          ]),
+        );
+        fixture.detectChanges();
+
+        expect(propertyEditor.resetKey()).not.toBe(initialResetKey);
+      });
+
+      it('changes resetKey when the session resets even if the draft text is unchanged', () => {
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+        const initialResetKey = propertyEditor.resetKey();
+
+        stateSync.sessionResetNonce.update(count => count + 1);
+        fixture.detectChanges();
+
+        expect(propertyEditor.resetKey()).not.toBe(initialResetKey);
       });
 
       it('disables the Property Editor when a programmatic stream starts', () => {
