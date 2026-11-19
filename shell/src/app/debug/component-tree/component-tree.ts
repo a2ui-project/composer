@@ -178,21 +178,34 @@ export class ComponentTree {
   }
 
   protected focusNextNode(event: Event): void {
-    this.stepFocus(event, 1);
+    this.moveTreeFocus(event, (rows, currentIndex) => rows[currentIndex + 1]);
   }
 
   protected focusPreviousNode(event: Event): void {
-    this.stepFocus(event, -1);
+    this.moveTreeFocus(event, (rows, currentIndex) => rows[currentIndex - 1]);
   }
 
-  private stepFocus(event: Event, delta: 1 | -1): void {
+  protected focusFirstNode(event: Event): void {
+    this.moveTreeFocus(event, rows => rows[0]);
+  }
+
+  protected focusLastNode(event: Event): void {
+    this.moveTreeFocus(event, rows => rows.at(-1));
+  }
+
+  private moveTreeFocus(
+    event: Event,
+    selectTarget: (rows: readonly HTMLElement[], currentIndex: number) => HTMLElement | undefined,
+  ) {
     event.preventDefault();
     const currentRow = event.currentTarget;
     if (!(currentRow instanceof HTMLElement)) return;
     const tree = currentRow.closest<HTMLElement>('[role="tree"]');
     if (!tree) return;
     const rows = Array.from(tree.querySelectorAll<HTMLElement>('.tree-row'));
-    rows[rows.indexOf(currentRow) + delta]?.focus();
+    const currentIndex = rows.indexOf(currentRow);
+    if (currentIndex === -1) return;
+    selectTarget(rows, currentIndex)?.focus();
   }
 
   protected toggle(node: ComponentTreeNode, event?: Event): void {

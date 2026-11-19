@@ -91,6 +91,8 @@
     (keydown.arrowUp)="focusPreviousNode($event)"
     (keydown.arrowLeft)="collapseNode(node, parentRow, $event)"
     (keydown.arrowRight)="expandNode(node, $event)"
+    (keydown.home)="focusFirstNode($event)"
+    (keydown.end)="focusLastNode($event)"
   >
     @if (node.children.length > 0) {
       <span class="toggle" aria-hidden="true" (click)="toggle(node, $event)">
