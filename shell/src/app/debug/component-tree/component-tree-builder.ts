@@ -433,9 +433,26 @@ export function getSurfaceComponent(
   return collectSurfaces(messages).get(surfaceId)?.components.get(componentId) ?? null;
 }
 
+function replaceLastMatchingComponent(
+  components: readonly unknown[],
+  componentId: string,
+  updatedComponent: Record<string, unknown>,
+): unknown[] | null {
+  for (let componentIndex = components.length - 1; componentIndex >= 0; componentIndex--) {
+    const component = asRecord(components[componentIndex]);
+    if (component && component['id'] === componentId) {
+      const nextComponents = [...components];
+      nextComponents[componentIndex] = updatedComponent;
+      return nextComponents;
+    }
+  }
+  return null;
+}
+
 /**
  * Returns a copy of [messages] with component [componentId] in [surfaceId]
- * replaced by [updatedComponent] in its latest `updateComponents` message.
+ * replaced by [updatedComponent] in its latest `updateComponents` or inline
+ * `createSurface` message.
  */
 export function updateSurfaceComponent(
   messages: readonly unknown[],
@@ -454,26 +471,45 @@ export function updateSurfaceComponent(
       updateComponents['surfaceId'] === surfaceId &&
       Array.isArray(updateComponents['components'])
     ) {
-      const components = updateComponents['components'];
-      for (let componentIndex = components.length - 1; componentIndex >= 0; componentIndex--) {
-        const component = asRecord(components[componentIndex]);
-        if (component && component['id'] === componentId) {
-          const nextComponents = [...components];
-          nextComponents[componentIndex] = updatedComponent;
+      const nextComponents = replaceLastMatchingComponent(
+        updateComponents['components'],
+        componentId,
+        updatedComponent,
+      );
+      if (nextComponents) {
+        const nextMessages = [...messages];
+        nextMessages[messageIndex] = {
+          ...record,
+          updateComponents: {
+            ...updateComponents,
+            components: nextComponents,
+          },
+        };
+        return nextMessages;
+      }
+    }
+    const createSurface = asRecord(record['createSurface']);
+    if (createSurface && createSurface['surfaceId'] === surfaceId) {
+      if (Array.isArray(createSurface['components'])) {
+        const nextComponents = replaceLastMatchingComponent(
+          createSurface['components'],
+          componentId,
+          updatedComponent,
+        );
+        if (nextComponents) {
           const nextMessages = [...messages];
           nextMessages[messageIndex] = {
             ...record,
-            updateComponents: {
-              ...updateComponents,
+            createSurface: {
+              ...createSurface,
               components: nextComponents,
             },
           };
           return nextMessages;
         }
       }
+      break;
     }
-    const createSurface = asRecord(record['createSurface']);
-    if (createSurface && createSurface['surfaceId'] === surfaceId) break;
   }
   return [...messages];
 }

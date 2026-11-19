@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
+import {TestKey} from '@angular/cdk/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal, WritableSignal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
@@ -75,14 +76,6 @@ describe('ComponentTree', () => {
   let mergedActiveCatalog: WritableSignal<Catalog | null>;
   let updateDraftSpy: ReturnType<typeof vi.fn>;
 
-  const getRows = () =>
-    Array.from(fixture.nativeElement.querySelectorAll('.tree-row')) as HTMLElement[];
-
-  const pressKey = (element: HTMLElement, key: string) => {
-    element.dispatchEvent(new KeyboardEvent('keydown', {key, bubbles: true}));
-    fixture.detectChanges();
-  };
-
   beforeEach(async () => {
     activeDraft = signal(formatJson(SECONDARY_MODAL_MESSAGES));
     activeCatalog = signal<Catalog | null>(null);
@@ -113,6 +106,10 @@ describe('ComponentTree', () => {
     component = fixture.componentInstance;
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ComponentTreeHarness);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('prefers mergedActiveCatalog over activeCatalog so secondary catalog reference slots are expanded', async () => {
@@ -304,148 +301,220 @@ describe('ComponentTree', () => {
     expect(await harness.getRowIds()).toEqual(['#root']);
   });
 
-  it('starts with no node selected', () => {
-    expect(component.selected()).toBeNull();
-    expect(component.selectedComponent()).toBeNull();
-  });
-
-  it('selects a node on click and dispatches OpenPanelEvent for PropertyEditor', () => {
-    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
-    const rows = getRows();
-
-    rows[2].click();
-    fixture.detectChanges();
-
-    expect(dispatchSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: OpenPanelEvent.TYPE,
-        detail: {panelId: ComposerPanelId.PropertyEditor},
-      }),
-    );
-    dispatchSpy.mockRestore();
-    expect(rows[2].classList.contains('selected')).toBe(true);
-    expect(rows[2].getAttribute('aria-selected')).toBe('true');
-    expect(rows[0].getAttribute('aria-selected')).toBe('false');
-    expect(component.selectedComponent()).toEqual({
-      id: 'greeting',
-      component: 'Text',
-      text: 'Hello',
-      variant: 'body',
-    });
-  });
-
-  it('updates the selected component in the active draft via updateSelectedComponent', () => {
-    const rows = getRows();
-    rows[2].click();
-    fixture.detectChanges();
-
-    component.updateSelectedComponent({
-      id: 'greeting',
-      component: 'Text',
-      text: 'Updated greeting',
-      variant: 'body',
-    });
-    fixture.detectChanges();
-
-    expect(updateDraftSpy).toHaveBeenCalledTimes(1);
-    const updatedPayload = JSON.parse(activeDraft());
-    expect(updatedPayload[1].updateComponents.components).toEqual([
-      {id: 'root', component: 'Column', children: ['branch', 'ghost']},
-      {id: 'branch', component: 'Column', children: ['greeting']},
-      {id: 'greeting', component: 'Text', text: 'Updated greeting', variant: 'body'},
-    ]);
-  });
-
-  it('switches selection when a different node is clicked', () => {
-    const rows = getRows();
-
-    rows[2].click();
-    fixture.detectChanges();
-    expect(component.selected()?.id).toBe('greeting');
-
-    rows[0].click();
-    fixture.detectChanges();
-    expect(rows[0].classList.contains('selected')).toBe(true);
-    expect(rows[2].classList.contains('selected')).toBe(false);
-    expect(component.selected()?.id).toBe('root');
-  });
-
-  describe('keyboard navigation', () => {
-    it('sets roving tabindex and aria-level on tree rows', () => {
-      const rows = getRows();
-      expect(rows.map(row => row.getAttribute('tabindex'))).toEqual(['0', '-1', '-1', '-1']);
-      expect(rows.map(row => row.getAttribute('aria-level'))).toEqual(['1', '2', '3', '2']);
-    });
-
-    it('falls back to the first node when the focused node is collapsed or removed', () => {
-      let rows = getRows();
-      rows[2].focus();
+  describe('selection and keyboard navigation', () => {
+    beforeEach(() => {
+      activeCatalog.set(MERGED_CATALOG);
       fixture.detectChanges();
-      expect(rows.map(row => row.getAttribute('tabindex'))).toEqual(['-1', '-1', '0', '-1']);
-
-      const toggleButton = rows[1].querySelector('button.toggle') as HTMLButtonElement;
-      toggleButton.click();
-      fixture.detectChanges();
-      rows = getRows();
-      expect(rows.map(row => row.getAttribute('tabindex'))).toEqual(['0', '-1', '-1']);
     });
 
-    it('moves focus with ArrowDown and ArrowUp into expanded children before siblings without selecting', () => {
-      const rows = getRows();
-
-      pressKey(rows[0], 'ArrowDown');
-      expect(document.activeElement).toBe(rows[1]);
+    it('starts with no node selected', () => {
       expect(component.selected()).toBeNull();
-
-      pressKey(rows[1], 'ArrowDown');
-      expect(document.activeElement).toBe(rows[2]);
-      expect(rows[2].textContent).toContain('#greeting');
-
-      pressKey(rows[2], 'ArrowUp');
-      expect(document.activeElement).toBe(rows[1]);
+      expect(component.selectedComponent()).toBeNull();
     });
 
-    it('selects the focused node on Enter or Space', () => {
-      const rows = getRows();
+    it('selects a node on click and dispatches OpenPanelEvent for PropertyEditor', async () => {
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
 
-      pressKey(rows[2], 'Enter');
-      expect(component.selected()?.id).toBe('greeting');
+      await harness.selectRow('#open');
 
-      pressKey(rows[1], ' ');
-      expect(component.selected()?.id).toBe('branch');
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: OpenPanelEvent.TYPE,
+          detail: {panelId: ComposerPanelId.PropertyEditor},
+        }),
+      );
+      const rows = await harness.getRows();
+      expect(rows.map(row => row.selected)).toEqual([false, false, true, false]);
+      expect(component.selectedComponent()).toEqual({
+        id: 'open',
+        component: 'Text',
+        text: 'Open',
+      });
     });
 
-    it('collapses an expanded node on ArrowLeft and focuses its parent when already collapsed or a leaf', () => {
-      let rows = getRows();
+    it('does not select the row or open PropertyEditor when toggling expansion', async () => {
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
 
-      pressKey(rows[2], 'ArrowLeft');
-      expect(document.activeElement).toBe(rows[1]);
+      await harness.toggleRow('#modal');
 
-      pressKey(rows[1], 'ArrowLeft');
-      rows = getRows();
-      expect(rows.length).toBe(3);
-      expect(rows[1].getAttribute('aria-expanded')).toBe('false');
-
-      pressKey(rows[1], 'ArrowLeft');
-      expect(document.activeElement).toBe(rows[0]);
+      expect(dispatchSpy).not.toHaveBeenCalled();
+      expect(component.selected()).toBeNull();
+      const rows = await harness.getRows();
+      expect(
+        rows.map(row => ({id: row.id, expanded: row.expanded, selected: row.selected})),
+      ).toEqual([
+        {id: '#root', expanded: true, selected: false},
+        {id: '#modal', expanded: false, selected: false},
+      ]);
     });
 
-    it('focuses the first child on ArrowRight when expanded and expands when collapsed', () => {
-      let rows = getRows();
+    it('updates the selected component in the active draft via updateSelectedComponent', async () => {
+      await harness.selectRow('#open');
 
-      pressKey(rows[1], 'ArrowLeft');
-      rows = getRows();
+      component.updateSelectedComponent({
+        id: 'open',
+        component: 'Text',
+        text: 'Updated Open',
+      });
+      fixture.detectChanges();
 
-      pressKey(rows[0], 'ArrowRight');
-      expect(document.activeElement).toBe(rows[1]);
+      expect(updateDraftSpy).toHaveBeenCalledTimes(1);
+      const updatedPayload = JSON.parse(activeDraft());
+      expect(updatedPayload[0].createSurface.components).toEqual([
+        {id: 'root', component: 'Column', children: ['modal']},
+        {id: 'modal', component: 'Modal', trigger: 'open', content: 'body'},
+        {id: 'open', component: 'Text', text: 'Updated Open'},
+        {id: 'body', component: 'Text', text: 'Details'},
+      ]);
+    });
 
-      pressKey(rows[1], 'ArrowRight');
-      rows = getRows();
-      expect(rows.length).toBe(4);
-      expect(rows[1].getAttribute('aria-expanded')).toBe('true');
+    it('switches selection when a different node is clicked', async () => {
+      await harness.selectRow('#open');
 
-      pressKey(rows[1], 'ArrowRight');
-      expect(document.activeElement).toBe(rows[2]);
+      await harness.selectRow('#root');
+
+      const rows = await harness.getRows();
+      expect(rows.map(row => row.selected)).toEqual([true, false, false, false]);
+      expect(component.selected()?.id).toBe('root');
+    });
+
+    describe('keyboard navigation', () => {
+      it('sets roving tabindex and aria-level on tree rows', async () => {
+        const rows = await harness.getRows();
+
+        expect(rows.map(row => row.tabIndex)).toEqual([0, -1, -1, -1]);
+        expect(rows.map(row => row.level)).toEqual([1, 2, 3, 3]);
+      });
+
+      it('resets tabindex to the first row when the focused node is collapsed', async () => {
+        await harness.focusRow('#open');
+
+        await harness.toggleRow('#modal');
+
+        const rows = await harness.getRows();
+        expect(rows.map(row => ({id: row.id, tabIndex: row.tabIndex}))).toEqual([
+          {id: '#root', tabIndex: 0},
+          {id: '#modal', tabIndex: -1},
+        ]);
+      });
+
+      it('resets tabindex to the first row when the focused node is removed from the draft', async () => {
+        await harness.focusRow('#open');
+
+        activeDraft.set(
+          formatJson([
+            {
+              version: '1.0',
+              createSurface: {
+                surfaceId: 's',
+                catalogId: 'primary-catalog',
+                components: [
+                  {id: 'root', component: 'Column', children: ['body']},
+                  {id: 'body', component: 'Text', text: 'Details'},
+                ],
+              },
+            },
+          ]),
+        );
+        fixture.detectChanges();
+
+        const rows = await harness.getRows();
+        expect(rows.map(row => ({id: row.id, tabIndex: row.tabIndex}))).toEqual([
+          {id: '#root', tabIndex: 0},
+          {id: '#body', tabIndex: -1},
+        ]);
+      });
+
+      it('moves focus with ArrowDown and ArrowUp across visible rows without selecting', async () => {
+        await harness.pressKeyOnRow('#root', TestKey.DOWN_ARROW);
+        expect(await harness.getFocusedRowId()).toBe('#modal');
+        expect(component.selected()).toBeNull();
+
+        await harness.pressKeyOnRow('#modal', TestKey.DOWN_ARROW);
+        expect(await harness.getFocusedRowId()).toBe('#open');
+
+        await harness.pressKeyOnRow('#open', TestKey.DOWN_ARROW);
+        expect(await harness.getFocusedRowId()).toBe('#body');
+
+        await harness.pressKeyOnRow('#body', TestKey.UP_ARROW);
+        expect(await harness.getFocusedRowId()).toBe('#open');
+
+        await harness.pressKeyOnRow('#open', TestKey.UP_ARROW);
+        expect(await harness.getFocusedRowId()).toBe('#modal');
+      });
+
+      it('selects the focused node and opens PropertyEditor on Enter or Space', async () => {
+        const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+
+        await harness.pressKeyOnRow('#open', TestKey.ENTER);
+        expect(component.selected()?.id).toBe('open');
+        expect((await harness.getRows()).map(row => row.selected)).toEqual([
+          false,
+          false,
+          true,
+          false,
+        ]);
+        expect(dispatchSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: OpenPanelEvent.TYPE,
+            detail: {panelId: ComposerPanelId.PropertyEditor},
+          }),
+        );
+
+        dispatchSpy.mockClear();
+
+        await harness.pressKeyOnRow('#modal', ' ');
+        expect(component.selected()?.id).toBe('modal');
+        expect((await harness.getRows()).map(row => row.selected)).toEqual([
+          false,
+          true,
+          false,
+          false,
+        ]);
+        expect(dispatchSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: OpenPanelEvent.TYPE,
+            detail: {panelId: ComposerPanelId.PropertyEditor},
+          }),
+        );
+      });
+
+      it('collapses an expanded node on ArrowLeft', async () => {
+        await harness.pressKeyOnRow('#modal', TestKey.LEFT_ARROW);
+
+        const rows = await harness.getRows();
+        expect(rows.map(row => ({id: row.id, expanded: row.expanded}))).toEqual([
+          {id: '#root', expanded: true},
+          {id: '#modal', expanded: false},
+        ]);
+      });
+
+      it('focuses the parent node on ArrowLeft from a leaf or collapsed node', async () => {
+        await harness.pressKeyOnRow('#open', TestKey.LEFT_ARROW);
+        expect(await harness.getFocusedRowId()).toBe('#modal');
+
+        await harness.toggleRow('#modal');
+        await harness.pressKeyOnRow('#modal', TestKey.LEFT_ARROW);
+        expect(await harness.getFocusedRowId()).toBe('#root');
+      });
+
+      it('expands a collapsed node on ArrowRight', async () => {
+        await harness.toggleRow('#modal');
+
+        await harness.pressKeyOnRow('#modal', TestKey.RIGHT_ARROW);
+
+        const rows = await harness.getRows();
+        expect(rows.map(row => row.id)).toEqual(['#root', '#modal', '#open', '#body']);
+        expect(rows[1].expanded).toBe(true);
+      });
+
+      it('focuses the first child on ArrowRight from an expanded node', async () => {
+        await harness.pressKeyOnRow('#root', TestKey.RIGHT_ARROW);
+        expect(await harness.getFocusedRowId()).toBe('#modal');
+
+        await harness.pressKeyOnRow('#modal', TestKey.RIGHT_ARROW);
+        expect(await harness.getFocusedRowId()).toBe('#open');
+      });
     });
   });
 });

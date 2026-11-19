@@ -514,6 +514,121 @@ describe('updateSurfaceComponent', () => {
     );
   });
 
+  it('replaces the target component in inline v1.0 createSurface components when not overridden', () => {
+    const messages = [
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's',
+          components: [
+            {id: 'root', component: 'Card', child: 'title'},
+            {id: 'title', component: 'Text', text: 'Hi'},
+          ],
+        },
+      },
+    ];
+
+    const updatedMessages = updateSurfaceComponent(messages, 's', 'title', {
+      id: 'title',
+      component: 'Text',
+      text: 'Hello',
+    });
+
+    expect(updatedMessages).toEqual([
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's',
+          components: [
+            {id: 'root', component: 'Card', child: 'title'},
+            {id: 'title', component: 'Text', text: 'Hello'},
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('updates the latest updateComponents override rather than an earlier inline createSurface component', () => {
+    const messages = [
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's',
+          components: [
+            {id: 'root', component: 'Card', child: 'title'},
+            {id: 'title', component: 'Text', text: 'Initial'},
+          ],
+        },
+      },
+      {
+        version: '1.0',
+        updateComponents: {
+          surfaceId: 's',
+          components: [{id: 'title', component: 'Text', text: 'Overridden'}],
+        },
+      },
+    ];
+
+    const updatedMessages = updateSurfaceComponent(messages, 's', 'title', {
+      id: 'title',
+      component: 'Text',
+      text: 'Edited',
+    });
+
+    expect(updatedMessages).toEqual([
+      messages[0],
+      {
+        version: '1.0',
+        updateComponents: {
+          surfaceId: 's',
+          components: [{id: 'title', component: 'Text', text: 'Edited'}],
+        },
+      },
+    ]);
+  });
+
+  it('does not mutate components from before a surface was recreated', () => {
+    const messages = [
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's',
+          components: [{id: 'title', component: 'Text', text: 'Stale'}],
+        },
+      },
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's',
+          components: [{id: 'root', component: 'Column', children: []}],
+        },
+      },
+    ];
+
+    const updatedMessages = updateSurfaceComponent(messages, 's', 'title', {
+      id: 'title',
+      component: 'Text',
+      text: 'Edited',
+    });
+
+    expect(updatedMessages).toEqual(messages);
+  });
+
+  it('does not mutate components after a surface was deleted', () => {
+    const messages = [
+      ...surface([{id: 'title', component: 'Text', text: 'Hi'}]),
+      {version: 'v0.9', deleteSurface: {surfaceId: 's'}},
+    ];
+
+    const updatedMessages = updateSurfaceComponent(messages, 's', 'title', {
+      id: 'title',
+      component: 'Text',
+      text: 'Edited',
+    });
+
+    expect(updatedMessages).toEqual(messages);
+  });
+
   it('leaves messages unchanged when the component is not found', () => {
     const messages = surface([{id: 'root', component: 'Column', children: []}]);
 
