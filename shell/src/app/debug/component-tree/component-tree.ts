@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, computed, inject, signal} from '@angular/core';
+import {Component, computed, inject, linkedSignal, signal} from '@angular/core';
 import {NgTemplateOutlet} from '@angular/common';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {StateSync} from '../../chat/state-sync/state-sync';
@@ -57,8 +57,30 @@ export class ComponentTree {
     return draft.trim() ? tryParseJsonArray(draft) : {success: true, data: []};
   });
 
-  /** Reference to the currently selected tree node, if any. */
-  readonly selected = signal<TreeNodeRef | null>(null);
+  /** Reference to the currently selected tree node, re-resolved when the tree changes. */
+  readonly selected = linkedSignal<SurfaceComponentTree[] | null, TreeNodeRef | null>({
+    source: () => (this.parsedDraft().success ? this.trees() : null),
+    computation: (trees, previous) => {
+      const current = previous?.value ?? null;
+      if (!current || !trees) return current;
+      const tree = trees.find(tree => tree.surfaceId === current.surfaceId);
+      if (!tree) return null;
+      const roots = tree.root ? [tree.root, ...tree.unreachable] : tree.unreachable;
+      const findNode = (
+        nodes: readonly ComponentTreeNode[],
+        match: (node: ComponentTreeNode) => boolean,
+      ): ComponentTreeNode | null => {
+        for (const node of nodes) {
+          const found = match(node) ? node : findNode(node.children, match);
+          if (found) return found;
+        }
+        return null;
+      };
+      if (findNode(roots, node => node.key === current.key)) return current;
+      const fallback = findNode(roots, node => node.id === current.id);
+      return fallback ? {surfaceId: tree.surfaceId, key: fallback.key, id: fallback.id} : null;
+    },
+  });
 
   /** The component definition for the currently selected tree node, if defined. */
   readonly selectedComponent = computed<Record<string, unknown> | null>(() => {
