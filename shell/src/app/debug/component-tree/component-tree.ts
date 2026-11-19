@@ -29,8 +29,11 @@ import {
   updateSurfaceComponent,
 } from './component-tree-builder';
 
-/** Reference to a node occurrence in a surface's component tree. */
-interface TreeNodeRef {
+/**
+ * Identifies a selected or focused occurrence in a surface's component tree so both the specific
+ * tree row (`key`) and its underlying component definition (`surfaceId`, `id`) can be tracked.
+ */
+export interface TreeNodeRef {
   readonly surfaceId: string;
   readonly key: string;
   readonly id: string;
