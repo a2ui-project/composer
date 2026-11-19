@@ -27,8 +27,7 @@ import {
 } from './component-tree-builder';
 
 /**
- * A debug drawer panel showing the component tree of the current A2UI
- * document.
+ * A workspace panel showing the component tree of the current A2UI document.
  *
  * The tree is derived from the document itself (the active draft) and the
  * catalog schema; see {@link buildComponentTrees}.
@@ -43,17 +42,18 @@ import {
 export class ComponentTree {
   private readonly stateSync = inject(StateSync);
   private readonly catalogManagement = inject(CatalogManagement);
+  private readonly parsedDraft = computed(() => tryParseJsonArray(this.stateSync.activeDraft()));
 
   /** Keys of collapsed nodes (nodes are expanded by default). */
   protected readonly collapsed = signal<ReadonlySet<string>>(new Set());
 
   protected readonly parseError = computed(() => {
-    const result = tryParseJsonArray(this.stateSync.activeDraft());
+    const result = this.parsedDraft();
     return result.success ? null : result.error.message;
   });
 
   protected readonly trees = computed<SurfaceComponentTree[]>(() => {
-    const result = tryParseJsonArray(this.stateSync.activeDraft());
+    const result = this.parsedDraft();
     if (!result.success) return [];
     const catalog =
       this.catalogManagement.mergedActiveCatalog() ?? this.catalogManagement.activeCatalog();
