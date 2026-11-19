@@ -17,6 +17,7 @@
 import {Injectable, inject, OnDestroy, signal} from '@angular/core';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {stripPrototypePollutionKeys} from '../../shell/cross-frame-validator/wire-version-validator';
+import {buildAgentFunctionResponseItem} from '../../shared/a2ui-rpc-envelope';
 
 /** Lifecycle status for a pending agent function invocation */
 export type PendingRpcStatus = 'pending' | 'replied' | 'rejected' | 'timed_out';
@@ -382,21 +383,7 @@ export class PendingRpcRegistry implements OnDestroy {
     value?: unknown,
     error?: {code: string; message: string},
   ): void {
-    const responseBody: Record<string, unknown> = {
-      functionCallId,
-    };
-    if (error) {
-      responseBody['error'] = error;
-    } else {
-      responseBody['value'] = value;
-    }
-
-    const payload = [
-      {
-        version: '1.0',
-        agentFunctionResponse: responseBody,
-      },
-    ];
+    const payload = [buildAgentFunctionResponseItem(functionCallId, error ? {error} : {value})];
 
     this.hostCommunication.sendRenderA2UI(payload, sourceWindow);
   }

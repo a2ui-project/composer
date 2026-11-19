@@ -32,6 +32,37 @@ export declare interface McpToolInfo {
   outputSchema?: Record<string, unknown>;
 }
 
+/**
+ * Checks whether a single catalog or any catalog in a list declares `callMcpTool`
+ * (either directly in `functions` or in `$defs`), indicating MCP tool support.
+ */
+export function catalogSupportsMcp(
+  catalog:
+    | Catalog
+    | CatalogJson
+    | null
+    | undefined
+    | readonly (Catalog | CatalogJson | null | undefined)[],
+): boolean {
+  if (!catalog) {
+    return false;
+  }
+  const list = Array.isArray(catalog)
+    ? (catalog as readonly (Catalog | CatalogJson | null | undefined)[])
+    : [catalog as Catalog | CatalogJson | null | undefined];
+  return list.some(c => {
+    if (!c) {
+      return false;
+    }
+    if (catalogDeclaresFunction(c, 'callMcpTool')) {
+      return true;
+    }
+    return Boolean(
+      c['$defs'] && ('callMcpTool' in c['$defs'] || 'catalog_callMcpTool' in c['$defs']),
+    );
+  });
+}
+
 export declare interface McpServerConfig {
   id: string;
   name?: string;
@@ -81,31 +112,7 @@ export class McpClientManagerService {
       | undefined
       | readonly (Catalog | CatalogJson | null | undefined)[],
   ): boolean {
-    if (!catalog) {
-      return false;
-    }
-    if (Array.isArray(catalog)) {
-      return (catalog as readonly (Catalog | CatalogJson | null | undefined)[]).some(c =>
-        this.doesSingleCatalogSupportMcp(c),
-      );
-    }
-    return this.doesSingleCatalogSupportMcp(catalog as Catalog | CatalogJson | null | undefined);
-  }
-
-  private doesSingleCatalogSupportMcp(catalog: Catalog | CatalogJson | null | undefined): boolean {
-    if (!catalog) {
-      return false;
-    }
-    if (catalogDeclaresFunction(catalog, 'callMcpTool')) {
-      return true;
-    }
-    if (
-      catalog['$defs'] &&
-      ('callMcpTool' in catalog['$defs'] || 'catalog_callMcpTool' in catalog['$defs'])
-    ) {
-      return true;
-    }
-    return false;
+    return catalogSupportsMcp(catalog);
   }
 
   private loadFromStorage(): void {

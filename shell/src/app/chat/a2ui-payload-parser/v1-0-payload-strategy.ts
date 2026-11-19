@@ -15,39 +15,34 @@
  */
 
 import {
+  A2UI_ONE_SHOT_RPC_KEYS,
+  A2UI_UPDATE_KEYS,
   A2uiComponentInstance,
-  PreviewBridgeMessageType,
   type A2uiProtocolVersion,
 } from 'a2ui-bridge';
-import type {TaggedLogger} from '../../debug/error-logger.service';
-import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
-import {stripPrototypePollutionKeys} from '../../shell/cross-frame-validator/wire-version-validator';
+import {normalizeV10RpcEnvelopeItem} from '../../shared/a2ui-rpc-envelope';
 import {
   type Catalog,
   type CatalogJson,
   catalogDeclaresFunction,
   getCatalogId,
 } from '../../storage/models/catalog-storage.model';
-import type {PayloadProtocolStrategy} from './payload-protocol-strategy';
+import {BasePayloadProtocolStrategy} from './payload-protocol-strategy';
 import {buildComponentHealMap, healComponentList} from './component-name-healer';
-
-const V10_COMMAND_KEYS = [
-  'createSurface',
-  'updateComponents',
-  'updateDataModel',
-  'deleteSurface',
-  'callRendererFunction',
-  'agentFunctionResponse',
-];
 
 /**
  * Payload parsing, healing, and validation strategy for A2UI v1.0 protocol specifications.
  */
-export class V10PayloadStrategy implements PayloadProtocolStrategy {
-  readonly version: A2uiProtocolVersion = 'v1.0';
-  readonly canonicalWireVersion = '1.0';
+export class V10PayloadStrategy extends BasePayloadProtocolStrategy {
+  override readonly version: A2uiProtocolVersion = 'v1.0';
+  override readonly canonicalWireVersion = '1.0';
+  protected override readonly recognizedCommandKeys = [
+    ...A2UI_UPDATE_KEYS,
+    ...A2UI_ONE_SHOT_RPC_KEYS,
+  ];
+  protected override readonly canonicalizableVersions = new Set(['1.0', 'v1.0']);
 
-  resolveComponentCount(blocks: unknown[]): number {
+  override resolveComponentCount(blocks: unknown[]): number {
     return (blocks as Array<Record<string, unknown>>).reduce((acc, obj) => {
       if (!obj || typeof obj !== 'object') return acc;
 
@@ -72,70 +67,13 @@ export class V10PayloadStrategy implements PayloadProtocolStrategy {
     }, 0);
   }
 
-  normalizeBlocks(blocks: unknown[]): unknown[] {
-    return blocks.map(block => {
-      if (!block || typeof block !== 'object' || Array.isArray(block)) {
-        return this.sanitizePayload(block);
-      }
-
-      const sanitized = this.sanitizePayload(block) as Record<string, unknown>;
-      const hasCommand = V10_COMMAND_KEYS.some(k => k in sanitized);
-      if (hasCommand) {
-        const ver = sanitized['version'];
-        if (ver === undefined || ver === '1.0' || ver === 'v1.0') {
-          sanitized['version'] = this.canonicalWireVersion;
-        }
-      }
-
-      // Normalization of callRendererFunction shorthand
-      if (
-        sanitized['callRendererFunction'] &&
-        typeof sanitized['callRendererFunction'] === 'object'
-      ) {
-        const crf = sanitized['callRendererFunction'] as Record<string, unknown>;
-
-        if (crf['call'] !== undefined) {
-          const fnName = String(crf['call']);
-          delete crf['call'];
-          const args = crf['args'];
-          if ('args' in crf) {
-            delete crf['args'];
-          }
-          const callFnObj: Record<string, unknown> = {
-            ['@call']: fnName,
-          };
-          if (args !== undefined) {
-            callFnObj['args'] = args;
-          }
-          if (crf['catalogId'] !== undefined) {
-            callFnObj['catalogId'] = crf['catalogId'];
-            delete crf['catalogId'];
-          }
-          crf['callFunction'] = callFnObj;
-        } else if (
-          crf['callFunction'] &&
-          typeof crf['callFunction'] === 'object' &&
-          !Array.isArray(crf['callFunction'])
-        ) {
-          const cf = crf['callFunction'] as Record<string, unknown>;
-          if (cf['call'] !== undefined && !cf['@call']) {
-            cf['@call'] = String(cf['call']);
-            delete cf['call'];
-          }
-          if (crf['catalogId'] !== undefined) {
-            if (cf['catalogId'] === undefined) {
-              cf['catalogId'] = crf['catalogId'];
-            }
-            delete crf['catalogId'];
-          }
-        }
-      }
-
-      return sanitized;
-    });
+  protected override normalizeSanitizedBlock(
+    block: Record<string, unknown>,
+  ): Record<string, unknown> {
+    return normalizeV10RpcEnvelopeItem(block);
   }
 
-  runCatalogComponentSchemaCheck(
+  override runCatalogComponentSchemaCheck(
     parsedBlocks: unknown[],
     componentsOrCatalog?: Record<string, unknown> | CatalogJson,
     catalogObj?: Record<string, unknown> | CatalogJson,
@@ -242,25 +180,5 @@ export class V10PayloadStrategy implements PayloadProtocolStrategy {
     }
 
     return healed;
-  }
-
-  sanitizePayload<T>(payload: T): T {
-    return stripPrototypePollutionKeys(payload);
-  }
-
-  validateOutgoingBlocks(
-    blocks: unknown[],
-    errors?: string[],
-    logger?: Pick<TaggedLogger, 'error' | 'warn'>,
-  ): boolean {
-    const mockEnvMsg = {
-      type: PreviewBridgeMessageType.RENDER_A2UI,
-      payload: blocks,
-    };
-    return CrossFrameValidator.validateOutgoingMessage(
-      mockEnvMsg,
-      errors,
-      logger ?? {error: () => {}, warn: () => {}},
-    );
   }
 }

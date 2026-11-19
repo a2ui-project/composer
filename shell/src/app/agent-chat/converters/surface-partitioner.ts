@@ -14,11 +14,15 @@
  * limitations under the License.
  */
 
-import {RenderA2uiItem} from 'a2ui-bridge';
+import {isV10RpcEnvelopeItem, RenderA2uiItem} from 'a2ui-bridge';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {normalizeV10RpcEnvelopeItem} from '../../shared/a2ui-rpc-envelope';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {CanvasArtifact} from '../chat-message/types';
-import {sanitizeA2uiPayload} from '../protocol/a2a-protocol-strategy';
+import {
+  deduplicateSurfaceLifecycleItems,
+  sanitizeA2uiPayload,
+} from '../protocol/a2a-protocol-strategy';
 import {detectPayloadVersion} from '../../preview/protocol-version-mismatch';
 import {V09A2aStrategy} from '../protocol/v0-9-a2a-strategy';
 import {V10A2aStrategy} from '../protocol/v1-0-a2a-strategy';
@@ -368,8 +372,7 @@ export function normalizeA2uiItems(
 ): RenderA2uiItem[] {
   if (!items || !Array.isArray(items)) return [];
 
-  const seenSurfaces = new Set<string>();
-  const normalized: RenderA2uiItem[] = [];
+  const mapped: RenderA2uiItem[] = [];
 
   for (const raw of items) {
     if (!isA2uiItem(raw)) {
@@ -384,22 +387,16 @@ export function normalizeA2uiItems(
       }
       continue;
     }
-    const sanitized = sanitizeA2uiPayload(raw) as Record<string, unknown>;
-    if (sanitized['callAgentFunctionResponse'] && !sanitized['agentFunctionResponse']) {
-      sanitized['agentFunctionResponse'] = sanitized['callAgentFunctionResponse'];
-      delete sanitized['callAgentFunctionResponse'];
-    }
+    const sanitized = normalizeV10RpcEnvelopeItem(
+      sanitizeA2uiPayload(raw) as Record<string, unknown>,
+    );
     const rawVersion = typeof sanitized['version'] === 'string' ? sanitized['version'].trim() : '';
     let version = A2UI_PROTOCOL_VERSION;
     if (rawVersion === '1.0' || rawVersion === 'v1.0') {
       version = defaultV10A2aStrategy.normalizeWireVersion(rawVersion);
     } else if (rawVersion === '0.9' || rawVersion === 'v0.9') {
       version = defaultV09A2aStrategy.normalizeWireVersion(rawVersion);
-    } else if (
-      sanitized['callRendererFunction'] ||
-      sanitized['agentFunctionResponse'] ||
-      sanitized['callAgentFunctionResponse']
-    ) {
+    } else if (isV10RpcEnvelopeItem(sanitized)) {
       version = defaultV10A2aStrategy.canonicalWireVersion;
     } else if (rawVersion) {
       version = rawVersion;
@@ -412,44 +409,64 @@ export function normalizeA2uiItems(
       }
     }
 
-    const item: RenderA2uiItem = {
+    mapped.push({
       ...sanitized,
       version,
-    } as RenderA2uiItem;
-
-    if (item.createSurface?.surfaceId) {
-      const surfaceId = item.createSurface.surfaceId;
-      if (seenSurfaces.has(surfaceId)) {
-        continue;
-      }
-      seenSurfaces.add(surfaceId);
-    } else if (item.deleteSurface?.surfaceId) {
-      seenSurfaces.delete(item.deleteSurface.surfaceId);
-    }
-
-    normalized.push(item);
+    } as RenderA2uiItem);
   }
 
-  return normalized;
+  return deduplicateSurfaceLifecycleItems(mapped);
 }
 
 /**
- * Returns true if the normalized item is a one-shot RPC envelope
- * (`callRendererFunction` or `agentFunctionResponse`) that must not persist in surface state.
+ * Extracts the target `surfaceId` from an A2UI surface lifecycle or update item.
  */
-export function isOneShotRpcEnvelope(item: RenderA2uiItem): boolean {
-  return Boolean(
-    item.callRendererFunction || item.agentFunctionResponse || 'callAgentFunctionResponse' in item,
-  );
+export function getA2uiItemSurfaceId(item: unknown): string | undefined {
+  if (!item || typeof item !== 'object') {
+    return undefined;
+  }
+  const candidate = item as RenderA2uiItem;
+  const surfaceId =
+    candidate.createSurface?.surfaceId ??
+    candidate.updateComponents?.surfaceId ??
+    candidate.updateDataModel?.surfaceId ??
+    candidate.deleteSurface?.surfaceId;
+  return typeof surfaceId === 'string' && surfaceId ? surfaceId : undefined;
 }
 
-function getItemSurfaceId(item: RenderA2uiItem): string | undefined {
-  return (
-    item.createSurface?.surfaceId ??
-    item.updateComponents?.surfaceId ??
-    item.updateDataModel?.surfaceId ??
-    item.deleteSurface?.surfaceId
-  );
+/**
+ * Resolves the set of active surface IDs across a sequence of A2UI items in order,
+ * tracking surface creations/updates and removing surfaces on `deleteSurface`.
+ */
+export function resolveActiveSurfaceIds(
+  items: readonly unknown[],
+  options?: {requireCreateSurface?: boolean},
+): Set<string> {
+  const activeSurfaces = new Set<string>();
+  const requireCreateSurface = options?.requireCreateSurface === true;
+  for (const raw of items) {
+    if (!raw || typeof raw !== 'object') {
+      continue;
+    }
+    const item = raw as RenderA2uiItem;
+    const deletedId = item.deleteSurface?.surfaceId;
+    if (typeof deletedId === 'string' && deletedId) {
+      activeSurfaces.delete(deletedId);
+      continue;
+    }
+    const createdId = item.createSurface?.surfaceId;
+    if (typeof createdId === 'string' && createdId) {
+      activeSurfaces.add(createdId);
+      continue;
+    }
+    if (!requireCreateSurface) {
+      const updatedId = item.updateComponents?.surfaceId ?? item.updateDataModel?.surfaceId;
+      if (typeof updatedId === 'string' && updatedId) {
+        activeSurfaces.add(updatedId);
+      }
+    }
+  }
+  return activeSurfaces;
 }
 
 function extractPriorSurfaceItems(
@@ -459,8 +476,8 @@ function extractPriorSurfaceItems(
   const itemsBySurface = new Map<string, RenderA2uiItem[]>();
 
   for (const item of priorItems) {
-    if (isOneShotRpcEnvelope(item)) continue;
-    const surfaceId = getItemSurfaceId(item);
+    if (isV10RpcEnvelopeItem(item)) continue;
+    const surfaceId = getA2uiItemSurfaceId(item);
     if (!surfaceId || !targetSurfaceIds.has(surfaceId)) continue;
 
     if (item.deleteSurface) {
@@ -488,8 +505,8 @@ export function mergeA2uiItems(
   newItems: readonly RenderA2uiItem[],
   priorSessionItems?: readonly RenderA2uiItem[],
 ): RenderA2uiItem[] {
-  const normalizedNew = normalizeA2uiItems(newItems).filter(item => !isOneShotRpcEnvelope(item));
-  const sanitizedExisting = existingItems.filter(item => !isOneShotRpcEnvelope(item));
+  const normalizedNew = normalizeA2uiItems(newItems).filter(item => !isV10RpcEnvelopeItem(item));
+  const sanitizedExisting = existingItems.filter(item => !isV10RpcEnvelopeItem(item));
   if (normalizedNew.length === 0) return [...sanitizedExisting];
 
   const newCreateSurfaces = new Set<string>();
@@ -502,7 +519,7 @@ export function mergeA2uiItems(
   let priorAndExistingItems = sanitizedExisting;
   if (priorSessionItems && priorSessionItems.length > 0) {
     const knownSurfaces = new Set([
-      ...priorAndExistingItems.map(getItemSurfaceId),
+      ...priorAndExistingItems.map(getA2uiItemSurfaceId),
       ...newCreateSurfaces,
     ]);
     const missingSurfaces = new Set<string>();
@@ -525,7 +542,7 @@ export function mergeA2uiItems(
   const filteredExisting =
     newCreateSurfaces.size > 0
       ? priorAndExistingItems.filter(item => {
-          const surfaceId = getItemSurfaceId(item);
+          const surfaceId = getA2uiItemSurfaceId(item);
           return surfaceId == null || !newCreateSurfaces.has(surfaceId);
         })
       : priorAndExistingItems;
@@ -937,7 +954,7 @@ export function partitionA2uiSurfacePayload(
   items: RenderA2uiItem[],
   catalog?: Catalog | null,
 ): PartitionedA2uiSurface {
-  const normalized = normalizeA2uiItems(items).filter(item => !isOneShotRpcEnvelope(item));
+  const normalized = normalizeA2uiItems(items).filter(item => !isV10RpcEnvelopeItem(item));
   if (normalized.length === 0) {
     return {inlinePayload: null, canvasArtifacts: [], hasCanvas: false};
   }
@@ -1001,6 +1018,6 @@ export function unwrapCanvasForRenderer(
   const partitioned = partitionA2uiSurfacePayload(items, catalog);
   return (
     partitioned.canvasArtifacts[0]?.payload ||
-    normalizeA2uiItems(items).filter(item => !isOneShotRpcEnvelope(item))
+    normalizeA2uiItems(items).filter(item => !isV10RpcEnvelopeItem(item))
   );
 }

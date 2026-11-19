@@ -48,6 +48,7 @@ import {RendererTool} from '../renderer-selection/renderer-tool';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {getCatalogId} from '../../storage/models/catalog-storage.model';
+import {resolveActiveSurfaceIds} from '../../agent-chat/converters/surface-partitioner';
 
 /** Why a response was cancelled before it finished. */
 enum CancelReason {
@@ -927,17 +928,7 @@ export class ChatCoordinator {
     const base = !replacesDraft && current.success ? current.data : [];
 
     // Surfaces that exist once the base draft has been replayed.
-    const activeSurfaces = new Set<string>();
-    for (const item of base) {
-      const created = surfaceId(item, 'createSurface');
-      const deleted = surfaceId(item, 'deleteSurface');
-      if (created !== undefined) {
-        activeSurfaces.add(created);
-      }
-      if (deleted !== undefined) {
-        activeSurfaces.delete(deleted);
-      }
-    }
+    const activeSurfaces = resolveActiveSurfaceIds(base, {requireCreateSurface: true});
 
     // Replay the response in order, so an update may target a surface created
     // earlier in the same response but not one deleted before it.

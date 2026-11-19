@@ -15,13 +15,9 @@
  */
 
 import {Injectable} from '@angular/core';
-import {
-  Catalog,
-  CatalogJson,
-  catalogDeclaresFunction,
-} from '../../storage/models/catalog-storage.model';
+import {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/v1-0/common-types-schema';
-import {McpServerConfig, McpToolInfo} from '../../mcp/mcp-client-manager.service';
+import {catalogSupportsMcp, McpServerConfig} from '../../mcp/mcp-client-manager.service';
 import {
   PromptProtocolStrategy,
   PromptStrategyOptions,
@@ -31,11 +27,11 @@ import {
   quoteCatalogValue,
   iconSupport,
   imageUrlGuidance,
-  iconGuidance,
-  visualAffordanceGuidance,
-  componentTreeMappingGuidance,
   IconSupport,
+  pruneCatalogForPrompt,
   serializeCatalogForPrompt,
+  formatMcpToolsMarkdown,
+  buildMultimodalGuidelinesSection,
 } from './prompt-strategy-helpers';
 
 /** Canonical default schema ID for secondary MCP tools catalog in v1.0. */
@@ -79,13 +75,7 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
     const primaryCatalogId =
       primaryCatalog?.['$id'] ?? primaryCatalog?.catalogId ?? DEFAULT_V10_BASIC_CATALOG_ID;
 
-    const mcpCatalog = catalogs.find(c => {
-      if (catalogDeclaresFunction(c, 'callMcpTool')) return true;
-      if (c['$defs'] && ('callMcpTool' in c['$defs'] || 'catalog_callMcpTool' in c['$defs'])) {
-        return true;
-      }
-      return false;
-    });
+    const mcpCatalog = catalogs.find(c => catalogSupportsMcp(c));
     const mcpCatalogId =
       mcpCatalog?.['$id'] ?? mcpCatalog?.catalogId ?? DEFAULT_V10_MCP_FUNCTIONS_CATALOG_ID;
 
@@ -113,7 +103,7 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
     const serializedCatalogs =
       catalogs.length === 1
         ? this.serializeCatalogForPrompt(catalogs[0])
-        : JSON.stringify(catalogs.map(c => JSON.parse(this.serializeCatalogForPrompt(c))));
+        : JSON.stringify(catalogs.map(c => pruneCatalogForPrompt(stripReturnTypeDeep(c))));
 
     return (
       (
@@ -139,47 +129,10 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
     activeServers: readonly McpServerConfig[],
     mcpCatalogId = DEFAULT_V10_MCP_FUNCTIONS_CATALOG_ID,
   ): string {
-    const toolsMap = new Map<string, McpToolInfo>();
-    for (const server of activeServers) {
-      for (const tool of server.tools || []) {
-        if (!toolsMap.has(tool.name)) {
-          toolsMap.set(tool.name, tool);
-        }
-      }
-    }
-
-    if (toolsMap.size === 0) {
+    const toolsMarkdown = formatMcpToolsMarkdown(activeServers, stripReturnTypeDeep);
+    if (!toolsMarkdown) {
       return '';
     }
-
-    const defaultOutputSchema = {
-      type: 'object',
-      properties: {
-        content: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              type: {type: 'string'},
-              text: {type: 'string'},
-            },
-          },
-        },
-      },
-    };
-
-    const toolsMarkdown = Array.from(toolsMap.values())
-      .map(tool => {
-        const desc = tool.description ? ` - ${tool.description}` : '';
-        const inputSchemaStr = JSON.stringify(
-          stripReturnTypeDeep(tool.inputSchema || {type: 'object', properties: {}}),
-        );
-        const outputSchemaStr = JSON.stringify(
-          stripReturnTypeDeep(tool.outputSchema || defaultOutputSchema),
-        );
-        return `- **\`${tool.name}\`**${desc}\n  - **Input Schema**: \`${inputSchemaStr}\`\n  - **Output Schema**: \`${outputSchemaStr}\``;
-      })
-      .join('\n');
 
     const quotedMcpId = quoteCatalogValue(mcpCatalogId);
 
@@ -247,96 +200,7 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
     const quotedMcpId = quoteCatalogValue(mcpCatalogId);
 
     const multimodalGuidelinesSection = includeMultimodalGuidelines
-      ? `
-
-  ## Multimodal & Image-to-UI Guidelines
-
-  When an image, wireframe, mockup, or UI screenshot is provided by the
-  user, adhere strictly to these visual translation principles (on follow-up
-  turns, explicit user text instructions to add, modify, or remove elements
-  take precedence over earlier screenshots and follow ## Editing the Current UI):
-
-  ### 1. Visual Layout, Scope & Sizing Fidelity
-  * **Root Container Bounding**: The root component ("id": "root") MUST match
-    the visual boundary of the primary UI card, form, or dialog shown. Do
-    NOT extract ambient background titles, file names, or browser canvas
-    headers outside the visual card boundary unless explicitly requested.
-  * **Flex Orientation Mapping**:
-    - Elements arranged top-to-bottom MUST map to vertical layout containers
-      defined in the active catalog (e.g., Column).
-    - Elements arranged left-to-right MUST map to horizontal layout
-      containers defined in the active catalog (e.g., Row).
-  * **Full-Width Stretch Mandate**: When an element (such as a primary CTA
-    button, input field, or card) visually spans the full width of its
-    parent container in the screenshot, configure its layout/alignment
-    properties to stretch full-width (e.g., setting "align": "stretch" on
-    the parent container or applying full-width properties supported by
-    the active catalog) rather than rendering as a compact inline element.
-  * **Container Spacing & Clipping Prevention**: Ensure root layout
-    containers (Column) and nested sections maintain proper vertical
-    padding, spacing, and scrollability so that bottom elements (such as
-    footer actions or trailing list items) are never cut off or clipped.
-  * **No Unseen Separators Rule**: Do NOT insert "Divider" lines or border
-    components unless a distinct horizontal or vertical line separator is
-    literally visible in the screenshot.
-  * **Visual Reading Order**: List child IDs in children arrays in strict
-    visual reading order (top-to-bottom, left-to-right).
-
-  ### 2. Catalog-Aware Component Mapping
-  Map visual elements to the most specific matching component type from the
-  "components" allowlist of the active catalog schema provided above:
-  * **Headings & Titles** -> Text component formatted with Markdown \`#\` through \`#####\`
-    inside \`Text.text\` (do NOT use heading variant properties or \`h1\`–\`h5\`, which were
-    removed in A2UI v1.0).
-  * **Body Text & Captions** -> Text component with standard body text or markdown formatting.
-  * **Interactive Buttons** -> Button/IconButton component in the active
-    catalog schema. Reflect visual prominence (e.g., primary filled vs.
-    secondary borderless/outlined) and preserve full-width intent.
-  * **Form Controls & Inputs** -> Text entry, date picker, selection/picker,
-    or toggle components defined in the active catalog schema.
-  * **Content Panels & Containers** -> Card, panel, or layout container
-    components defined in the active catalog schema wrapping child elements.
-  * **Repeated Lists & Collections** -> Layout container components with
-    dynamic item template declarations
-    (children: { "componentId": "...", "path": "/..." }).
-  * **CRITICAL**: Every generated "component" value MUST be an exact key
-    from the "components" map in the active catalog schema provided above.
-    Never invent or guess component names not present in the active catalog.
-
-  ### 3. Icon, Image & Styling Intent
-  ${iconGuidance(support)}
-  * **Visual Hierarchy**: Preserve typography scale, text weight, button
-    prominence, and color intent using supported catalog properties.
-
-  ### 4. Visual Affordance Recognition
-  ${visualAffordanceGuidance(support)}
-
-  ### 5. Grounding, Data Binding & Sequence
-  * **Complete Data Model Extraction**: ALL text strings, label names, image
-    URLs, options, and default values visible in the image MUST be extracted
-    into the dataModel payload of createSurface.
-  * **JSON Pointer References**: Components MUST bind to data model values
-    using valid JSON Pointers with the \`@path\` key (e.g., {"@path": "/header/title"}).
-    Never use \`"path"\` for data bindings.
-  * **Strict Grounding**: Include ONLY visual elements present in the
-    screenshot. Do NOT hallucinate extra buttons, fields, or unrepresented
-    data streams.
-
-  ### 6. Image-to-UI Processing Sequence
-  When translating an image to A2UI, follow this internal mental sequence
-  (do NOT output any analysis or scratchpad text; output ONLY the final
-  JSONL messages):
-  1. **Analyze (Internal)**: Identify primary card boundaries, flex layout
-     directions, full-width element stretching, absence of unseen dividers,
-     container spacing, and composite icon details.
-  2. **Extract Data**: Extract all visible text strings, values, and list
-     items into dataModel.
-  3. **Build Component Tree**: Map visual elements strictly to active
-     catalog component types with
-     ${componentTreeMappingGuidance(support)}, full-width
-     properties, Markdown \`#\`–\`#####\` headings, and \`@path\` bindings.
-  4. **Emit JSONL Message**: Output the complete initial UI as a single
-     \`createSurface\` message with inline \`components\` and \`dataModel\`.`
+      ? buildMultimodalGuidelinesSection(support, 'v1.0')
       : '';
 
     return `

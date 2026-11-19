@@ -45,6 +45,7 @@ import {StartupResolution} from '../../shell/startup-resolution/startup-resoluti
 import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 import type {A2uiProtocolVersion} from 'a2ui-bridge';
+import {buildAgentFunctionResponseItem} from '../../shared/a2ui-rpc-envelope';
 import {validatePayloadProtocolVersion} from '../protocol-version-mismatch';
 import {buildRendererUrl} from '../renderer-url';
 
@@ -265,16 +266,12 @@ export class GuestFrame implements OnInit {
           return;
         }
         const rejectionPayload = [
-          {
-            version: '1.0',
-            agentFunctionResponse: {
-              functionCallId,
-              error: {
-                code: 'NO_AGENT_CONNECTED',
-                message: 'No agent is connected to handle agent function calls.',
-              },
+          buildAgentFunctionResponseItem(functionCallId, {
+            error: {
+              code: 'NO_AGENT_CONNECTED',
+              message: 'No agent is connected to handle agent function calls.',
             },
-          },
+          }),
         ];
         this.hostCommunication.sendRenderA2UI(rejectionPayload, guestWindow);
       });

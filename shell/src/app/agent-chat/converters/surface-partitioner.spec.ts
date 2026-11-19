@@ -15,18 +15,19 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {RenderA2uiItem} from 'a2ui-bridge';
+import {isV10RpcEnvelopeItem, RenderA2uiItem} from 'a2ui-bridge';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {
+  getA2uiItemSurfaceId,
   hasA2uiCanvasComponent,
   isA2uiItem,
   isA2uiMimeType,
-  isOneShotRpcEnvelope,
   mergeA2uiItems,
   normalizeA2uiItems,
   partitionA2uiSurfacePayload,
+  resolveActiveSurfaceIds,
   unwrapCanvasForRenderer,
   A2UI_MIME_TYPE,
   LEGACY_A2UI_MIME_TYPE,
@@ -1121,7 +1122,7 @@ describe('SurfacePartitioner', () => {
       expect(normalized[0]['agentFunctionResponse']).toBeDefined();
       expect(normalized[0]['callAgentFunctionResponse']).toBeUndefined();
       expect(
-        isOneShotRpcEnvelope({
+        isV10RpcEnvelopeItem({
           version: '1.0',
           callAgentFunctionResponse: {functionCallId: 'raw-1'},
         } as RenderA2uiItem),
@@ -1224,6 +1225,22 @@ describe('SurfacePartitioner', () => {
       expect(mergedNextTurn.some(item => 'agentFunctionResponse' in item)).toBe(false);
       expect(mergedNextTurn.some(item => item.createSurface?.surfaceId === 's1')).toBe(true);
       expect(mergedNextTurn.some(item => item.updateDataModel?.surfaceId === 's1')).toBe(true);
+    });
+
+    it('tracks active surface IDs across create, update, and deleteSurface operations', () => {
+      const items = [
+        {version: '1.0', createSurface: {surfaceId: 'surf-a', catalogId: 'c1', components: []}},
+        {version: '1.0', updateDataModel: {surfaceId: 'surf-b', path: '/x', value: 1}},
+        {version: '1.0', deleteSurface: {surfaceId: 'surf-a'}},
+        {version: '1.0', createSurface: {surfaceId: 'surf-c', catalogId: 'c1', components: []}},
+      ];
+
+      expect(getA2uiItemSurfaceId(items[0])).toBe('surf-a');
+      expect(getA2uiItemSurfaceId(items[2])).toBe('surf-a');
+      expect(Array.from(resolveActiveSurfaceIds(items))).toEqual(['surf-b', 'surf-c']);
+      expect(Array.from(resolveActiveSurfaceIds(items, {requireCreateSurface: true}))).toEqual([
+        'surf-c',
+      ]);
     });
   });
 });

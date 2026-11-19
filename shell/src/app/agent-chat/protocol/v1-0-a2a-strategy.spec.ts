@@ -253,6 +253,25 @@ describe('V10A2aStrategy', () => {
       expect(normalized[3].createSurface?.catalogId).toBe('c1-recreated');
     });
 
+    it('normalizes legacy callAgentFunctionResponse and result keys to canonical agentFunctionResponse', () => {
+      const normalized = strategy.normalizeItems([
+        {
+          version: '1.0',
+          callAgentFunctionResponse: {functionCallId: 'f1', result: 42},
+        },
+      ]);
+      expect(normalized).toEqual([
+        {
+          version: '1.0',
+          agentFunctionResponse: {functionCallId: 'f1', value: 42},
+        },
+      ]);
+      expect('callAgentFunctionResponse' in normalized[0]).toBe(false);
+      expect('result' in (normalized[0].agentFunctionResponse as Record<string, unknown>)).toBe(
+        false,
+      );
+    });
+
     it('returns empty array when items is null, undefined, or not an array', () => {
       expect(strategy.normalizeItems(null as unknown as readonly unknown[])).toEqual([]);
       expect(strategy.normalizeItems(undefined as unknown as readonly unknown[])).toEqual([]);

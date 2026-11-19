@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-import type {A2uiProtocolVersion} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, type A2uiProtocolVersion} from 'a2ui-bridge';
 import type {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import type {TaggedLogger} from '../../debug/error-logger.service';
+import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
+import {stripPrototypePollutionKeys} from '../../shell/cross-frame-validator/wire-version-validator';
 
 /**
  * Common contract for protocol-specific A2UI payload parsing, healing,
@@ -83,4 +85,69 @@ export declare interface PayloadProtocolStrategy {
     errors?: string[],
     logger?: Pick<TaggedLogger, 'error' | 'warn'>,
   ): boolean;
+}
+
+/**
+ * Abstract base class providing shared prototype-pollution sanitization and
+ * cross-frame outgoing block validation for payload protocol strategies.
+ */
+export abstract class BasePayloadProtocolStrategy implements PayloadProtocolStrategy {
+  abstract readonly version: A2uiProtocolVersion;
+  abstract readonly canonicalWireVersion: string;
+  protected abstract readonly recognizedCommandKeys: readonly string[];
+  protected abstract readonly canonicalizableVersions: ReadonlySet<string>;
+
+  abstract resolveComponentCount(blocks: unknown[]): number;
+  abstract runCatalogComponentSchemaCheck(
+    parsedBlocks: unknown[],
+    componentsOrCatalog?: Record<string, unknown> | CatalogJson,
+    catalogObj?: Record<string, unknown> | CatalogJson,
+    activeCatalogs?: readonly (Catalog | CatalogJson)[],
+  ): boolean;
+
+  normalizeBlocks(blocks: unknown[]): unknown[] {
+    return blocks.map(block => {
+      if (!block || typeof block !== 'object' || Array.isArray(block)) {
+        return this.sanitizePayload(block);
+      }
+
+      const sanitized = this.normalizeSanitizedBlock(
+        this.sanitizePayload(block) as Record<string, unknown>,
+      );
+      if (this.recognizedCommandKeys.some(k => k in sanitized)) {
+        const ver = sanitized['version'];
+        if (
+          ver === undefined ||
+          (typeof ver === 'string' && this.canonicalizableVersions.has(ver))
+        ) {
+          sanitized['version'] = this.canonicalWireVersion;
+        }
+      }
+      return sanitized;
+    });
+  }
+
+  protected normalizeSanitizedBlock(block: Record<string, unknown>): Record<string, unknown> {
+    return block;
+  }
+
+  sanitizePayload<T>(payload: T): T {
+    return stripPrototypePollutionKeys(payload);
+  }
+
+  validateOutgoingBlocks(
+    blocks: unknown[],
+    errors?: string[],
+    logger?: Pick<TaggedLogger, 'error' | 'warn'>,
+  ): boolean {
+    const mockEnvMsg = {
+      type: PreviewBridgeMessageType.RENDER_A2UI,
+      payload: blocks,
+    };
+    return CrossFrameValidator.validateOutgoingMessage(
+      mockEnvMsg,
+      errors,
+      logger ?? {error: () => {}, warn: () => {}},
+    );
+  }
 }

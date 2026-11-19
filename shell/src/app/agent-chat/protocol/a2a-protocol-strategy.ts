@@ -14,22 +14,24 @@
  * limitations under the License.
  */
 
-import type {RenderA2uiItem} from 'a2ui-bridge';
+import {
+  A2UI_ONE_SHOT_RPC_KEYS,
+  hasDefinedObjectKey,
+  type A2uiProtocolVersion,
+  type RenderA2uiItem,
+} from 'a2ui-bridge';
 import type {A2aPart} from '../../chat/a2a/a2a-types';
 import type {
   V10CallAgentFunctionPayload,
   V10RendererFunctionResponsePayload,
 } from '../../shell/cross-frame-validator/v1-0-wire-validator';
 import {stripPrototypePollutionKeys} from '../../shell/cross-frame-validator/wire-version-validator';
-import type {A2uiProtocolVersion} from 'a2ui-bridge';
 import type {CatalogJson} from '../../storage/models/catalog-storage.model';
 
 /** Canonical A2UI v1.0 RPC envelope keys. */
 export const A2UI_V10_RPC_KEYS = [
-  'callRendererFunction',
+  ...A2UI_ONE_SHOT_RPC_KEYS,
   'callAgentFunction',
-  'callAgentFunctionResponse',
-  'agentFunctionResponse',
   'rendererFunctionResponse',
 ] as const;
 
@@ -102,4 +104,112 @@ export declare interface A2aProtocolStrategy {
  */
 export function sanitizeA2uiPayload<T>(payload: T): T {
   return stripPrototypePollutionKeys(payload);
+}
+
+/**
+ * Abstract base class providing shared normalization and outbound DataPart builders
+ * across A2A protocol strategies.
+ */
+export abstract class BaseA2aProtocolStrategy implements A2aProtocolStrategy {
+  abstract readonly version: A2uiProtocolVersion;
+  abstract readonly canonicalWireVersion: string;
+  readonly mimeType: string = 'application/a2ui+json';
+
+  protected abstract readonly recognizedOperations: readonly string[];
+
+  abstract getClientConfiguration(activeCatalogs?: CatalogJson[]): Record<string, unknown>;
+
+  normalizeWireVersion(_rawVersion?: unknown): string {
+    return this.canonicalWireVersion;
+  }
+
+  abstract buildActionDataPart(
+    action: unknown,
+    userMessage?: string,
+    metadata?: Record<string, unknown>,
+  ): A2aPart;
+
+  buildCallAgentFunctionDataPart(payload: V10CallAgentFunctionPayload): A2aPart {
+    return {
+      data: {
+        ['version']: this.canonicalWireVersion,
+        ['callAgentFunction']: payload,
+      },
+      metadata: {
+        ['mimeType']: this.mimeType,
+        ['type']: 'a2ui_call_agent_function',
+      },
+    };
+  }
+
+  buildRendererFunctionResponseDataPart(payload: V10RendererFunctionResponsePayload): A2aPart {
+    return {
+      data: {
+        ['version']: this.canonicalWireVersion,
+        ['rendererFunctionResponse']: payload,
+      },
+      metadata: {
+        ['mimeType']: this.mimeType,
+        ['type']: 'a2ui_renderer_function_response',
+      },
+    };
+  }
+
+  isA2uiItem(item: unknown): boolean {
+    return hasDefinedObjectKey(item, this.recognizedOperations);
+  }
+
+  normalizeItems(items: readonly unknown[]): RenderA2uiItem[] {
+    if (!items || !Array.isArray(items)) return [];
+
+    const mapped: RenderA2uiItem[] = [];
+    for (const raw of items) {
+      if (!this.isA2uiItem(raw)) {
+        continue;
+      }
+      const sanitized = this.normalizeSanitizedItem(
+        sanitizeA2uiPayload(raw) as Record<string, unknown>,
+      );
+      mapped.push({
+        ...sanitized,
+        version: this.canonicalWireVersion,
+      } as RenderA2uiItem);
+    }
+
+    return deduplicateSurfaceLifecycleItems(mapped);
+  }
+
+  protected normalizeSanitizedItem(item: Record<string, unknown>): Record<string, unknown> {
+    return item;
+  }
+
+  isA2uiRpcEnvelope(_item: unknown): boolean {
+    return false;
+  }
+}
+
+/**
+ * Deduplicates consecutive `createSurface` commands for the same `surfaceId`
+ * while allowing re-creation after an intervening `deleteSurface`.
+ */
+export function deduplicateSurfaceLifecycleItems(
+  items: readonly RenderA2uiItem[],
+): RenderA2uiItem[] {
+  const seenSurfaces = new Set<string>();
+  const deduplicated: RenderA2uiItem[] = [];
+
+  for (const item of items) {
+    if (item.createSurface?.surfaceId) {
+      const surfaceId = item.createSurface.surfaceId;
+      if (seenSurfaces.has(surfaceId)) {
+        continue;
+      }
+      seenSurfaces.add(surfaceId);
+    } else if (item.deleteSurface?.surfaceId) {
+      seenSurfaces.delete(item.deleteSurface.surfaceId);
+    }
+    deduplicated.push(item);
+  }
+
+  return deduplicated;
 }

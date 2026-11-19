@@ -15,19 +15,11 @@
  */
 
 import {Injectable} from '@angular/core';
-import type {RenderA2uiItem} from 'a2ui-bridge';
 import type {A2aPart} from '../../chat/a2a/a2a-types';
-import type {
-  V10CallAgentFunctionPayload,
-  V10RendererFunctionResponsePayload,
-} from '../../shell/cross-frame-validator/v1-0-wire-validator';
-import type {A2uiProtocolVersion} from 'a2ui-bridge';
+import {hasDefinedObjectKey, isV10RpcEnvelopeItem, type A2uiProtocolVersion} from 'a2ui-bridge';
 import type {CatalogJson} from '../../storage/models/catalog-storage.model';
-import {
-  type A2aProtocolStrategy,
-  A2UI_V10_RPC_KEYS,
-  sanitizeA2uiPayload,
-} from './a2a-protocol-strategy';
+import {normalizeV10RpcEnvelopeItem} from '../../shared/a2ui-rpc-envelope';
+import {BaseA2aProtocolStrategy} from './a2a-protocol-strategy';
 
 /** Canonical A2UI v1.0 operation keys. */
 const V10_OPERATIONS = [
@@ -48,12 +40,12 @@ const V10_OPERATIONS = [
 @Injectable({
   providedIn: 'root',
 })
-export class V10A2aStrategy implements A2aProtocolStrategy {
-  readonly version: A2uiProtocolVersion = 'v1.0';
-  readonly canonicalWireVersion: string = '1.0';
-  readonly mimeType: string = 'application/a2ui+json';
+export class V10A2aStrategy extends BaseA2aProtocolStrategy {
+  override readonly version: A2uiProtocolVersion = 'v1.0';
+  override readonly canonicalWireVersion: string = '1.0';
+  protected override readonly recognizedOperations = V10_OPERATIONS;
 
-  getClientConfiguration(_activeCatalogs?: CatalogJson[]): Record<string, unknown> {
+  override getClientConfiguration(_activeCatalogs?: CatalogJson[]): Record<string, unknown> {
     const supportedExtensions = ['https://a2ui.org/a2a-extension/a2ui/v1.0'];
 
     return {
@@ -62,11 +54,7 @@ export class V10A2aStrategy implements A2aProtocolStrategy {
     };
   }
 
-  normalizeWireVersion(_rawVersion?: unknown): string {
-    return this.canonicalWireVersion;
-  }
-
-  buildActionDataPart(
+  override buildActionDataPart(
     action: unknown,
     userMessage?: string,
     metadata?: Record<string, unknown>,
@@ -95,73 +83,16 @@ export class V10A2aStrategy implements A2aProtocolStrategy {
     };
   }
 
-  buildCallAgentFunctionDataPart(payload: V10CallAgentFunctionPayload): A2aPart {
-    return {
-      data: {
-        ['version']: this.canonicalWireVersion,
-        ['callAgentFunction']: payload,
-      },
-      metadata: {
-        ['mimeType']: this.mimeType,
-        ['type']: 'a2ui_call_agent_function',
-      },
-    };
+  protected override normalizeSanitizedItem(
+    item: Record<string, unknown>,
+  ): Record<string, unknown> {
+    return normalizeV10RpcEnvelopeItem(item);
   }
 
-  buildRendererFunctionResponseDataPart(payload: V10RendererFunctionResponsePayload): A2aPart {
-    return {
-      data: {
-        ['version']: this.canonicalWireVersion,
-        ['rendererFunctionResponse']: payload,
-      },
-      metadata: {
-        ['mimeType']: this.mimeType,
-        ['type']: 'a2ui_renderer_function_response',
-      },
-    };
-  }
-
-  isA2uiItem(item: unknown): boolean {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
-    const obj = item as Record<string, unknown>;
-    return V10_OPERATIONS.some(key => key in obj && obj[key] !== undefined && obj[key] !== null);
-  }
-
-  normalizeItems(items: readonly unknown[]): RenderA2uiItem[] {
-    if (!items || !Array.isArray(items)) return [];
-
-    const seenSurfaces = new Set<string>();
-    const normalized: RenderA2uiItem[] = [];
-
-    for (const raw of items) {
-      if (!this.isA2uiItem(raw)) {
-        continue;
-      }
-      const sanitized = sanitizeA2uiPayload(raw) as Record<string, unknown>;
-      const item: RenderA2uiItem = {
-        ...sanitized,
-        version: this.canonicalWireVersion,
-      } as RenderA2uiItem;
-
-      if (item.createSurface?.surfaceId) {
-        const surfaceId = item.createSurface.surfaceId;
-        if (seenSurfaces.has(surfaceId)) {
-          continue;
-        }
-        seenSurfaces.add(surfaceId);
-      } else if (item.deleteSurface?.surfaceId) {
-        seenSurfaces.delete(item.deleteSurface.surfaceId);
-      }
-
-      normalized.push(item);
-    }
-
-    return normalized;
-  }
-
-  isA2uiRpcEnvelope(item: unknown): boolean {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
-    const obj = item as Record<string, unknown>;
-    return A2UI_V10_RPC_KEYS.some(key => key in obj && obj[key] !== undefined && obj[key] !== null);
+  override isA2uiRpcEnvelope(item: unknown): boolean {
+    return (
+      isV10RpcEnvelopeItem(item) ||
+      hasDefinedObjectKey(item, ['callAgentFunction', 'rendererFunctionResponse'])
+    );
   }
 }

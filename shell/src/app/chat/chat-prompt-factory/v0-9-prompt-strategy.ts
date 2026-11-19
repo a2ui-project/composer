@@ -17,18 +17,17 @@
 import {Injectable} from '@angular/core';
 import {Catalog, CatalogJson, getCatalogId} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
-import {McpServerConfig, McpToolInfo} from '../../mcp/mcp-client-manager.service';
+import {McpServerConfig} from '../../mcp/mcp-client-manager.service';
 import {PromptProtocolStrategy, PromptStrategyOptions} from './prompt-protocol-strategy';
 import {
   quoteCatalogValue,
   iconSupport,
   imageUrlGuidance,
-  iconGuidance,
-  visualAffordanceGuidance,
-  componentTreeMappingGuidance,
   IconSupport,
   serializeCatalogForPrompt,
   collectLocalDefRefs,
+  formatMcpToolsMarkdown,
+  buildMultimodalGuidelinesSection,
 } from './prompt-strategy-helpers';
 
 export {serializeCatalogForPrompt, collectLocalDefRefs, IconSupport};
@@ -78,43 +77,10 @@ export class V09PromptStrategy implements PromptProtocolStrategy {
   }
 
   buildMcpInstructions(activeServers: readonly McpServerConfig[]): string {
-    const toolsMap = new Map<string, McpToolInfo>();
-    for (const server of activeServers) {
-      for (const tool of server.tools || []) {
-        if (!toolsMap.has(tool.name)) {
-          toolsMap.set(tool.name, tool);
-        }
-      }
-    }
-
-    if (toolsMap.size === 0) {
+    const toolsMarkdown = formatMcpToolsMarkdown(activeServers);
+    if (!toolsMarkdown) {
       return '';
     }
-
-    const defaultOutputSchema = {
-      type: 'object',
-      properties: {
-        content: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              type: {type: 'string'},
-              text: {type: 'string'},
-            },
-          },
-        },
-      },
-    };
-
-    const toolsMarkdown = Array.from(toolsMap.values())
-      .map(tool => {
-        const desc = tool.description ? ` - ${tool.description}` : '';
-        const inputSchemaStr = JSON.stringify(tool.inputSchema || {type: 'object', properties: {}});
-        const outputSchemaStr = JSON.stringify(tool.outputSchema || defaultOutputSchema);
-        return `- **\`${tool.name}\`**${desc}\n  - **Input Schema**: \`${inputSchemaStr}\`\n  - **Output Schema**: \`${outputSchemaStr}\``;
-      })
-      .join('\n');
 
     return `
 
@@ -167,100 +133,9 @@ export class V09PromptStrategy implements PromptProtocolStrategy {
     // a renderer rejects other catalog IDs. 'active-catalog' stands in when the catalog
     // has no ID. The renderer supplies the ID, so it is quoted rather than pasted in.
     const catalogIdLiteral = quoteCatalogValue(getCatalogId(catalog) || 'active-catalog');
-    const iconSupport = this.iconSupport(catalog);
+    const support = iconSupport(catalog);
     const multimodalGuidelinesSection = includeMultimodalGuidelines
-      ? `
-
-  ## Multimodal & Image-to-UI Guidelines
-
-  When an image, wireframe, mockup, or UI screenshot is provided by the
-  user, adhere strictly to these visual translation principles (on follow-up
-  turns, explicit user text instructions to add, modify, or remove elements
-  take precedence over earlier screenshots and follow ## Editing the Current UI):
-
-  ### 1. Visual Layout, Scope & Sizing Fidelity
-  * **Root Container Bounding**: The root component ("id": "root") MUST match
-    the visual boundary of the primary UI card, form, or dialog shown. Do
-    NOT extract ambient background titles, file names, or browser canvas
-    headers outside the visual card boundary unless explicitly requested.
-  * **Flex Orientation Mapping**:
-    - Elements arranged top-to-bottom MUST map to vertical layout containers
-      defined in the active catalog (e.g., Column).
-    - Elements arranged left-to-right MUST map to horizontal layout
-      containers defined in the active catalog (e.g., Row).
-  * **Full-Width Stretch Mandate**: When an element (such as a primary CTA
-    button, input field, or card) visually spans the full width of its
-    parent container in the screenshot, configure its layout/alignment
-    properties to stretch full-width (e.g., setting "align": "stretch" on
-    the parent container or applying full-width properties supported by
-    the active catalog) rather than rendering as a compact inline element.
-  * **Container Spacing & Clipping Prevention**: Ensure root layout
-    containers (Column) and nested sections maintain proper vertical
-    padding, spacing, and scrollability so that bottom elements (such as
-    footer actions or trailing list items) are never cut off or clipped.
-  * **No Unseen Separators Rule**: Do NOT insert "Divider" lines or border
-    components unless a distinct horizontal or vertical line separator is
-    literally visible in the screenshot.
-  * **Visual Reading Order**: List child IDs in children arrays in strict
-    visual reading order (top-to-bottom, left-to-right).
-
-  ### 2. Catalog-Aware Component Mapping
-  Map visual elements to the most specific matching component type from the
-  "components" allowlist of the active catalog schema provided above:
-  * **Headings & Titles** -> Text component with heading typography styles
-    (usageHint: "h1" | "h2" | "h3" or equivalent variant property in the
-    active catalog schema).
-  * **Body Text & Captions** -> Text component with body or caption
-    typography styles (usageHint: "body" | "caption").
-  * **Interactive Buttons** -> Button/IconButton component in the active
-    catalog schema. Reflect visual prominence (e.g., primary filled vs.
-    secondary borderless/outlined) and preserve full-width intent.
-  * **Form Controls & Inputs** -> Text entry, date picker, selection/picker,
-    or toggle components defined in the active catalog schema.
-  * **Content Panels & Containers** -> Card, panel, or layout container
-    components defined in the active catalog schema wrapping child elements.
-  * **Repeated Lists & Collections** -> Layout container components with
-    dynamic item template declarations
-    (children: { "componentId": "...", "path": "/..." }).
-  * **CRITICAL**: Every generated "component" value MUST be an exact key
-    from the "components" map in the active catalog schema provided above.
-    Never invent or guess component names not present in the active catalog.
-
-  ### 3. Icon, Image & Styling Intent
-  ${this.iconGuidance(iconSupport)}
-  * **Visual Hierarchy**: Preserve typography scale, text weight, button
-    prominence, and color intent using supported catalog properties.
-
-  ### 4. Visual Affordance Recognition
-  ${this.visualAffordanceGuidance(iconSupport)}
-
-  ### 5. Grounding, Data Binding & Sequence
-  * **Complete Data Model Extraction**: ALL text strings, label names, image
-    URLs, options, and default values visible in the image MUST be extracted
-    into the updateDataModel payload.
-  * **JSON Pointer References**: Components in updateComponents MUST bind to
-    values in updateDataModel using valid JSON Pointers
-    (e.g., {"path": "/header/title"}). Do NOT hardcode visible text strings
-    inline when data binding is supported.
-  * **Strict Grounding**: Include ONLY visual elements present in the
-    screenshot. Do NOT hallucinate extra buttons, fields, or unrepresented
-    data streams.
-
-  ### 6. Image-to-UI Processing Sequence
-  When translating an image to A2UI, follow this internal mental sequence
-  (do NOT output any analysis or scratchpad text; output ONLY the final
-  JSONL messages):
-  1. **Analyze (Internal)**: Identify primary card boundaries, flex layout
-     directions, full-width element stretching, absence of unseen dividers,
-     container spacing, and composite icon details.
-  2. **Extract Data**: Extract all visible text strings, values, and list
-     items into updateDataModel.
-  3. **Build Component Tree**: Map visual elements strictly to active
-     catalog component types with
-     ${this.componentTreeMappingGuidance(iconSupport)}, full-width
-     properties, and JSON Pointer paths.
-  4. **Emit JSONL Messages**: Output the single-line JSONL messages in
-     strict sequence (createSurface -> updateComponents -> updateDataModel).`
+      ? buildMultimodalGuidelinesSection(support, 'v0.9')
       : '';
 
     return `
@@ -286,7 +161,7 @@ export class V09PromptStrategy implements PromptProtocolStrategy {
   3. **No Hallucinated Properties**: Include ONLY properties explicitly
      defined in the JSON Schema for that specific component type in the
      active catalog. Do NOT emit unauthorized keys (e.g., "rules", "mock*",
-     or unsupported CSS/styling parameters).${this.imageUrlGuidance(catalog)}
+     or unsupported CSS/styling parameters).${imageUrlGuidance(catalog)}
 
   ### Active Catalog Schema (Mandatory Allowlist)
   \`\`\`json
@@ -399,30 +274,5 @@ export class V09PromptStrategy implements PromptProtocolStrategy {
   }
   \`\`\`
   `;
-  }
-
-  /**
-   * The multimodal guidelines' rule for icons. A catalog whose Icon takes only
-   * listed names may use those names, as the visual affordance and component
-   * tree guidance also say, but must not fall back to drawing an icon.
-   */
-  private iconGuidance(support: IconSupport): string {
-    return iconGuidance(support);
-  }
-
-  private imageUrlGuidance(catalog: Catalog): string {
-    return imageUrlGuidance(catalog);
-  }
-
-  private iconSupport(catalog: Catalog): IconSupport {
-    return iconSupport(catalog);
-  }
-
-  private visualAffordanceGuidance(support: IconSupport): string {
-    return visualAffordanceGuidance(support);
-  }
-
-  private componentTreeMappingGuidance(support: IconSupport): string {
-    return componentTreeMappingGuidance(support);
   }
 }

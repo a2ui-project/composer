@@ -197,6 +197,26 @@ describe('V10PayloadStrategy', () => {
       const dataModel = createMsg['dataModel'] as Record<string, Record<string, unknown>>;
       expect(Object.keys(dataModel['user'])).not.toContain('__proto__');
     });
+
+    it('promotes legacy callAgentFunctionResponse and agentFunctionResponse.result and stamps version 1.0', () => {
+      const normalized = strategy.normalizeBlocks([
+        {callAgentFunctionResponse: {functionCallId: 'fn-legacy', result: {ok: true}}},
+        {version: 'v1.0', agentFunctionResponse: {functionCallId: 'fn-res', result: 42}},
+      ]) as Array<Record<string, unknown>>;
+
+      expect(normalized[0]).toEqual({
+        version: '1.0',
+        agentFunctionResponse: {functionCallId: 'fn-legacy', value: {ok: true}},
+      });
+      expect('callAgentFunctionResponse' in normalized[0]).toBe(false);
+      expect(normalized[1]).toEqual({
+        version: '1.0',
+        agentFunctionResponse: {functionCallId: 'fn-res', value: 42},
+      });
+      expect('result' in (normalized[1]['agentFunctionResponse'] as Record<string, unknown>)).toBe(
+        false,
+      );
+    });
   });
 
   describe('runCatalogComponentSchemaCheck', () => {

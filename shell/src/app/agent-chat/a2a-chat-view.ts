@@ -34,7 +34,7 @@ import {MatDialog, MatDialogRef} from '@angular/material/dialog';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {RenderA2uiItem} from 'a2ui-bridge';
+import {isV10RpcEnvelopeItem, RenderA2uiItem} from 'a2ui-bridge';
 
 import {A2A_TRANSPORT} from '../chat/a2a/a2a-transport.token';
 import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../chat/a2a/a2a-types';
@@ -57,6 +57,10 @@ import {V09A2aStrategy} from './protocol/v0-9-a2a-strategy';
 import {V10A2aStrategy} from './protocol/v1-0-a2a-strategy';
 import {CrossFrameValidator} from '../shell/cross-frame-validator/cross-frame-validator';
 import {hasPrototypePollution} from '../shell/cross-frame-validator/wire-version-validator';
+import {
+  buildAgentFunctionResponseItem,
+  normalizeV10RpcEnvelopeItem,
+} from '../shared/a2ui-rpc-envelope';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {stableStringify} from '../storage/stable-stringify/stable-stringify';
@@ -83,10 +87,10 @@ import {
 import {A2aStreamEventParser} from './converters/a2a-stream-event-parser.service';
 import {
   catalogDefinesCanvas,
-  isOneShotRpcEnvelope,
   mergeA2uiItems,
   normalizeA2uiItems,
   partitionA2uiSurfacePayload,
+  resolveActiveSurfaceIds,
 } from './converters/surface-partitioner';
 import {A2aErrorsInspector} from './errors-inspector/errors-inspector';
 import {A2aInputArea, SendMessageEvent} from './input-area/input-area';
@@ -838,8 +842,8 @@ export class A2aChatView implements OnInit {
 
     const normalizedItems =
       parsed.a2uiItems.length > 0 ? normalizeA2uiItems(parsed.a2uiItems, this.errorLogger) : [];
-    const surfaceItems = normalizedItems.filter(item => !isOneShotRpcEnvelope(item));
-    const rpcItems = normalizedItems.filter(isOneShotRpcEnvelope);
+    const surfaceItems = normalizedItems.filter(item => !isV10RpcEnvelopeItem(item));
+    const rpcItems = normalizedItems.filter(isV10RpcEnvelopeItem);
 
     this.messages.update(msgs =>
       msgs.map((m, index) => {
@@ -1133,13 +1137,9 @@ export class A2aChatView implements OnInit {
     for (const [functionCallId, entry] of this.pendingFunctionCalls.entries()) {
       entry.abortController.abort();
       if (notifyWindows) {
-        const cancelMsg: RenderA2uiItem = {
-          version: '1.0',
-          agentFunctionResponse: {
-            functionCallId,
-            error: {code: 'CANCELLED', message: 'Agent function call cancelled'},
-          },
-        } as RenderA2uiItem;
+        const cancelMsg = buildAgentFunctionResponseItem(functionCallId, {
+          error: {code: 'CANCELLED', message: 'Agent function call cancelled'},
+        });
         this.hostCommunication.sendRenderA2UI([cancelMsg], entry.sourceWindow);
       }
     }
@@ -1162,46 +1162,11 @@ export class A2aChatView implements OnInit {
   }
 
   private extractSurfaceIds(items: readonly unknown[]): Set<string> {
-    const surfaceIds = new Set<string>();
-    for (const raw of items) {
-      if (!raw || typeof raw !== 'object') continue;
-      const item = raw as RenderA2uiItem;
-      const surfaceId =
-        item.createSurface?.surfaceId ??
-        item.updateComponents?.surfaceId ??
-        item.updateDataModel?.surfaceId;
-      if (typeof surfaceId === 'string' && surfaceId) {
-        surfaceIds.add(surfaceId);
-      }
-    }
-    return surfaceIds;
+    return resolveActiveSurfaceIds(items);
   }
 
   private normalizeRpcEnvelopeItem(item: RenderA2uiItem): RenderA2uiItem {
-    let normalized = item;
-    const itemRecord = normalized as Record<string, unknown>;
-    if (itemRecord['callAgentFunctionResponse'] && !itemRecord['agentFunctionResponse']) {
-      normalized = {
-        ...normalized,
-        agentFunctionResponse: itemRecord[
-          'callAgentFunctionResponse'
-        ] as RenderA2uiItem['agentFunctionResponse'],
-      };
-    }
-    if (normalized.agentFunctionResponse) {
-      const respRec = normalized.agentFunctionResponse as unknown as Record<string, unknown>;
-      if (respRec['result'] !== undefined && respRec['value'] === undefined) {
-        const {result, ...rest} = respRec;
-        normalized = {
-          ...normalized,
-          agentFunctionResponse: {
-            ...rest,
-            value: result,
-          } as RenderA2uiItem['agentFunctionResponse'],
-        };
-      }
-    }
-    return normalized;
+    return normalizeV10RpcEnvelopeItem(item);
   }
 
   private isLiveOwnedWindow(win: Window | null | undefined): win is Window {
@@ -1471,16 +1436,12 @@ export class A2aChatView implements OnInit {
 
     const url = this.configProvider.a2aAgentUrl();
     if (!url) {
-      const errorMsg: RenderA2uiItem = {
-        version: '1.0',
-        agentFunctionResponse: {
-          functionCallId,
-          error: {
-            code: 'NO_AGENT_CONNECTED',
-            message: 'No agent endpoint configured',
-          },
+      const errorMsg = buildAgentFunctionResponseItem(functionCallId, {
+        error: {
+          code: 'NO_AGENT_CONNECTED',
+          message: 'No agent endpoint configured',
         },
-      } as RenderA2uiItem;
+      });
       this.hostCommunication.sendRenderA2UI([errorMsg], sourceWindow);
       return;
     }
@@ -1488,16 +1449,12 @@ export class A2aChatView implements OnInit {
     const existing = this.pendingFunctionCalls.get(functionCallId);
     if (existing) {
       existing.abortController.abort();
-      const cancelMsg: RenderA2uiItem = {
-        version: '1.0',
-        agentFunctionResponse: {
-          functionCallId,
-          error: {
-            code: 'CANCELLED',
-            message: 'Duplicate functionCallId replaced',
-          },
+      const cancelMsg = buildAgentFunctionResponseItem(functionCallId, {
+        error: {
+          code: 'CANCELLED',
+          message: 'Duplicate functionCallId replaced',
         },
-      } as RenderA2uiItem;
+      });
       this.hostCommunication.sendRenderA2UI([cancelMsg], existing.sourceWindow);
       this._activeRpcCount.update(c => Math.max(0, c - 1));
     }
@@ -1559,32 +1516,24 @@ export class A2aChatView implements OnInit {
         const errMessage = err instanceof Error ? err.message : 'Agent function call failed';
         this.recordInspectorEvent(createErrorEvent(err));
         if (!hasReceivedResponse) {
-          const errorMsg: RenderA2uiItem = {
-            version: '1.0',
-            agentFunctionResponse: {
-              functionCallId,
-              error: {
-                code: 'AGENT_FUNCTION_ERROR',
-                message: errMessage,
-              },
+          const errorMsg = buildAgentFunctionResponseItem(functionCallId, {
+            error: {
+              code: 'AGENT_FUNCTION_ERROR',
+              message: errMessage,
             },
-          } as RenderA2uiItem;
+          });
           this.hostCommunication.sendRenderA2UI([errorMsg], sourceWindow);
           hasReceivedResponse = true;
         }
       }
     } finally {
       if (!hasReceivedResponse && !abortController.signal.aborted) {
-        const errorMsg: RenderA2uiItem = {
-          version: '1.0',
-          agentFunctionResponse: {
-            functionCallId,
-            error: {
-              code: 'AGENT_FUNCTION_ERROR',
-              message: 'Stream completed without returning agentFunctionResponse',
-            },
+        const errorMsg = buildAgentFunctionResponseItem(functionCallId, {
+          error: {
+            code: 'AGENT_FUNCTION_ERROR',
+            message: 'Stream completed without returning agentFunctionResponse',
           },
-        } as RenderA2uiItem;
+        });
         this.hostCommunication.sendRenderA2UI([errorMsg], sourceWindow);
       }
       const current = this.pendingFunctionCalls.get(functionCallId);
