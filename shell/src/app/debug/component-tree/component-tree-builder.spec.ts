@@ -460,6 +460,27 @@ describe('getSurfaceComponent', () => {
     });
   });
 
+  it('returns a component defined inline in v1.0 createSurface.components', () => {
+    const messages = [
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's',
+          components: [
+            {id: 'root', component: 'Card', child: 'title'},
+            {id: 'title', component: 'Text', text: 'Inline'},
+          ],
+        },
+      },
+    ];
+
+    expect(getSurfaceComponent(messages, 's', 'title')).toEqual({
+      id: 'title',
+      component: 'Text',
+      text: 'Inline',
+    });
+  });
+
   it('returns null when the surface or component does not exist', () => {
     const messages = surface([{id: 'root', component: 'Column', children: []}]);
 
