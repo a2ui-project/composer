@@ -240,11 +240,36 @@ export class PropertyEditorHarness extends ComponentHarness {
     return !(await row.hasClass('property-row-multiline'));
   }
 
+  private async getOptionalText(selector: string): Promise<string | null> {
+    const element = await this.locatorForOptional(selector)();
+    return element ? (await element.text()).replace(/\s+/g, ' ').trim() : null;
+  }
+
+  /**
+   * Reads the rendered component header (`Type #id`), or null when hidden or no component is set.
+   */
+  async getHeaderText(): Promise<string | null> {
+    return this.getOptionalText('[data-property-header]');
+  }
+
+  /**
+   * Whether the inline `role="status"` live region container is mounted.
+   */
+  async hasStatusLiveRegion(): Promise<boolean> {
+    return (await this.locatorForOptional('[role="status"]')()) !== null;
+  }
+
+  /**
+   * Reads the inline status message rendered by the editor, if any.
+   */
+  async getStatusText(): Promise<string | null> {
+    return this.getOptionalText('[data-property-status]');
+  }
+
   /**
    * Reads the empty-state placeholder message when no editable properties are rendered, if any.
    */
   async getEmptyStateText(): Promise<string | null> {
-    const empty = await this.locatorForOptional('[data-property-empty-state]')();
-    return empty ? (await empty.text()).trim() : null;
+    return this.getOptionalText('[data-property-empty-state]');
   }
 }

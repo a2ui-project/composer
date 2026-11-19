@@ -14,6 +14,21 @@
  limitations under the License.
 -->
 
+@if (showHeader() && componentHeader(); as header) {
+  <div class="property-header" data-property-header>
+    <span class="property-header-type">{{ header.type }}</span>
+    @if (header.id) {
+      {{ ' ' }}<span class="property-header-id">#{{ header.id }}</span>
+    }
+  </div>
+}
+@if (showStatus()) {
+  <div role="status">
+    @if (inlineStatusMessage(); as status) {
+      <p class="property-status" data-property-status>{{ status }}</p>
+    }
+  </div>
+}
 @if (editableProperties().length) {
   <div class="property-list">
     @for (prop of editableProperties(); track prop.name) {
