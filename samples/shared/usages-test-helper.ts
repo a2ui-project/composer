@@ -16,7 +16,7 @@
 
 import {expect} from 'vitest';
 import {CreateSurfaceMessageSchema} from '@a2ui/web_core/v1_0';
-import type {ComponentUsages} from 'a2ui-bridge';
+import type {ComponentUsages, Demo} from 'a2ui-bridge';
 import {validateV10Components} from './validate-components.js';
 
 /**
@@ -58,4 +58,21 @@ export function assertValidV10ComponentUsages(
 
     validateV10Components(usageEntry.usage as Array<Record<string, unknown>>, componentName);
   }
+}
+
+/**
+ * Asserts that a basic-catalog demo catalog contains the expected number of
+ * uniquely-identified A2UI v1.0 demos with non-empty payloads.
+ */
+export function assertValidV10Demos(demos: ReadonlyArray<Demo>, expectedCount = 46): void {
+  expect(demos).toHaveLength(expectedCount);
+  for (const demo of demos) {
+    expect(demo.id).toBeTruthy();
+    expect(demo.name).toBeTruthy();
+    expect(demo.description).toBeTruthy();
+    expect(Array.isArray(demo.a2ui)).toBe(true);
+    expect(demo.a2ui.length).toBeGreaterThan(0);
+    expect((demo.a2ui[0] as {version?: unknown})?.version).toBe('1.0');
+  }
+  expect(new Set(demos.map(d => d.id)).size).toBe(demos.length);
 }

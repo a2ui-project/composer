@@ -19,7 +19,10 @@ import {describe, it, expect, beforeEach, afterEach, vi, onTestFinished} from 'v
 import {AppRoot} from './main';
 import {a2uiBridge, PreviewBridgeMessageType, MCP_FUNCTIONS_CATALOG_ID} from 'a2ui-bridge';
 import {COMPONENT_USAGES} from '../../shared/usages.js';
-import {assertValidV10ComponentUsages} from '../../shared/usages-test-helper.js';
+import {
+  assertValidV10ComponentUsages,
+  assertValidV10Demos,
+} from '../../shared/usages-test-helper.js';
 import {attachCatalogSchema} from '../../shared/attach-catalog-schema.js';
 
 describe('AppRoot Lit Element', () => {
@@ -186,16 +189,7 @@ describe('AppRoot Lit Element', () => {
 
   it('serves the full basic-catalog demo set', async () => {
     const {DEMOS} = await import('../../shared/demos');
-    expect(DEMOS).toHaveLength(46);
-    for (const demo of DEMOS) {
-      expect(demo.id).toBeTruthy();
-      expect(demo.name).toBeTruthy();
-      expect(demo.description).toBeTruthy();
-      expect(Array.isArray(demo.a2ui)).toBe(true);
-      expect(demo.a2ui.length).toBeGreaterThan(0);
-      expect(demo.a2ui[0].version).toBe('1.0');
-    }
-    expect(new Set(DEMOS.map(d => d.id)).size).toBe(DEMOS.length);
+    assertValidV10Demos(DEMOS);
   });
 
   it('wires getDemos from the bootstrap options through to the bridge', async () => {
