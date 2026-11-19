@@ -54,7 +54,7 @@ test.describe('Component Tree Panel', () => {
     const bookButtonToggle = treeContainer
       .locator('.tree-row', {hasText: '#book_button'})
       .first()
-      .locator('button.toggle');
+      .locator('.toggle');
     await bookButtonToggle.click();
     await expect(rowIds).toHaveText([
       '#root',

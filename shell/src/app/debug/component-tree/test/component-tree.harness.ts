@@ -151,7 +151,7 @@ export class ComponentTreeHarness extends ComponentHarness {
   }
 
   /**
-   * Clicks the expand/collapse toggle button on the matching `#id` row (at the given occurrence).
+   * Clicks the expand/collapse toggle on the matching `#id` row (at the given occurrence).
    */
   async toggleRow(id: string, occurrence = 0): Promise<void> {
     const index = await this.findRowIndex(id, occurrence);
@@ -212,7 +212,7 @@ class ComponentTreeRowHarness extends ComponentHarness {
   private readonly getTypeElement = this.locatorFor('.type');
   private readonly getIdElement = this.locatorFor('.id');
   private readonly getBadgeElements = this.locatorForAll('.badge');
-  private readonly getToggleButton = this.locatorForOptional('button.toggle');
+  private readonly getToggleElement = this.locatorForOptional('.toggle');
 
   async getSummary(): Promise<ComponentTreeRowSummary> {
     const host = await this.host();
@@ -257,10 +257,10 @@ class ComponentTreeRowHarness extends ComponentHarness {
   }
 
   async toggle(): Promise<void> {
-    const button = await this.getToggleButton();
-    if (!button) {
-      throw new Error(`Row ${await this.getId()} does not have an expand/collapse toggle button.`);
+    const toggle = await this.getToggleElement();
+    if (!toggle) {
+      throw new Error(`Row ${await this.getId()} does not have an expand/collapse toggle.`);
     }
-    await button.click();
+    await toggle.click();
   }
 }
