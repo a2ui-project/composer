@@ -86,6 +86,11 @@ code {
     .id {
       color: var(--mat-sys-on-secondary-container);
     }
+
+    .badge:not(.error):not(.warn) {
+      background: var(--mat-sys-surface);
+      color: var(--mat-sys-on-surface);
+    }
   }
 
   &.missing .type,
