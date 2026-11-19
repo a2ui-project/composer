@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, ElementRef, computed, inject, signal} from '@angular/core';
+import {Component, computed, inject, signal} from '@angular/core';
 import {NgTemplateOutlet} from '@angular/common';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {StateSync} from '../../chat/state-sync/state-sync';
@@ -53,7 +53,6 @@ export class ComponentTree {
   private readonly stateSync = inject(StateSync);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly parsedDraft = computed(() => tryParseJsonArray(this.stateSync.activeDraft()));
-  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
 
   /** Reference to the currently selected tree node, if any. */
   readonly selected = signal<TreeNodeRef | null>(null);
@@ -95,30 +94,25 @@ export class ComponentTree {
     return selected?.surfaceId === surfaceId && selected.key === node.key;
   }
 
-  protected readonly tabStop = computed<TreeNodeRef | null>(() => {
+  protected readonly tabStopKeys = computed<ReadonlySet<string>>(() => {
     const focused = this.focused();
     const hasNode = (node: ComponentTreeNode): boolean =>
       node.key === focused?.key || (this.isExpanded(node) && node.children.some(hasNode));
-    if (
-      focused !== null &&
-      this.trees().some(
-        tree =>
-          tree.surfaceId === focused.surfaceId &&
-          ((tree.root !== null && hasNode(tree.root)) || tree.unreachable.some(hasNode)),
-      )
-    ) {
-      return focused;
-    }
+    const keys = new Set<string>();
+    const addStop = (surfaceId: string, roots: readonly ComponentTreeNode[]) => {
+      const key =
+        focused?.surfaceId === surfaceId && roots.some(hasNode) ? focused.key : roots[0]?.key;
+      if (key) keys.add(`${surfaceId}\0${key}`);
+    };
     for (const tree of this.trees()) {
-      const node = tree.root ?? tree.unreachable[0];
-      if (node) return {surfaceId: tree.surfaceId, key: node.key, id: node.id};
+      if (tree.root) addStop(tree.surfaceId, [tree.root]);
+      addStop(tree.surfaceId, tree.unreachable);
     }
-    return null;
+    return keys;
   });
 
   protected tabIndexFor(surfaceId: string, node: ComponentTreeNode): number {
-    const tabStop = this.tabStop();
-    return tabStop?.surfaceId === surfaceId && tabStop.key === node.key ? 0 : -1;
+    return this.tabStopKeys().has(`${surfaceId}\0${node.key}`) ? 0 : -1;
   }
 
   protected onFocus(surfaceId: string, node: ComponentTreeNode): void {
@@ -157,10 +151,12 @@ export class ComponentTree {
 
   private stepFocus(event: Event, delta: 1 | -1): void {
     event.preventDefault();
-    const rows = Array.from(
-      this.elementRef.nativeElement.querySelectorAll<HTMLElement>('.tree-row'),
-    );
-    rows[rows.indexOf(event.currentTarget as HTMLElement) + delta]?.focus();
+    const currentRow = event.currentTarget;
+    if (!(currentRow instanceof HTMLElement)) return;
+    const tree = currentRow.closest<HTMLElement>('[role="tree"]');
+    if (!tree) return;
+    const rows = Array.from(tree.querySelectorAll<HTMLElement>('.tree-row'));
+    rows[rows.indexOf(currentRow) + delta]?.focus();
   }
 
   protected toggle(node: ComponentTreeNode, event?: Event): void {

@@ -35,6 +35,15 @@ export interface ComponentTreeRowSummary {
 }
 
 /**
+ * Snapshot of a `role="tree"` section in the ComponentTree panel.
+ */
+export interface ComponentTreeSectionSummary {
+  readonly label: string | null;
+  readonly rowIds: readonly string[];
+  readonly tabStops: readonly string[];
+}
+
+/**
  * Test harness for the standalone ComponentTree panel.
  */
 export class ComponentTreeHarness extends ComponentHarness {
@@ -46,6 +55,7 @@ export class ComponentTreeHarness extends ComponentHarness {
     '.surface-header .badge.warn',
   );
   private readonly getUnreachableHeaderElement = this.locatorForOptional('.unreachable-header');
+  private readonly getTreeHarnesses = this.locatorForAll(ComponentTreeSectionHarness);
   private readonly getRowHarnesses = this.locatorForAll(ComponentTreeRowHarness);
   private readonly getRowTooltips = this.locatorForAll(
     MatTooltipHarness.with({selector: '.tree-row'}),
@@ -79,6 +89,14 @@ export class ComponentTreeHarness extends ComponentHarness {
    */
   async hasUnreachableHeader(): Promise<boolean> {
     return (await this.getUnreachableHeaderElement()) !== null;
+  }
+
+  /**
+   * Returns structured summaries of all rendered `role="tree"` sections in display order.
+   */
+  async getTrees(): Promise<ComponentTreeSectionSummary[]> {
+    const trees = await this.getTreeHarnesses();
+    return Promise.all(trees.map(tree => tree.getSummary()));
   }
 
   /**
@@ -169,6 +187,21 @@ export class ComponentTreeHarness extends ComponentHarness {
       }
     }
     throw new Error(`Row "${id}" (occurrence ${occurrence}) not found in [${ids.join(', ')}].`);
+  }
+}
+
+class ComponentTreeSectionHarness extends ComponentHarness {
+  static hostSelector = '[role="tree"]';
+
+  private readonly getRowHarnesses = this.locatorForAll(ComponentTreeRowHarness);
+
+  async getSummary(): Promise<ComponentTreeSectionSummary> {
+    const rows = await Promise.all((await this.getRowHarnesses()).map(row => row.getSummary()));
+    return {
+      label: await (await this.host()).getAttribute('aria-label'),
+      rowIds: rows.map(row => row.id),
+      tabStops: rows.filter(row => row.tabIndex === 0).map(row => row.id),
+    };
   }
 }
 
