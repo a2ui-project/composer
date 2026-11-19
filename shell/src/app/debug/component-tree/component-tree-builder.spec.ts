@@ -407,4 +407,23 @@ describe('buildComponentTrees', () => {
     expect(schemaReads).toBe(1);
     expect(outline(secondTree.root)).toEqual(['Card#root', '  child:Text#title']);
   });
+
+  it('truncates expansion at MAX_NODES when shared references multiply nodes', () => {
+    const levels = Array.from({length: 12}, (_, index) => ({
+      id: `n${index}`,
+      component: 'Column',
+      children: [`n${index + 1}`, `n${index + 1}`],
+    }));
+    const messages = surface([
+      {id: 'root', component: 'Column', children: ['n0', 'n0']},
+      ...levels,
+      {id: 'n12', component: 'Text'},
+      {id: 'orphan', component: 'Text'},
+    ]);
+
+    const [tree] = buildComponentTrees(messages, CATALOG);
+
+    expect(tree.truncated).toBe(true);
+    expect(tree.unreachable).toEqual([]);
+  });
 });
