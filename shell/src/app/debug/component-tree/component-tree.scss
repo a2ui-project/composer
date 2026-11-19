@@ -101,12 +101,10 @@ code {
 }
 
 .toggle {
-  padding: 0;
-  border: none;
-  background: none;
-  color: inherit;
   cursor: pointer;
   line-height: 16px;
+  text-align: center;
+  user-select: none;
 }
 
 .via {

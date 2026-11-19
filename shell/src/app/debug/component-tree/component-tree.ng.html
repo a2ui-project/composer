@@ -93,15 +93,9 @@
     (keydown.arrowRight)="expandNode(node, $event)"
   >
     @if (node.children.length > 0) {
-      <button
-        type="button"
-        class="toggle"
-        tabindex="-1"
-        [attr.aria-label]="isExpanded(node) ? 'Collapse' : 'Expand'"
-        (click)="toggle(node, $event)"
-      >
+      <span class="toggle" aria-hidden="true" (click)="toggle(node, $event)">
         {{ isExpanded(node) ? '▾' : '▸' }}
-      </button>
+      </span>
     } @else {
       <span class="toggle-spacer"></span>
     }
