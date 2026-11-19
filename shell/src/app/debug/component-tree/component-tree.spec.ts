@@ -371,6 +371,107 @@ describe('ComponentTree', () => {
       expect(component.selected()?.id).toBe('root');
     });
 
+    const surfaceDraft = (components: Array<Record<string, unknown>>) =>
+      formatJson([
+        {
+          version: '1.0',
+          createSurface: {surfaceId: 's', catalogId: 'primary-catalog', components},
+        },
+      ]);
+
+    it('keeps the highlight on the selected occurrence of a shared component when edited', async () => {
+      activeDraft.set(
+        surfaceDraft([
+          {id: 'root', component: 'Column', children: ['shared', 'shared']},
+          {id: 'shared', component: 'Text', text: 'Initial'},
+        ]),
+      );
+      fixture.detectChanges();
+      await harness.selectRow('#shared', 1);
+
+      component.updateSelectedComponent({id: 'shared', component: 'Text', text: 'Updated'});
+      fixture.detectChanges();
+
+      expect((await harness.getRows()).map(row => row.selected)).toEqual([false, false, true]);
+      expect(component.selected()?.key).toBe('s/root/1:shared');
+    });
+
+    it('re-resolves selection by (surfaceId, id) when sibling indices shift', async () => {
+      await harness.selectRow('#body');
+
+      activeDraft.set(
+        surfaceDraft([
+          {id: 'root', component: 'Column', children: ['modal']},
+          {id: 'modal', component: 'Modal', content: 'body'},
+          {id: 'body', component: 'Text', text: 'Details'},
+        ]),
+      );
+      fixture.detectChanges();
+
+      expect((await harness.getRows()).map(row => ({id: row.id, selected: row.selected}))).toEqual([
+        {id: '#root', selected: false},
+        {id: '#modal', selected: false},
+        {id: '#body', selected: true},
+      ]);
+      expect(component.selected()?.key).toBe('s/root/0:modal/0:body');
+    });
+
+    it('re-resolves selection when a catalog update moves the selected component into the tree', async () => {
+      activeCatalog.set(null);
+      fixture.detectChanges();
+      await harness.selectRow('#open');
+
+      activeCatalog.set(MERGED_CATALOG);
+      fixture.detectChanges();
+
+      expect((await harness.getRows()).map(row => ({id: row.id, selected: row.selected}))).toEqual([
+        {id: '#root', selected: false},
+        {id: '#modal', selected: false},
+        {id: '#open', selected: true},
+        {id: '#body', selected: false},
+      ]);
+      expect(component.selected()?.key).toBe('s/root/0:modal/0:open');
+    });
+
+    it('clears selection when the selected component is removed', async () => {
+      await harness.selectRow('#open');
+
+      activeDraft.set(
+        surfaceDraft([
+          {id: 'root', component: 'Column', children: ['body']},
+          {id: 'body', component: 'Text', text: 'Details'},
+        ]),
+      );
+      fixture.detectChanges();
+
+      expect((await harness.getRows()).map(row => ({id: row.id, selected: row.selected}))).toEqual([
+        {id: '#root', selected: false},
+        {id: '#body', selected: false},
+      ]);
+      expect(component.selected()).toBeNull();
+      expect(component.selectedComponent()).toBeNull();
+    });
+
+    it('preserves selection across transient invalid JSON and re-resolves once valid again', async () => {
+      await harness.selectRow('#body');
+
+      activeDraft.set('{invalid');
+      fixture.detectChanges();
+      activeDraft.set(
+        surfaceDraft([
+          {id: 'root', component: 'Column', children: ['body']},
+          {id: 'body', component: 'Text', text: 'Details'},
+        ]),
+      );
+      fixture.detectChanges();
+
+      expect((await harness.getRows()).map(row => ({id: row.id, selected: row.selected}))).toEqual([
+        {id: '#root', selected: false},
+        {id: '#body', selected: true},
+      ]);
+      expect(component.selected()?.key).toBe('s/root/0:body');
+    });
+
     describe('keyboard navigation', () => {
       it('sets roving tabindex and aria-level on tree rows', async () => {
         const rows = await harness.getRows();
