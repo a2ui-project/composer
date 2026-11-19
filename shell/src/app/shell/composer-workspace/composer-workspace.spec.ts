@@ -985,6 +985,26 @@ describe('ComposerWorkspace Dashboard', () => {
           text: 'Updated',
         });
       });
+
+      it('disables the Property Editor when a programmatic stream starts', () => {
+        const chatState = TestBed.inject(ChatState) as unknown as MockChatState;
+
+        chatState.setProgrammaticStreamActive(true);
+        fixture.detectChanges();
+
+        expect(propertyEditor.disabled()).toBe(true);
+      });
+
+      it('re-enables the Property Editor when a programmatic stream ends', () => {
+        const chatState = TestBed.inject(ChatState) as unknown as MockChatState;
+        chatState.setProgrammaticStreamActive(true);
+        fixture.detectChanges();
+
+        chatState.setProgrammaticStreamActive(false);
+        fixture.detectChanges();
+
+        expect(propertyEditor.disabled()).toBe(false);
+      });
     });
   });
 });

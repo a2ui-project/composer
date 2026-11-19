@@ -32,6 +32,7 @@ import {AddPanelOptions, DockviewComponent} from 'dockview-core';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {CHAT_PANEL_COMPONENT} from '../../chat/chat-panel/chat-panel-component.token';
+import {ChatState} from '../../chat/chat-state/chat-state';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {RenderedFrame, RenderedFrameSizing} from '../../preview/rendered/rendered-frame';
 import {DefaultTarget} from '../host-communication/host-communication';
@@ -121,6 +122,7 @@ export class ComposerDockview {
   private readonly viewContainerRef = inject(ViewContainerRef);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly chatPanelComponent = inject(CHAT_PANEL_COMPONENT);
+  private readonly chatState = inject(ChatState);
 
   private rootEl?: HTMLElement;
   private dockviewApi!: DockviewComponent;
@@ -450,6 +452,7 @@ export class ComposerDockview {
     return [
       inputBinding('component', () => this.componentTreeInstance()?.selectedComponent() ?? null),
       inputBinding('resetKey', () => this.componentTreeInstance()?.selected()?.surfaceId ?? null),
+      inputBinding('disabled', () => this.chatState.isProgrammaticStreamActive()),
       outputBinding<Record<string, unknown>>('componentChange', updatedComponent => {
         this.componentTreeInstance()?.updateSelectedComponent(updatedComponent);
       }),
