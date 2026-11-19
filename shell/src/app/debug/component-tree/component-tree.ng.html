@@ -83,7 +83,7 @@
     <span class="type">{{ node.type ?? '?' }}</span>
     <span class="id">#{{ node.id }}</span>
     @if (node.template !== null) {
-      <span class="badge">each {{ node.template }}</span>
+      <span class="badge">each {{ node.template || 'item' }}</span>
     }
     @if (node.shared) {
       <span class="badge">shared</span>

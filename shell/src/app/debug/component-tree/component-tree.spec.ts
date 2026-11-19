@@ -125,4 +125,37 @@ describe('ComponentTree', () => {
     expect(errorMessage?.textContent).toContain('The A2UI JSON is invalid:');
     expect(getRowIds()).toEqual([]);
   });
+
+  it('renders template badges with the data path or an item fallback when path is omitted', () => {
+    activeCatalog.set(PRIMARY_CATALOG);
+    activeDraft.set(
+      formatJson([
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 's',
+            catalogId: 'primary-catalog',
+            components: [
+              {id: 'root', component: 'Column', children: ['withPath', 'withoutPath']},
+              {
+                id: 'withPath',
+                component: 'Column',
+                children: {componentId: 'rowA', path: '/items'},
+              },
+              {id: 'withoutPath', component: 'Column', children: {componentId: 'rowB'}},
+              {id: 'rowA', component: 'Text', text: 'A'},
+              {id: 'rowB', component: 'Text', text: 'B'},
+            ],
+          },
+        },
+      ]),
+    );
+
+    fixture.detectChanges();
+
+    const badges = Array.from<HTMLElement>(
+      fixture.nativeElement.querySelectorAll('.tree-row .badge'),
+    ).map(element => element.textContent);
+    expect(badges).toEqual(['each /items', 'each item']);
+  });
 });
