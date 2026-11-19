@@ -747,6 +747,62 @@ describe('ComponentTree', () => {
         await harness.pressKeyOnRow('#root', TestKey.UP_ARROW, 1);
         expect((await harness.getRows()).map(row => row.focused)).toEqual([false, false, true]);
       });
+
+      it('moves focus to the first and last visible rows on Home and End without changing selection', async () => {
+        await harness.selectRow('#open');
+
+        await harness.pressKeyOnRow('#open', TestKey.END);
+        const focusedAfterEnd = await harness.getFocusedRowId();
+        await harness.pressKeyOnRow('#body', TestKey.HOME);
+        const focusedAfterHome = await harness.getFocusedRowId();
+
+        expect(focusedAfterEnd).toBe('#body');
+        expect(focusedAfterHome).toBe('#root');
+        expect(component.selected()?.id).toBe('open');
+        expect(
+          (await harness.getRows()).map(row => ({
+            id: row.id,
+            selected: row.selected,
+            tabIndex: row.tabIndex,
+          })),
+        ).toEqual([
+          {id: '#root', selected: false, tabIndex: 0},
+          {id: '#modal', selected: false, tabIndex: -1},
+          {id: '#open', selected: true, tabIndex: -1},
+          {id: '#body', selected: false, tabIndex: -1},
+        ]);
+      });
+
+      it('scopes Home and End to visible rows in the active tree without expanding collapsed branches', async () => {
+        activeDraft.set(
+          surfaceDraft([
+            {id: 'root', component: 'Column', children: ['modal']},
+            {id: 'modal', component: 'Modal', trigger: 'open', content: 'body'},
+            {id: 'open', component: 'Text', text: 'Open'},
+            {id: 'body', component: 'Text', text: 'Details'},
+            {id: 'orphanA', component: 'Text', text: 'Orphan A'},
+            {id: 'orphanB', component: 'Text', text: 'Orphan B'},
+          ]),
+        );
+        fixture.detectChanges();
+        await harness.toggleRow('#modal');
+
+        await harness.pressKeyOnRow('#root', TestKey.END);
+        const focusedAfterEnd = await harness.getFocusedRowId();
+        await harness.pressKeyOnRow('#orphanB', TestKey.HOME);
+        const focusedAfterOrphanHome = await harness.getFocusedRowId();
+
+        expect(focusedAfterEnd).toBe('#modal');
+        expect(focusedAfterOrphanHome).toBe('#orphanA');
+        expect(
+          (await harness.getRows()).map(row => ({id: row.id, expanded: row.expanded})),
+        ).toEqual([
+          {id: '#root', expanded: true},
+          {id: '#modal', expanded: false},
+          {id: '#orphanA', expanded: null},
+          {id: '#orphanB', expanded: null},
+        ]);
+      });
     });
   });
 });
