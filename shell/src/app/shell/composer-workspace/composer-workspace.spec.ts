@@ -1049,6 +1049,36 @@ describe('ComposerWorkspace Dashboard', () => {
         fixture.detectChanges();
 
         expect(propertyEditor.resetKey()).not.toBe(initialResetKey);
+        expect(propertyEditor.emptyMessage()).toBe('Select a component to inspect its properties.');
+      });
+
+      it('shows a missing-component emptyMessage when a selected node is not defined in the surface', () => {
+        componentTree.selectNode('s', {
+          ...TITLE_NODE,
+          key: 's/root/0:ghost',
+          id: 'ghost',
+          type: null,
+          status: 'missing',
+        });
+        fixture.detectChanges();
+
+        expect(propertyEditor.component()).toBeNull();
+        expect(propertyEditor.emptyMessage()).toBe(
+          'Component #ghost is not defined in surface "s".',
+        );
+      });
+
+      it('shows an invalid-JSON emptyMessage when the active draft fails to parse', () => {
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+
+        stateSync.activeDraftSignal.set('{invalid');
+        fixture.detectChanges();
+
+        expect(propertyEditor.component()).toBeNull();
+        expect(propertyEditor.emptyMessage()).toBe(
+          'Fix the A2UI JSON to inspect component properties.',
+        );
       });
 
       it('disables the Property Editor when a programmatic stream starts', () => {

@@ -463,6 +463,17 @@ export class ComposerDockview {
         return selected ? `${selected.surfaceId}:${selected.key}:${this.draftRevision()}` : null;
       }),
       inputBinding('disabled', () => this.chatState.isProgrammaticStreamActive()),
+      inputBinding('emptyMessage', () => {
+        const tree = this.componentTreeInstance();
+        if (tree?.parseError()) {
+          return 'Fix the A2UI JSON to inspect component properties.';
+        }
+        const selected = tree?.selected();
+        if (selected && !tree?.selectedComponent()) {
+          return `Component #${selected.id} is not defined in surface "${selected.surfaceId}".`;
+        }
+        return 'Select a component to inspect its properties.';
+      }),
       inputBinding('showHeader', () => true),
       inputBinding('showStatus', () => true),
       outputBinding<Record<string, unknown>>('componentChange', updatedComponent => {
