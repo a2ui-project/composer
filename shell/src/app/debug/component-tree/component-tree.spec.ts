@@ -72,12 +72,14 @@ describe('ComponentTree', () => {
   let harness: ComponentTreeHarness;
   let component: ComponentTree;
   let activeDraft: WritableSignal<string>;
+  let sessionResetNonce: WritableSignal<number>;
   let activeCatalog: WritableSignal<Catalog | null>;
   let mergedActiveCatalog: WritableSignal<Catalog | null>;
   let updateDraftSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     activeDraft = signal(formatJson(SECONDARY_MODAL_MESSAGES));
+    sessionResetNonce = signal(0);
     activeCatalog = signal<Catalog | null>(null);
     mergedActiveCatalog = signal<Catalog | null>(null);
     updateDraftSpy = vi.fn((next: string) => activeDraft.set(next));
@@ -89,6 +91,7 @@ describe('ComponentTree', () => {
           provide: StateSync,
           useValue: {
             activeDraft,
+            sessionResetNonce,
             updateDraft: updateDraftSpy,
           },
         },
@@ -447,6 +450,22 @@ describe('ComponentTree', () => {
       expect((await harness.getRows()).map(row => ({id: row.id, selected: row.selected}))).toEqual([
         {id: '#root', selected: false},
         {id: '#body', selected: false},
+      ]);
+      expect(component.selected()).toBeNull();
+      expect(component.selectedComponent()).toBeNull();
+    });
+
+    it('clears selection when the session resets even if the draft keeps the same component', async () => {
+      await harness.selectRow('#root');
+
+      sessionResetNonce.update(count => count + 1);
+      fixture.detectChanges();
+
+      expect((await harness.getRows()).map(row => row.selected)).toEqual([
+        false,
+        false,
+        false,
+        false,
       ]);
       expect(component.selected()).toBeNull();
       expect(component.selectedComponent()).toBeNull();

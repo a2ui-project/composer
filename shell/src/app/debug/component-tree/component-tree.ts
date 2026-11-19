@@ -57,11 +57,17 @@ export class ComponentTree {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly parsedDraft = computed(() => tryParseJsonArray(this.stateSync.activeDraft()));
 
-  /** Reference to the currently selected tree node, re-resolved when the tree changes. */
-  readonly selected = linkedSignal<SurfaceComponentTree[] | null, TreeNodeRef | null>({
-    source: () => (this.parsedDraft().success ? this.trees() : null),
-    computation: (trees, previous) => {
-      const current = previous?.value ?? null;
+  private readonly _selected = linkedSignal<
+    {trees: SurfaceComponentTree[] | null; resetNonce: number},
+    TreeNodeRef | null
+  >({
+    source: () => ({
+      trees: this.parsedDraft().success ? this.trees() : null,
+      resetNonce: this.stateSync.sessionResetNonce(),
+    }),
+    computation: ({trees, resetNonce}, previous) => {
+      if (!previous || resetNonce !== previous.source.resetNonce) return null;
+      const current = previous.value;
       if (!current || !trees) return current;
       const tree = trees.find(tree => tree.surfaceId === current.surfaceId);
       if (!tree) return null;
@@ -82,6 +88,9 @@ export class ComponentTree {
     },
   });
 
+  /** Reference to the currently selected tree node, re-resolved when the tree changes. */
+  readonly selected = this._selected.asReadonly();
+
   /** The component definition for the currently selected tree node, if defined. */
   readonly selectedComponent = computed<Record<string, unknown> | null>(() => {
     const selected = this.selected();
@@ -97,7 +106,8 @@ export class ComponentTree {
   /** Reference to the currently focused tree node for roving tabindex. */
   protected readonly focused = signal<TreeNodeRef | null>(null);
 
-  protected readonly parseError = computed(() => {
+  /** Parse error message when the active draft is not valid A2UI JSON, or null. */
+  readonly parseError = computed(() => {
     const result = this.parsedDraft();
     return result.success ? null : result.error.message;
   });
@@ -148,7 +158,7 @@ export class ComponentTree {
     event?.preventDefault();
     const ref: TreeNodeRef = {surfaceId, key: node.key, id: node.id};
     this.focused.set(ref);
-    this.selected.set(ref);
+    this._selected.set(ref);
     window.dispatchEvent(new OpenPanelEvent(ComposerPanelId.PropertyEditor));
   }
 
