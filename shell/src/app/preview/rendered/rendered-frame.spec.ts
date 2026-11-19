@@ -1227,6 +1227,84 @@ describe('RenderedFrame Live Preview Viewport', () => {
       expect(resets.includes(currentGuestWindow)).toBe(true);
     });
 
+    it('emits documentReset only on URL replacement, same-URL reload, and destroy — not on same-document resets', async () => {
+      const renderResets: Window[] = [];
+      const docResets: Window[] = [];
+      fixture.componentInstance.renderStateReset.subscribe(win => renderResets.push(win));
+      fixture.componentInstance.documentReset.subscribe(win => docResets.push(win));
+
+      // Initial dispatch emits renderStateReset but not documentReset
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      const iframe = await harness.getIframe();
+      await iframe!.dispatchEvent('load');
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets).toHaveLength(0);
+
+      // Same-document RENDER_ERROR -> renderStateReset only
+      renderResets.length = 0;
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_ERROR, {message: 'boom'}));
+      fixture.detectChanges();
+      expect(renderResets).toHaveLength(1);
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets).toHaveLength(0);
+
+      // Same-document rejected dispatch (sendRenderA2UI returns false) -> renderStateReset only
+      renderResets.length = 0;
+      vi.mocked(hostCommunicationServiceMock.sendRenderA2UI!).mockReturnValueOnce(false);
+      fixture.componentRef.setInput('payload', [
+        {version: 'v0.9', createSurface: {surfaceId: 's-retry', catalogId: 'cat-1'}},
+      ]);
+      fixture.detectChanges();
+      expect(renderResets).toHaveLength(1);
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets).toHaveLength(0);
+
+      // Empty payload -> renderStateReset only
+      renderResets.length = 0;
+      fixture.componentRef.setInput('payload', []);
+      fixture.detectChanges();
+      expect(renderResets).toHaveLength(1);
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets).toHaveLength(0);
+
+      // Session reset -> renderStateReset only
+      renderResets.length = 0;
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      expect(renderResets).toHaveLength(1);
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets).toHaveLength(0);
+
+      // Same-URL reload -> emits both renderStateReset and documentReset
+      renderResets.length = 0;
+      docResets.length = 0;
+      await iframe!.dispatchEvent('load');
+      fixture.detectChanges();
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets.includes(guestWindow)).toBe(true);
+
+      // URL replacement -> emits both renderStateReset and documentReset
+      renderResets.length = 0;
+      docResets.length = 0;
+      resolvedUrlSignal.set('http://localhost:4200/other-renderer');
+      fixture.detectChanges();
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets.includes(guestWindow)).toBe(true);
+
+      // Destroy -> emits both renderStateReset and documentReset
+      const currentGuestWindow = await guestWindowOf(harness);
+      renderResets.length = 0;
+      docResets.length = 0;
+      fixture.destroy();
+      expect(renderResets).toHaveLength(1);
+      expect(renderResets.includes(currentGuestWindow)).toBe(true);
+      expect(docResets).toHaveLength(1);
+      expect(docResets.includes(currentGuestWindow)).toBe(true);
+    });
+
     it('ignores stale RENDER_ERROR renderId without latching error or emitting reset, and latches on matching coalesced RENDER_ERROR', async () => {
       const resets: Window[] = [];
       fixture.componentInstance.renderStateReset.subscribe(win => resets.push(win));

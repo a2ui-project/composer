@@ -65,6 +65,11 @@ export class A2aChatMessageHarness extends ComponentHarness {
     return btn !== null;
   }
 
+  async isCanvasActive(): Promise<boolean> {
+    const btn = await this.getCloseCanvasButton();
+    return btn !== null;
+  }
+
   async getCanvasButtonText(): Promise<string | null> {
     const btn = await this.getOpenCanvasButton();
     return btn ? btn.getText() : null;

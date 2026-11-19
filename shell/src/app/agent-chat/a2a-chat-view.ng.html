@@ -52,6 +52,7 @@
             (openInspector)="inspectMessage($event)"
             (inlinePayloadRendered)="onInlineSurfacePayloadRendered($event)"
             (inlineRenderStateReset)="onSurfaceRenderStateReset($event)"
+            (inlineDocumentReset)="onSurfaceDocumentReset($event)"
           ></a2ui-composer-chat-history>
         </div>
 
@@ -90,6 +91,7 @@
               [defaultTarget]="DefaultTarget.REPLACE"
               (payloadRendered)="onCanvasSurfacePayloadRendered($event)"
               (renderStateReset)="onSurfaceRenderStateReset($event)"
+              (documentReset)="onSurfaceDocumentReset($event)"
             ></a2ui-composer-rendered-frame>
           </div>
         </div>

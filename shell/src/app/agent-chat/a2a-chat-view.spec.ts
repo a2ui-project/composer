@@ -2414,7 +2414,7 @@ describe('A2aChatView', () => {
     });
 
     await vi.waitFor(() =>
-      expect(fixture.componentInstance['pendingFunctionCalls'].has('rpc-keep-alive')).toBe(true),
+      expect(vi.mocked(mockA2aTransport.sendMessageStream!)).toHaveBeenCalledTimes(2),
     );
 
     mockSendToServer$.next({
@@ -2426,7 +2426,6 @@ describe('A2aChatView', () => {
 
     await vi.waitFor(() => expect(chatAborted).toBe(true));
     expect(rpcAborted).toBe(false);
-    expect(fixture.componentInstance['pendingFunctionCalls'].has('rpc-keep-alive')).toBe(true);
 
     releaseRpc();
     await vi.waitFor(() =>
@@ -3791,5 +3790,578 @@ describe('A2aChatView', () => {
     const afterReloadCalls = findRendererFunctionDispatches('fn-after-reload');
     expect(afterReloadCalls.length).toBe(1);
     expect(afterReloadCalls[0][1] === guestWindow).toBe(true);
+  });
+
+  it('queues scoped and unscoped Canvas RPCs for turn 2 instead of running on turn 1 open Canvas snapshot', async () => {
+    mockActiveProtocolVersionSignal.set('v1.0');
+    vi.mocked(mockA2aTransport.sendMessageStream!).mockImplementation(async function* (_url, msg) {
+      const text = msg.parts.find(p => p.text)?.text;
+      if (text === 'turn 1 canvas') {
+        yield {
+          final: true,
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                data: {
+                  version: '1.0',
+                  createSurface: {
+                    surfaceId: 'surf-canvas',
+                    catalogId: 'cat-1',
+                    components: [
+                      {
+                        id: 'root',
+                        component: 'Canvas',
+                        cardTitle: 'Canvas v1',
+                        autoOpen: true,
+                        children: ['t1'],
+                      },
+                      {id: 't1', component: 'Text', text: 'Snapshot v1'},
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        };
+        return;
+      }
+
+      yield {
+        final: true,
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              data: {
+                version: '1.0',
+                createSurface: {
+                  surfaceId: 'surf-canvas',
+                  catalogId: 'cat-1',
+                  components: [
+                    {
+                      id: 'root',
+                      component: 'Canvas',
+                      cardTitle: 'Canvas v2',
+                      autoOpen: false,
+                      children: ['t2'],
+                    },
+                    {id: 't2', component: 'Text', text: 'Snapshot v2'},
+                  ],
+                },
+              },
+            },
+            {
+              data: {
+                version: '1.0',
+                callRendererFunction: {
+                  surfaceId: 'surf-canvas',
+                  functionCallId: 'fn-canvas-scoped-v2',
+                  callFunction: {['@call']: 'updateChart'},
+                },
+              },
+            },
+            {
+              data: {
+                version: '1.0',
+                callRendererFunction: {
+                  functionCallId: 'fn-canvas-unscoped-v2',
+                  callFunction: {['@call']: 'pingCanvas'},
+                },
+              },
+            },
+          ],
+        },
+      };
+    });
+
+    const history = await harness.getHistory();
+    const inputArea = await harness.getInputArea();
+
+    // Turn 1 opens and renders Canvas v1
+    await inputArea.setInputValue('turn 1 canvas');
+    await inputArea.clickSend();
+    await vi.waitFor(async () => {
+      expect(await harness.hasSideCanvas()).toBe(true);
+      expect(await inputArea.isStreaming()).toBe(false);
+    });
+    fixture.detectChanges();
+
+    const canvasIframe = await getSideCanvasIframe();
+    emitBridgeLifecycle(canvasIframe.contentWindow!, [
+      PreviewBridgeMessageType.RENDERER_READY,
+      PreviewBridgeMessageType.RENDER_SUCCESS,
+    ]);
+
+    const sendSpy = mockHostCommunication.sendRenderA2UI;
+    sendSpy.mockClear();
+
+    // Turn 2 updates surf-canvas (autoOpen: false) and streams scoped + unscoped RPCs while Turn 1 Canvas is open
+    await inputArea.setInputValue('turn 2 canvas');
+    await inputArea.clickSend();
+    await vi.waitFor(async () => {
+      expect(await history.getMessageCount()).toBe(4);
+      expect(await inputArea.isStreaming()).toBe(false);
+    });
+    fixture.detectChanges();
+
+    // Neither RPC may run against Turn 1's older open Canvas snapshot
+    expect(findRendererFunctionDispatches('fn-canvas-scoped-v2')).toHaveLength(0);
+    expect(findRendererFunctionDispatches('fn-canvas-unscoped-v2')).toHaveLength(0);
+
+    // User opens Turn 2's Canvas card and it finishes rendering -> both RPCs flush
+    const turn2Msg = await history.getMessage(3);
+    await turn2Msg!.clickOpenCanvas();
+    fixture.detectChanges();
+
+    emitBridgeLifecycle(canvasIframe.contentWindow!, [PreviewBridgeMessageType.RENDER_SUCCESS]);
+
+    expect(findRendererFunctionDispatches('fn-canvas-scoped-v2')).toHaveLength(1);
+    expect(findRendererFunctionDispatches('fn-canvas-unscoped-v2')).toHaveLength(1);
+  });
+
+  it('flushes queued unscoped RPC for a surface-less turn 2 once reloading turn 1 inline frame renders', async () => {
+    mockActiveProtocolVersionSignal.set('v1.0');
+    vi.mocked(mockA2aTransport.sendMessageStream!).mockImplementation(async function* (_url, msg) {
+      const text = msg.parts.find(p => p.text)?.text;
+      if (text === 'turn 1 inline') {
+        yield {
+          final: true,
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                data: {
+                  version: '1.0',
+                  createSurface: {
+                    surfaceId: 'surf-reload-unscoped',
+                    catalogId: 'cat-1',
+                    components: [{id: 'root', component: 'Text', text: 'Turn 1'}],
+                  },
+                },
+              },
+            ],
+          },
+        };
+        return;
+      }
+
+      yield {
+        final: true,
+        message: {
+          role: 'agent',
+          parts: [
+            {text: 'Calling existing surface...'},
+            {
+              data: {
+                version: '1.0',
+                callRendererFunction: {
+                  functionCallId: 'fn-turn2-unscoped',
+                  callFunction: {['@call']: 'focusExisting'},
+                },
+              },
+            },
+          ],
+        },
+      };
+    });
+
+    const history = await harness.getHistory();
+    const inputArea = await harness.getInputArea();
+
+    await inputArea.setInputValue('turn 1 inline');
+    await inputArea.clickSend();
+    await vi.waitFor(async () => {
+      expect(await (await history.getMessage(1))?.hasInlineSurface()).toBe(true);
+    });
+    fixture.detectChanges();
+
+    const msgHarness = await history.getMessage(1);
+    const inlineFrameHarness = await msgHarness!.getInlineFrame();
+    const iframeTestEl = await inlineFrameHarness!.getIframe();
+    const inlineIframe = TestbedHarnessEnvironment.getNativeElement(
+      iframeTestEl!,
+    ) as HTMLIFrameElement;
+    const guestWindow = inlineIframe.contentWindow!;
+    vi.spyOn(inlineIframe, 'contentWindow', 'get').mockReturnValue(guestWindow);
+    showGuestDocument(inlineIframe, 'renderer');
+
+    await iframeTestEl!.dispatchEvent('load');
+    emitBridgeLifecycle(guestWindow, [
+      PreviewBridgeMessageType.RENDERER_READY,
+      PreviewBridgeMessageType.RENDER_SUCCESS,
+    ]);
+
+    // Trigger same-URL reload on Turn 1's inline frame so it becomes unready
+    const sendSpy = mockHostCommunication.sendRenderA2UI;
+    sendSpy.mockClear();
+    await iframeTestEl!.dispatchEvent('load');
+    fixture.detectChanges();
+
+    // Turn 2 has no surface of its own and emits an unscoped callRendererFunction while Turn 1 reloads
+    await inputArea.setInputValue('turn 2 unscoped');
+    await inputArea.clickSend();
+    await vi.waitFor(async () => {
+      expect(await history.getMessageCount()).toBe(4);
+      expect(await inputArea.isStreaming()).toBe(false);
+    });
+    fixture.detectChanges();
+
+    expect(findRendererFunctionDispatches('fn-turn2-unscoped')).toHaveLength(0);
+
+    // Turn 1's inline frame finishes reloading -> Turn 2's unscoped RPC flushes to Turn 1's window
+    emitBridgeLifecycle(guestWindow, [
+      PreviewBridgeMessageType.RENDERER_READY,
+      PreviewBridgeMessageType.RENDER_SUCCESS,
+    ]);
+
+    const flushed = findRendererFunctionDispatches('fn-turn2-unscoped');
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0][1] === guestWindow).toBe(true);
+  });
+
+  it('keeps an open Turn 1 Canvas intact when Turn 2 arrives with autoOpen false and the same Canvas id on a different surface', async () => {
+    mockActiveProtocolVersionSignal.set('v1.0');
+    vi.mocked(mockA2aTransport.sendMessageStream!).mockImplementation(async function* (_url, msg) {
+      const text = msg.parts.find(p => p.text)?.text;
+      const turn = text === 'turn one' ? 1 : 2;
+      yield {
+        final: true,
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              data: {
+                version: '1.0',
+                createSurface: {
+                  surfaceId: `turn-${turn}`,
+                  catalogId: 'cat-1',
+                  components: [
+                    {id: 'root', component: 'Column', children: ['inline_text', 'canvas']},
+                    {id: 'inline_text', component: 'Text', text: `Inline ${turn}`},
+                    {
+                      id: 'canvas',
+                      component: 'Canvas',
+                      cardTitle: `Turn ${turn} details`,
+                      autoOpen: false,
+                      children: ['canvas_text'],
+                    },
+                    {id: 'canvas_text', component: 'Text', text: `Canvas ${turn}`},
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      };
+    });
+
+    const history = await harness.getHistory();
+    const inputArea = await harness.getInputArea();
+
+    await inputArea.setInputValue('turn one');
+    await inputArea.clickSend();
+    await vi.waitFor(async () => expect(await history.getMessageCount()).toBe(2));
+    fixture.detectChanges();
+
+    const turn1Msg = await history.getMessage(1);
+    await turn1Msg!.clickOpenCanvas();
+    fixture.detectChanges();
+
+    const canvasIframe = await getSideCanvasIframe();
+    emitBridgeLifecycle(canvasIframe.contentWindow!, [
+      PreviewBridgeMessageType.RENDERER_READY,
+      PreviewBridgeMessageType.RENDER_SUCCESS,
+    ]);
+    mockHostCommunication.sendRenderA2UI.mockClear();
+
+    await inputArea.setInputValue('turn two');
+    await inputArea.clickSend();
+    await vi.waitFor(async () => {
+      expect(await history.getMessageCount()).toBe(4);
+      expect(await inputArea.isStreaming()).toBe(false);
+    });
+    fixture.detectChanges();
+
+    const dispatchesToCanvasAfterTurn2 = mockHostCommunication.sendRenderA2UI.mock.calls.filter(
+      call => call[1] === canvasIframe || call[1] === canvasIframe.contentWindow,
+    );
+    expect(dispatchesToCanvasAfterTurn2).toHaveLength(0);
+
+    const turn2Msg = await history.getMessage(3);
+    await turn2Msg!.clickOpenCanvas();
+    fixture.detectChanges();
+
+    const dispatchesToCanvasAfterClick = mockHostCommunication.sendRenderA2UI.mock.calls.filter(
+      call => call[1] === canvasIframe || call[1] === canvasIframe.contentWindow,
+    );
+    expect(dispatchesToCanvasAfterClick).toHaveLength(1);
+    expect(
+      (dispatchesToCanvasAfterClick[0][0] as Array<{createSurface?: {surfaceId?: string}}>)[0]
+        ?.createSurface?.surfaceId,
+    ).toBe('turn-2');
+  });
+
+  it('keeps the open Turn 2 Canvas pinned during repartitioning when two turns share the same Canvas id and surfaceId', async () => {
+    mockActiveProtocolVersionSignal.set('v1.0');
+    vi.mocked(mockA2aTransport.sendMessageStream!).mockImplementation(async function* (_url, msg) {
+      const text = msg.parts.find(p => p.text)?.text;
+      const turn = text === 'turn one' ? 1 : 2;
+      yield {
+        final: true,
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              data: {
+                version: '1.0',
+                createSurface: {
+                  surfaceId: 'surf-shared',
+                  catalogId: 'cat-1',
+                  components: [
+                    {id: 'root', component: 'Column', children: ['canvas']},
+                    {
+                      id: 'canvas',
+                      component: 'Canvas',
+                      cardTitle: `Turn ${turn} canvas`,
+                      autoOpen: false,
+                      children: ['canvas_text'],
+                    },
+                    {id: 'canvas_text', component: 'Text', text: `Canvas ${turn}`},
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      };
+    });
+
+    const history = await harness.getHistory();
+    const inputArea = await harness.getInputArea();
+
+    await inputArea.setInputValue('turn one');
+    await inputArea.clickSend();
+    await vi.waitFor(async () => expect(await history.getMessageCount()).toBe(2));
+
+    await inputArea.setInputValue('turn two');
+    await inputArea.clickSend();
+    await vi.waitFor(async () => {
+      expect(await history.getMessageCount()).toBe(4);
+      expect(await inputArea.isStreaming()).toBe(false);
+    });
+    fixture.detectChanges();
+
+    // Open Turn 2's Canvas artifact
+    const turn2Msg = await history.getMessage(3);
+    await turn2Msg!.clickOpenCanvas();
+    fixture.detectChanges();
+    mockHostCommunication.sendRenderA2UI.mockClear();
+
+    // Trigger catalog re-partitioning -> Turn 2 Canvas must remain active, not revert to Turn 1
+    mockActiveCatalogSignal.set({
+      catalogId: 'cat-1',
+      name: 'Cat 1',
+      components: {
+        Canvas: {type: 'object'},
+        Column: {type: 'object'},
+        Text: {type: 'object'},
+      },
+    } as unknown as Catalog);
+    fixture.detectChanges();
+
+    expect(await (await history.getMessage(1))!.isCanvasActive()).toBe(false);
+    expect(await (await history.getMessage(3))!.isCanvasActive()).toBe(true);
+  });
+
+  it('ignores deleted surfaceIds in Canvas matching and keeps live callAgentFunction across same-document RENDER_ERROR', async () => {
+    mockActiveProtocolVersionSignal.set('v1.0');
+    let releaseRpc!: () => void;
+    const rpcGate = new Promise<void>(resolve => {
+      releaseRpc = resolve;
+    });
+    let rpcAborted = false;
+
+    vi.mocked(mockA2aTransport.sendMessageStream!).mockImplementation(async function* (
+      _url,
+      msg,
+      opts?: {abortSignal?: AbortSignal},
+    ) {
+      const hasRpc = msg.parts.some(p => p.data && 'callAgentFunction' in p.data);
+      if (hasRpc) {
+        opts?.abortSignal?.addEventListener('abort', () => {
+          rpcAborted = true;
+        });
+        await rpcGate;
+        yield {
+          final: true,
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                data: {
+                  version: '1.0',
+                  agentFunctionResponse: {
+                    functionCallId: 'fn-survive-render-err',
+                    value: {survived: true},
+                  },
+                },
+              },
+            ],
+          },
+        };
+        return;
+      }
+
+      const text = msg.parts.find(p => p.text)?.text;
+      if (text === 'turn one') {
+        yield {
+          final: true,
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                data: {
+                  version: '1.0',
+                  createSurface: {
+                    surfaceId: 'surf-old',
+                    catalogId: 'cat-1',
+                    components: [
+                      {
+                        id: 'root',
+                        component: 'Canvas',
+                        cardTitle: 'Old Canvas',
+                        autoOpen: true,
+                        children: ['t1'],
+                      },
+                      {id: 't1', component: 'Text', text: 'Old Surface'},
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        };
+        return;
+      }
+
+      // Turn 2 creates and deletes surf-old, leaving only surf-live active
+      yield {
+        final: true,
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              data: {
+                version: '1.0',
+                createSurface: {
+                  surfaceId: 'surf-old',
+                  catalogId: 'cat-1',
+                  components: [
+                    {
+                      id: 'root',
+                      component: 'Canvas',
+                      cardTitle: 'Turn 2',
+                      autoOpen: false,
+                      children: ['t2'],
+                    },
+                    {id: 't2', component: 'Text', text: 'Deleted'},
+                  ],
+                },
+              },
+            },
+            {data: {version: '1.0', deleteSurface: {surfaceId: 'surf-old'}}},
+            {
+              data: {
+                version: '1.0',
+                createSurface: {
+                  surfaceId: 'surf-live',
+                  catalogId: 'cat-1',
+                  components: [
+                    {
+                      id: 'root-live',
+                      component: 'Canvas',
+                      cardTitle: 'Live',
+                      autoOpen: false,
+                      children: ['t3'],
+                    },
+                    {id: 't3', component: 'Text', text: 'Live Surface'},
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      };
+    });
+
+    const history = await harness.getHistory();
+    const inputArea = await harness.getInputArea();
+
+    await inputArea.setInputValue('turn one');
+    await inputArea.clickSend();
+    await vi.waitFor(async () => expect(await harness.hasSideCanvas()).toBe(true));
+    fixture.detectChanges();
+
+    const canvasIframe = await getSideCanvasIframe();
+    const canvasWindow = canvasIframe.contentWindow!;
+    emitBridgeLifecycle(canvasWindow, [
+      PreviewBridgeMessageType.RENDERER_READY,
+      PreviewBridgeMessageType.RENDER_SUCCESS,
+    ]);
+
+    // Turn 2 streams -> Turn 1 open Canvas stays intact (surf-old was deleted in Turn 2)
+    mockHostCommunication.sendRenderA2UI.mockClear();
+    await inputArea.setInputValue('turn two');
+    await inputArea.clickSend();
+    await vi.waitFor(async () => {
+      expect(await history.getMessageCount()).toBe(4);
+      expect(await inputArea.isStreaming()).toBe(false);
+    });
+    expect(await (await history.getMessage(1))!.isCanvasActive()).toBe(true);
+    expect(await (await history.getMessage(3))!.isCanvasActive()).toBe(false);
+    expect(
+      mockHostCommunication.sendRenderA2UI.mock.calls.filter(
+        call => call[1] === canvasIframe || call[1] === canvasWindow,
+      ),
+    ).toHaveLength(0);
+
+    // Start in-flight callAgentFunction from canvasWindow, then emit same-document RENDER_ERROR
+    mockCallAgentFunction$.next({
+      sourceWindow: canvasWindow,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      payload: {
+        version: '1.0',
+        callAgentFunction: {
+          surfaceId: 'surf-old',
+          functionCallId: 'fn-survive-render-err',
+          callFunction: {['@call']: 'slowOp'},
+        },
+      },
+    });
+    await vi.waitFor(() =>
+      expect(vi.mocked(mockA2aTransport.sendMessageStream!)).toHaveBeenCalledTimes(3),
+    );
+
+    emitBridgeLifecycle(canvasWindow, [PreviewBridgeMessageType.RENDER_ERROR]);
+    fixture.detectChanges();
+    expect(rpcAborted).toBe(false);
+
+    releaseRpc();
+    await vi.waitFor(() =>
+      expect(mockHostCommunication.sendRenderA2UI).toHaveBeenCalledWith(
+        [
+          {
+            version: '1.0',
+            agentFunctionResponse: {
+              functionCallId: 'fn-survive-render-err',
+              value: {survived: true},
+            },
+          },
+        ],
+        canvasWindow,
+      ),
+    );
   });
 });

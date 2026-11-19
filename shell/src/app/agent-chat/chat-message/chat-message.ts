@@ -156,8 +156,10 @@ export class A2aChatMessage {
   readonly openInspector = output<string>();
   /** Emitted after this message's inline RenderedFrame finishes rendering its payload. */
   readonly inlinePayloadRendered = output<InlineSurfaceDispatch>();
-  /** Emitted when this message's inline RenderedFrame resets or replaces its document. */
+  /** Emitted when this message's inline RenderedFrame clears its rendered state. */
   readonly inlineRenderStateReset = output<Window>();
+  /** Emitted when this message's inline RenderedFrame replaces, reloads, or destroys its document. */
+  readonly inlineDocumentReset = output<Window>();
 
   /**
    * Records the user's last manual expand/collapse action along with the content state

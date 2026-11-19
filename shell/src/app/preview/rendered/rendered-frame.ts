@@ -98,10 +98,17 @@ export class RenderedFrame implements OnDestroy {
   /**
    * Emits when this frame's rendered state is cleared or replaced (document
    * replacement, same-URL reload, empty payload, session reset, render error,
-   * or teardown), carrying the associated guest Window so parents can drop
-   * stale tracking entries immediately.
+   * rejected dispatch, or teardown), carrying the associated guest Window so
+   * parents can drop stale tracking entries immediately.
    */
   readonly renderStateReset = output<Window>();
+
+  /**
+   * Emits only when this frame's hosted guest document is replaced, reloaded, or
+   * destroyed (`documentReplaced`, same-URL reload `documentReset`, or teardown),
+   * not on same-document render errors or rejected dispatches.
+   */
+  readonly documentReset = output<Window>();
 
   /**
    * The A2UI messages to render in the guest. Sent once the guest's document
@@ -190,7 +197,7 @@ export class RenderedFrame implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.resetRenderState({clearHeight: false, notifyReset: true});
+    this.resetRenderState({clearHeight: false, notifyReset: true, notifyDocumentReset: true});
   }
 
   private rememberContentWindow(): Window | null {
@@ -208,11 +215,23 @@ export class RenderedFrame implements OnDestroy {
     }
   }
 
-  private resetRenderState(options: {clearHeight?: boolean; notifyReset?: boolean} = {}): void {
+  private emitDocumentReset(): void {
+    const win = this.rememberContentWindow();
+    if (win) {
+      this.documentReset.emit(win);
+    }
+  }
+
+  private resetRenderState(
+    options: {clearHeight?: boolean; notifyReset?: boolean; notifyDocumentReset?: boolean} = {},
+  ): void {
     this.inFlightDispatches.length = 0;
     this.hasRenderError = false;
     if (options.clearHeight !== false) {
       untracked(() => this.reportedHeight.set(null));
+    }
+    if (options.notifyDocumentReset) {
+      this.emitDocumentReset();
     }
     if (options.notifyReset) {
       this.emitRenderStateReset();
@@ -220,11 +239,17 @@ export class RenderedFrame implements OnDestroy {
   }
 
   protected onDocumentReplaced(): void {
-    this.resetRenderState({notifyReset: true});
+    this.resetRenderState({notifyReset: true, notifyDocumentReset: true});
   }
 
   protected onDocumentReset(): void {
-    this.resetRenderState({notifyReset: true});
+    this.resetRenderState({notifyReset: true, notifyDocumentReset: true});
+  }
+
+  protected onRenderRejected(): void {
+    // GuestFrame emits renderError(undefined) immediately after renderRejected,
+    // which latches hasRenderError and emits renderStateReset once.
+    this.resetRenderState();
   }
 
   protected onPayloadDispatched(event: PayloadDispatchedEvent): void {
