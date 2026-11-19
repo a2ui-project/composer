@@ -24,12 +24,35 @@ export class PropertyEditorHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-property-editor';
 
   /**
-   * Edits a supported literal property using its visible control.
+   * Edits a supported literal property using its visible control and blurs it to commit immediately.
    */
   async editProperty(name: string, value: string): Promise<void> {
+    await this.typeProperty(name, value);
+    await this.blurProperty(name);
+  }
+
+  /**
+   * Types into a supported literal property control without blurring, leaving debounced edits pending.
+   */
+  async typeProperty(name: string, value: string): Promise<void> {
     const input = await this.locatorFor(`[data-property="${name}"]`)();
     await input.setInputValue(value);
     await input.dispatchEvent('input');
+  }
+
+  /**
+   * Blurs a supported literal property control to flush any pending debounced edit.
+   */
+  async blurProperty(name: string): Promise<void> {
+    const input = await this.locatorFor(`[data-property="${name}"]`)();
+    await input.dispatchEvent('blur');
+  }
+
+  /**
+   * Reads the current DOM input value of a supported literal property control.
+   */
+  async getPropertyValue(name: string): Promise<string> {
+    return (await this.locatorFor(`[data-property="${name}"]`)()).getProperty<string>('value');
   }
 
   /**

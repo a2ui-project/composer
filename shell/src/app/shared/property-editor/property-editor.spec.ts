@@ -17,7 +17,7 @@
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal} from '@angular/core';
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {PropertyEditor} from './property-editor';
 import {
   createDefaultPropertyValue,
@@ -844,6 +844,345 @@ describe('PropertyEditor Component', () => {
 
     expect(await harness.getStatusText()).toBeNull();
     expect(statusSpy).not.toHaveBeenCalled();
+  });
+
+  describe('debounced text and number edits', () => {
+    const debounceMs = 300;
+
+    const createChoicePicker = (
+      overrides: Record<string, unknown> = {},
+    ): Record<string, unknown> => ({
+      id: 'picker-1',
+      component: 'ChoicePicker',
+      options: [{label: 'Small', value: 's'}],
+      value: ['s'],
+      ...overrides,
+    });
+
+    const stepperCatalog: Catalog = {
+      ...basicCatalog,
+      components: {
+        ...basicCatalog.components,
+        Stepper: {
+          type: 'object',
+          allOf: [
+            {$ref: '#/$defs/ComponentCommon'},
+            {
+              type: 'object',
+              required: ['component', 'steps'],
+              properties: {
+                component: {const: 'Stepper'},
+                steps: {type: 'integer'},
+                enabled: {type: 'boolean'},
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('coalesces rapid text keystrokes and emits componentChange once after 300ms', async () => {
+      const initial = createChoicePicker({label: 'Size'});
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.typeProperty('label', 'S');
+      await vi.advanceTimersByTimeAsync(100);
+      await harness.typeProperty('label', 'Sm');
+      await vi.advanceTimersByTimeAsync(100);
+      await harness.typeProperty('label', 'Small');
+      await vi.advanceTimersByTimeAsync(debounceMs - 1);
+      const changesBeforeDebounce = [...componentChanges];
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(changesBeforeDebounce).toEqual([]);
+      expect(componentChanges).toEqual([{...initial, label: 'Small'}]);
+    });
+
+    it('coalesces rapid number edits and emits componentChange once after 300ms', async () => {
+      catalogManagementMock.activeCatalog.set(jsonCatalog);
+      const initial = {id: 'action-1', component: 'ActionBox', count: 5, config: {}};
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.typeProperty('count', '1');
+      await vi.advanceTimersByTimeAsync(150);
+      await harness.typeProperty('count', '12');
+      await vi.advanceTimersByTimeAsync(debounceMs - 1);
+      const changesBeforeDebounce = [...componentChanges];
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(changesBeforeDebounce).toEqual([]);
+      expect(componentChanges).toEqual([{...initial, count: 12}]);
+    });
+
+    it('skips emitting componentChange when a debounced edit reverts to the current value', async () => {
+      const initial = createChoicePicker({label: 'Size'});
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.typeProperty('label', 'Temp');
+      await harness.typeProperty('label', 'Size');
+      await vi.advanceTimersByTimeAsync(debounceMs);
+
+      expect(componentChanges).toEqual([]);
+    });
+
+    it('flushes a pending debounced text edit immediately on blur without re-emitting after 300ms', async () => {
+      const initial = createChoicePicker({label: 'Size'});
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.typeProperty('label', 'Updated');
+      const changesBeforeBlur = [...componentChanges];
+      await harness.blurProperty('label');
+      const changesOnBlur = [...componentChanges];
+      await vi.advanceTimersByTimeAsync(debounceMs);
+
+      expect(changesBeforeBlur).toEqual([]);
+      expect(changesOnBlur).toEqual([{...initial, label: 'Updated'}]);
+      expect(componentChanges).toHaveLength(1);
+    });
+
+    it('flushes a pending debounced number edit immediately on blur without re-emitting after 300ms', async () => {
+      catalogManagementMock.activeCatalog.set(jsonCatalog);
+      const initial = {id: 'action-1', component: 'ActionBox', count: 5, config: {}};
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.typeProperty('count', '12');
+      const changesBeforeBlur = [...componentChanges];
+      await harness.blurProperty('count');
+      const changesOnBlur = [...componentChanges];
+      await vi.advanceTimersByTimeAsync(debounceMs);
+
+      expect(changesBeforeBlur).toEqual([]);
+      expect(changesOnBlur).toEqual([{...initial, count: 12}]);
+      expect(componentChanges).toHaveLength(1);
+    });
+
+    it('preserves a pending debounced text edit when an immediate control is triggered before 300ms', async () => {
+      const initial = createChoicePicker({label: 'Size', filterable: true});
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.typeProperty('label', 'Updated');
+      await harness.toggleProperty('filterable');
+      const changesOnToggle = [...componentChanges];
+      await vi.advanceTimersByTimeAsync(debounceMs);
+
+      expect(changesOnToggle).toEqual([{...initial, label: 'Updated', filterable: false}]);
+      expect(componentChanges).toHaveLength(1);
+    });
+
+    it('layers consecutive debounced edits to sibling nested object fields within 300ms', async () => {
+      catalogManagementMock.activeCatalog.set(jsonCatalog);
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', {
+        id: 'action-1',
+        component: 'ActionBox',
+        count: 3,
+        config: {},
+        metadata: {hint: 'Old', tag: 'v1'},
+      });
+      fixture.detectChanges();
+
+      await harness.typeProperty('metadata.hint', 'New');
+      await harness.typeProperty('metadata.tag', 'v2');
+      await vi.advanceTimersByTimeAsync(debounceMs);
+
+      expect(componentChanges).toEqual([
+        {
+          id: 'action-1',
+          component: 'ActionBox',
+          count: 3,
+          config: {},
+          metadata: {hint: 'New', tag: 'v2'},
+        },
+      ]);
+    });
+
+    it('preserves a pending debounced array item edit when adding an array item before 300ms', async () => {
+      const initial = createChoicePicker({value: ['s']});
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.typeProperty('value.0', 'm');
+      await harness.addArrayItem('value');
+      const changesOnAdd = [...componentChanges];
+      await vi.advanceTimersByTimeAsync(debounceMs);
+
+      expect(changesOnAdd).toEqual([{...initial, value: ['m', 'm']}]);
+      expect(componentChanges).toHaveLength(1);
+    });
+
+    it('drops a pending debounced edit and updates the input when the component updates externally before 300ms', async () => {
+      const initial = createChoicePicker({id: 'picker-1', label: 'Size'});
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.typeProperty('label', 'Stale');
+      fixture.componentRef.setInput(
+        'component',
+        createChoicePicker({id: 'picker-1', label: 'External'}),
+      );
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(debounceMs);
+
+      expect(componentChanges).toEqual([]);
+      expect(await harness.getPropertyValue('label')).toBe('External');
+    });
+
+    it('drops a pending debounced edit when disabled toggles before 300ms', async () => {
+      const initial = createChoicePicker({label: 'Size', filterable: true});
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.typeProperty('label', 'Stale');
+      fixture.componentRef.setInput('disabled', true);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(debounceMs);
+      fixture.componentRef.setInput('disabled', false);
+      fixture.detectChanges();
+      await harness.toggleProperty('filterable');
+
+      expect(componentChanges).toEqual([{...initial, filterable: false}]);
+    });
+
+    it('drops a pending debounced edit when clearErrors() is called before 300ms', async () => {
+      const initial = createChoicePicker({label: 'Size'});
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.typeProperty('label', 'Reset me');
+      fixture.componentInstance.clearErrors();
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(debounceMs);
+
+      expect(componentChanges).toEqual([]);
+    });
+
+    it('cancels a pending number edit without overwriting the input when a required number is cleared before 300ms', async () => {
+      catalogManagementMock.activeCatalog.set(jsonCatalog);
+      const componentChanges: Array<Record<string, unknown>> = [];
+      const statuses: string[] = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentInstance.statusMessage.subscribe(message => statuses.push(message));
+      fixture.componentRef.setInput('component', {
+        id: 'action-1',
+        component: 'ActionBox',
+        count: 5,
+        config: {},
+      });
+      fixture.detectChanges();
+
+      await harness.typeProperty('count', '55');
+      await harness.typeProperty('count', '');
+      await vi.advanceTimersByTimeAsync(debounceMs);
+
+      expect(componentChanges).toEqual([]);
+      expect(await harness.getPropertyValue('count')).toBe('');
+      expect(statuses.at(-1)).toBe('Enter a number for count. Preview keeps its previous value.');
+    });
+
+    it('cancels a pending debounced edit without overwriting the input or flushing on blur when a schema-invalid value is entered', async () => {
+      catalogManagementMock.activeCatalog.set(stepperCatalog);
+      const componentChanges: Array<Record<string, unknown>> = [];
+      const statuses: string[] = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentInstance.statusMessage.subscribe(message => statuses.push(message));
+      fixture.componentRef.setInput('component', {id: 'step-1', component: 'Stepper', steps: 2});
+      fixture.detectChanges();
+
+      await harness.typeProperty('steps', '4');
+      await harness.typeProperty('steps', '4.5');
+      await harness.blurProperty('steps');
+      await vi.advanceTimersByTimeAsync(debounceMs);
+
+      expect(componentChanges).toEqual([]);
+      expect(await harness.getPropertyValue('steps')).toBe('4.5');
+      expect(statuses.at(-1)).toBe(
+        '"steps" on "step-1" does not match its catalog property type or choices. Preview keeps its previous value.',
+      );
+    });
+
+    it('does not leak a cancelled pending debounced edit into a subsequent discrete control edit', async () => {
+      catalogManagementMock.activeCatalog.set(stepperCatalog);
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', {
+        id: 'step-1',
+        component: 'Stepper',
+        steps: 2,
+        enabled: false,
+      });
+      fixture.detectChanges();
+
+      await harness.typeProperty('steps', '4');
+      await harness.typeProperty('steps', '4.5');
+      await harness.toggleProperty('enabled');
+
+      expect(componentChanges).toEqual([
+        {id: 'step-1', component: 'Stepper', steps: 2, enabled: true},
+      ]);
+    });
   });
 });
 

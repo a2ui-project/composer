@@ -452,14 +452,15 @@ function replaceLastMatchingComponent(
 /**
  * Returns a copy of [messages] with component [componentId] in [surfaceId]
  * replaced by [updatedComponent] in its latest `updateComponents` or inline
- * `createSurface` message.
+ * `createSurface` message, or [messages] unchanged if no matching component is
+ * found.
  */
 export function updateSurfaceComponent(
   messages: readonly unknown[],
   surfaceId: string,
   componentId: string,
   updatedComponent: Record<string, unknown>,
-): unknown[] {
+): readonly unknown[] {
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
     const record = asRecord(messages[messageIndex]);
     if (!record) continue;
@@ -511,5 +512,5 @@ export function updateSurfaceComponent(
       break;
     }
   }
-  return [...messages];
+  return messages;
 }

@@ -176,6 +176,7 @@ export class ComponentTree {
       selected.id,
       updatedComponent,
     );
+    if (updatedMessages === result.data) return;
     this.stateSync.updateDraft(formatJson(updatedMessages));
   }
 

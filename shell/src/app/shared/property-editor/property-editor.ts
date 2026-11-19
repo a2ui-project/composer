@@ -24,8 +24,11 @@ import {
   linkedSignal,
   output,
 } from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {NgTemplateOutlet} from '@angular/common';
 import {FormsModule} from '@angular/forms';
+import {Subject} from 'rxjs';
+import {debounceTime} from 'rxjs/operators';
 import {MatInputModule} from '@angular/material/input';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {MatButtonModule} from '@angular/material/button';
@@ -45,6 +48,13 @@ import {formatJson} from '../../utils/json';
 import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 
 type PropertyPath = ReadonlyArray<string | number>;
+
+interface EditOptions {
+  readonly emitStatus?: boolean;
+  readonly debounce?: boolean;
+}
+
+const TEXT_INPUT_DEBOUNCE_MS = 300;
 
 let nextPropertyEditorId = 0;
 
@@ -224,6 +234,20 @@ export class PropertyEditor {
         : null,
   );
 
+  private readonly pendingCommit$ = new Subject<Record<string, unknown>>();
+
+  /** Uncommitted debounced text/number edit awaiting its 300ms timer or input blur. */
+  private readonly pendingCommit: WritableSignal<Record<string, unknown> | null> = linkedSignal({
+    source: () => [this.component(), this.contextIdentity(), this.disabled()] as const,
+    computation: (): Record<string, unknown> | null => null,
+  });
+
+  /**
+   * Component record read by edit mutations: layers any in-flight debounced edit on top of
+   * `component()` so discrete controls or sibling fields don't lose uncommitted keystrokes.
+   */
+  private readonly activeComponent = computed(() => this.pendingCommit() ?? this.component());
+
   /**
    * Every catalog property of the selected component except its identity and constants.
    */
@@ -267,12 +291,42 @@ export class PropertyEditor {
     );
   });
 
+  constructor() {
+    this.pendingCommit$
+      .pipe(debounceTime(TEXT_INPUT_DEBOUNCE_MS), takeUntilDestroyed())
+      .subscribe(updatedComponent => {
+        if (this.pendingCommit() === updatedComponent) {
+          this.commitPending(updatedComponent);
+        }
+      });
+  }
+
   /**
-   * Clears any pending inline JSON field validation errors and status feedback.
+   * Clears any pending inline JSON field validation errors, status feedback, and debounced edits.
    */
   clearErrors(): void {
+    this.pendingCommit.set(null);
     this.jsonFieldErrors.set({});
     this.setStatusMessage('');
+  }
+
+  /**
+   * Emits any pending debounced text/number edit immediately (for example on input blur).
+   */
+  protected flushPendingCommit(): void {
+    const pending = this.pendingCommit();
+    if (pending) {
+      this.commitPending(pending);
+    }
+  }
+
+  private commitPending(updatedComponent: Record<string, unknown>): void {
+    this.pendingCommit.set(null);
+    const current = this.component();
+    if (!current || stableStringify(updatedComponent) === stableStringify(current)) {
+      return;
+    }
+    this.componentChange.emit(updatedComponent);
   }
 
   /**
@@ -310,8 +364,9 @@ export class PropertyEditor {
   /**
    * Sets one property on the target component, or removes it when value is undefined.
    */
-  protected editProperty(name: string, value: unknown, emitStatus = true): string | null {
-    const target = this.component();
+  protected editProperty(name: string, value: unknown, options: EditOptions = {}): string | null {
+    const {emitStatus = true, debounce = false} = options;
+    const target = this.activeComponent();
     if (!target || this.disabled()) {
       return null;
     }
@@ -325,6 +380,9 @@ export class PropertyEditor {
     this.setStatusMessage('');
     const schema = this.selectedComponentSchemas()[name];
     if (value !== undefined && schema && !matchesSimpleSchema(value, schema)) {
+      if (debounce) {
+        this.pendingCommit.set(null);
+      }
       const componentId = this.resolvedComponentId() ?? this.resolvedComponentKey() ?? 'target';
       const reason = `"${name}" on "${componentId}" does not match its catalog property type or choices.`;
       if (emitStatus) {
@@ -339,14 +397,24 @@ export class PropertyEditor {
       const {[name]: _removed, ...rest} = target;
       updatedComponent = rest;
     }
-    this.componentChange.emit(updatedComponent);
+    if (debounce) {
+      this.pendingCommit.set(updatedComponent);
+      this.pendingCommit$.next(updatedComponent);
+    } else {
+      this.pendingCommit.set(null);
+      this.componentChange.emit(updatedComponent);
+    }
     return null;
   }
 
   /**
    * Updates a top-level or nested property at `path`.
    */
-  protected editAtPath(path: PropertyPath, value: unknown, emitStatus = true): string | null {
+  protected editAtPath(
+    path: PropertyPath,
+    value: unknown,
+    options: EditOptions = {},
+  ): string | null {
     if (path.length === 0) {
       return null;
     }
@@ -355,9 +423,9 @@ export class PropertyEditor {
       return null;
     }
     if (rest.length === 0) {
-      return this.editProperty(rootName, value, emitStatus);
+      return this.editProperty(rootName, value, options);
     }
-    const currentRoot = this.component()?.[rootName];
+    const currentRoot = this.activeComponent()?.[rootName];
     const topProp = this.editableProperties().find(prop => prop.name === rootName);
     const updatedRoot = this.setDeepValue(
       currentRoot,
@@ -366,14 +434,14 @@ export class PropertyEditor {
       topProp?.control,
       topProp?.required ?? false,
     );
-    return this.editProperty(rootName, updatedRoot, emitStatus);
+    return this.editProperty(rootName, updatedRoot, options);
   }
 
   /**
    * Empty optional text removes the property; required text may be empty.
    */
   protected editTextAtPath(path: PropertyPath, value: string, required: boolean): void {
-    this.editAtPath(path, value === '' && !required ? undefined : value);
+    this.editAtPath(path, value === '' && !required ? undefined : value, {debounce: true});
   }
 
   /**
@@ -389,10 +457,11 @@ export class PropertyEditor {
       return;
     }
     if (value !== null && Number.isFinite(value)) {
-      this.editAtPath(path, value);
+      this.editAtPath(path, value, {debounce: true});
     } else if (!required) {
-      this.editAtPath(path, undefined);
+      this.editAtPath(path, undefined, {debounce: true});
     } else {
+      this.pendingCommit.set(null);
       this.setStatusMessage(`Enter a number for ${label}. Preview keeps its previous value.`);
     }
   }
@@ -435,7 +504,7 @@ export class PropertyEditor {
         return;
       }
     }
-    const error = this.editAtPath(path, value, false);
+    const error = this.editAtPath(path, value, {emitStatus: false});
     if (error) {
       setError(`${error} The example keeps its previous value.`);
       return;
@@ -479,7 +548,7 @@ export class PropertyEditor {
    * Deep-gets a value from the editable component by the property path.
    */
   private getValueAtPath(path: PropertyPath): unknown {
-    let current: unknown = this.component();
+    let current: unknown = this.activeComponent();
     for (const segment of path) {
       if (typeof segment === 'number') {
         if (!Array.isArray(current)) {

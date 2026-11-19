@@ -313,6 +313,14 @@ describe('ComponentTree', () => {
   });
 
   describe('selection and keyboard navigation', () => {
+    const surfaceDraft = (components: Array<Record<string, unknown>>) =>
+      formatJson([
+        {
+          version: '1.0',
+          createSurface: {surfaceId: 's', catalogId: 'primary-catalog', components},
+        },
+      ]);
+
     beforeEach(() => {
       activeCatalog.set(MERGED_CATALOG);
       fixture.detectChanges();
@@ -379,6 +387,17 @@ describe('ComponentTree', () => {
       ]);
     });
 
+    it('skips updateDraft when the selected component does not exist in the draft', async () => {
+      activeDraft.set(surfaceDraft([{id: 'root', component: 'Column', children: ['ghost']}]));
+      fixture.detectChanges();
+      await harness.selectRow('#ghost');
+
+      component.updateSelectedComponent({id: 'ghost', component: 'Text', text: 'Ignored'});
+
+      expect(component.selected()?.id).toBe('ghost');
+      expect(updateDraftSpy).not.toHaveBeenCalled();
+    });
+
     it('switches selection when a different node is clicked', async () => {
       await harness.selectRow('#open');
 
@@ -388,14 +407,6 @@ describe('ComponentTree', () => {
       expect(rows.map(row => row.selected)).toEqual([true, false, false, false]);
       expect(component.selected()?.id).toBe('root');
     });
-
-    const surfaceDraft = (components: Array<Record<string, unknown>>) =>
-      formatJson([
-        {
-          version: '1.0',
-          createSurface: {surfaceId: 's', catalogId: 'primary-catalog', components},
-        },
-      ]);
 
     it('keeps the highlight on the selected occurrence of a shared component when edited', async () => {
       activeDraft.set(

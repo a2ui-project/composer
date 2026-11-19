@@ -153,6 +153,7 @@
       [placeholder]="required ? '' : 'Not set'"
       [ngModel]="value ?? null"
       (ngModelChange)="editNumberAtPath(path, $event, required, label)"
+      (blur)="flushPendingCommit()"
       [disabled]="disabled()"
     />
   } @else if (control.kind === 'string') {
@@ -165,6 +166,7 @@
       [placeholder]="required ? '' : 'Not set'"
       [ngModel]="value ?? ''"
       (ngModelChange)="editTextAtPath(path, $event, required)"
+      (blur)="flushPendingCommit()"
       [disabled]="disabled()"
     />
   } @else if (control.kind === 'array') {
