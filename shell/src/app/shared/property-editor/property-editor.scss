@@ -19,6 +19,14 @@
   min-width: 0;
 }
 
+:host-context(.dockview-root) {
+  box-sizing: border-box;
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+  padding: 8px 12px;
+}
+
 // One property per row: property name stacked on top of its UI control.
 .property-list {
   display: flex;

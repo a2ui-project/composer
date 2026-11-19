@@ -17,8 +17,9 @@
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal, WritableSignal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {beforeEach, describe, expect, it} from 'vitest';
+import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {StateSync} from '../../chat/state-sync/state-sync';
+import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {formatJson} from '../../utils/json';
@@ -68,24 +69,48 @@ const SECONDARY_MODAL_MESSAGES = [
 describe('ComponentTree', () => {
   let fixture: ComponentFixture<ComponentTree>;
   let harness: ComponentTreeHarness;
+  let component: ComponentTree;
   let activeDraft: WritableSignal<string>;
   let activeCatalog: WritableSignal<Catalog | null>;
   let mergedActiveCatalog: WritableSignal<Catalog | null>;
+  let updateDraftSpy: ReturnType<typeof vi.fn>;
+
+  const getRows = () =>
+    Array.from(fixture.nativeElement.querySelectorAll('.tree-row')) as HTMLElement[];
+
+  const pressKey = (element: HTMLElement, key: string) => {
+    element.dispatchEvent(new KeyboardEvent('keydown', {key, bubbles: true}));
+    fixture.detectChanges();
+  };
 
   beforeEach(async () => {
     activeDraft = signal(formatJson(SECONDARY_MODAL_MESSAGES));
     activeCatalog = signal<Catalog | null>(null);
     mergedActiveCatalog = signal<Catalog | null>(null);
+    updateDraftSpy = vi.fn((next: string) => activeDraft.set(next));
 
     await TestBed.configureTestingModule({
       imports: [ComponentTree],
       providers: [
-        {provide: StateSync, useValue: {activeDraft}},
-        {provide: CatalogManagement, useValue: {activeCatalog, mergedActiveCatalog}},
+        {
+          provide: StateSync,
+          useValue: {
+            activeDraft,
+            updateDraft: updateDraftSpy,
+          },
+        },
+        {
+          provide: CatalogManagement,
+          useValue: {
+            activeCatalog,
+            mergedActiveCatalog,
+          },
+        },
       ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ComponentTree);
+    component = fixture.componentInstance;
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ComponentTreeHarness);
   });
@@ -262,5 +287,150 @@ describe('ComponentTree', () => {
 
     expect(await harness.hasTruncatedBadge()).toBe(true);
     expect(await harness.getRowIds()).toEqual(['#root']);
+  });
+
+  it('starts with no node selected', () => {
+    expect(component.selected()).toBeNull();
+    expect(component.selectedComponent()).toBeNull();
+  });
+
+  it('selects a node on click and dispatches OpenPanelEvent for PropertyEditor', () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    const rows = getRows();
+
+    rows[2].click();
+    fixture.detectChanges();
+
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: OpenPanelEvent.TYPE,
+        detail: {panelId: ComposerPanelId.PropertyEditor},
+      }),
+    );
+    dispatchSpy.mockRestore();
+    expect(rows[2].classList.contains('selected')).toBe(true);
+    expect(rows[2].getAttribute('aria-selected')).toBe('true');
+    expect(rows[0].getAttribute('aria-selected')).toBe('false');
+    expect(component.selectedComponent()).toEqual({
+      id: 'greeting',
+      component: 'Text',
+      text: 'Hello',
+      variant: 'body',
+    });
+  });
+
+  it('updates the selected component in the active draft via updateSelectedComponent', () => {
+    const rows = getRows();
+    rows[2].click();
+    fixture.detectChanges();
+
+    component.updateSelectedComponent({
+      id: 'greeting',
+      component: 'Text',
+      text: 'Updated greeting',
+      variant: 'body',
+    });
+    fixture.detectChanges();
+
+    expect(updateDraftSpy).toHaveBeenCalledTimes(1);
+    const updatedPayload = JSON.parse(activeDraft());
+    expect(updatedPayload[1].updateComponents.components).toEqual([
+      {id: 'root', component: 'Column', children: ['branch', 'ghost']},
+      {id: 'branch', component: 'Column', children: ['greeting']},
+      {id: 'greeting', component: 'Text', text: 'Updated greeting', variant: 'body'},
+    ]);
+  });
+
+  it('switches selection when a different node is clicked', () => {
+    const rows = getRows();
+
+    rows[2].click();
+    fixture.detectChanges();
+    expect(component.selected()?.id).toBe('greeting');
+
+    rows[0].click();
+    fixture.detectChanges();
+    expect(rows[0].classList.contains('selected')).toBe(true);
+    expect(rows[2].classList.contains('selected')).toBe(false);
+    expect(component.selected()?.id).toBe('root');
+  });
+
+  describe('keyboard navigation', () => {
+    it('sets roving tabindex and aria-level on tree rows', () => {
+      const rows = getRows();
+      expect(rows.map(row => row.getAttribute('tabindex'))).toEqual(['0', '-1', '-1', '-1']);
+      expect(rows.map(row => row.getAttribute('aria-level'))).toEqual(['1', '2', '3', '2']);
+    });
+
+    it('falls back to the first node when the focused node is collapsed or removed', () => {
+      let rows = getRows();
+      rows[2].focus();
+      fixture.detectChanges();
+      expect(rows.map(row => row.getAttribute('tabindex'))).toEqual(['-1', '-1', '0', '-1']);
+
+      const toggleButton = rows[1].querySelector('button.toggle') as HTMLButtonElement;
+      toggleButton.click();
+      fixture.detectChanges();
+      rows = getRows();
+      expect(rows.map(row => row.getAttribute('tabindex'))).toEqual(['0', '-1', '-1']);
+    });
+
+    it('moves focus with ArrowDown and ArrowUp into expanded children before siblings without selecting', () => {
+      const rows = getRows();
+
+      pressKey(rows[0], 'ArrowDown');
+      expect(document.activeElement).toBe(rows[1]);
+      expect(component.selected()).toBeNull();
+
+      pressKey(rows[1], 'ArrowDown');
+      expect(document.activeElement).toBe(rows[2]);
+      expect(rows[2].textContent).toContain('#greeting');
+
+      pressKey(rows[2], 'ArrowUp');
+      expect(document.activeElement).toBe(rows[1]);
+    });
+
+    it('selects the focused node on Enter or Space', () => {
+      const rows = getRows();
+
+      pressKey(rows[2], 'Enter');
+      expect(component.selected()?.id).toBe('greeting');
+
+      pressKey(rows[1], ' ');
+      expect(component.selected()?.id).toBe('branch');
+    });
+
+    it('collapses an expanded node on ArrowLeft and focuses its parent when already collapsed or a leaf', () => {
+      let rows = getRows();
+
+      pressKey(rows[2], 'ArrowLeft');
+      expect(document.activeElement).toBe(rows[1]);
+
+      pressKey(rows[1], 'ArrowLeft');
+      rows = getRows();
+      expect(rows.length).toBe(3);
+      expect(rows[1].getAttribute('aria-expanded')).toBe('false');
+
+      pressKey(rows[1], 'ArrowLeft');
+      expect(document.activeElement).toBe(rows[0]);
+    });
+
+    it('focuses the first child on ArrowRight when expanded and expands when collapsed', () => {
+      let rows = getRows();
+
+      pressKey(rows[1], 'ArrowLeft');
+      rows = getRows();
+
+      pressKey(rows[0], 'ArrowRight');
+      expect(document.activeElement).toBe(rows[1]);
+
+      pressKey(rows[1], 'ArrowRight');
+      rows = getRows();
+      expect(rows.length).toBe(4);
+      expect(rows[1].getAttribute('aria-expanded')).toBe('true');
+
+      pressKey(rows[1], 'ArrowRight');
+      expect(document.activeElement).toBe(rows[2]);
+    });
   });
 });

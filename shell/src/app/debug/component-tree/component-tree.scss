@@ -66,11 +66,26 @@ code {
   gap: 6px;
   min-height: 24px;
   padding-right: 12px;
-  cursor: default;
+  cursor: pointer;
   white-space: nowrap;
 
   &:hover {
     background: var(--mat-sys-surface-container-high);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: -2px;
+  }
+
+  &.selected {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+
+    .via,
+    .id {
+      color: var(--mat-sys-on-secondary-container);
+    }
   }
 
   &.missing .type,
