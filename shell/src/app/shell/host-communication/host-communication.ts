@@ -564,7 +564,11 @@ export class HostCommunication implements OnDestroy {
     return this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
   }
 
-  private isRegisteredWindow(targetWindow: Window): boolean {
+  /**
+   * Returns whether `targetWindow` is currently registered as a live guest
+   * frame or window target in this service.
+   */
+  isRegisteredWindow(targetWindow: Window): boolean {
     if (this.registeredWindows.has(targetWindow)) {
       return true;
     }

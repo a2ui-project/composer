@@ -76,6 +76,7 @@ export class CatalogManagement {
   private readonly startupResolution = inject(StartupResolution);
 
   private watchdogTimerId: ReturnType<typeof setTimeout> | null = null;
+  private handshakeWindow: Window | null = null;
   private previousUrl: string | null | undefined = this.startupResolution.resolvedUrl();
   private isDestroyed = false;
   private resolutionGeneration = 0;
@@ -90,6 +91,13 @@ export class CatalogManagement {
     return this.resolutionGeneration;
   }
 
+  private clearWatchdogTimer(): void {
+    if (this.watchdogTimerId !== null) {
+      clearTimeout(this.watchdogTimerId);
+      this.watchdogTimerId = null;
+    }
+  }
+
   /**
    * Declarative Angular `resource` that asynchronously loads and sanitizes a cached catalog
    * from IndexedDB whenever `startupResolution.resolvedUrl()` changes to a new non-null URL.
@@ -102,10 +110,8 @@ export class CatalogManagement {
         return undefined;
       }
       this.previousUrl = rendererUrl;
-      if (this.watchdogTimerId !== null) {
-        clearTimeout(this.watchdogTimerId);
-        this.watchdogTimerId = null;
-      }
+      this.clearWatchdogTimer();
+      this.handshakeWindow = null;
       return rendererUrl ?? undefined;
     },
     loader: async ({params: targetUrl}): Promise<HydratedCatalog | null> => {
@@ -410,10 +416,8 @@ export class CatalogManagement {
     const destroyRef = inject(DestroyRef);
     destroyRef.onDestroy(() => {
       this.isDestroyed = true;
-      if (this.watchdogTimerId !== null) {
-        clearTimeout(this.watchdogTimerId);
-        this.watchdogTimerId = null;
-      }
+      this.clearWatchdogTimer();
+      this.handshakeWindow = null;
     });
 
     effect(() => {
@@ -425,7 +429,7 @@ export class CatalogManagement {
         takeUntilDestroyed(),
         concatMap((envelope: MessageEnvelope) => {
           if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
-            return this.handleRendererReady();
+            return this.handleRendererReady(envelope);
           }
           if (envelope.type === PreviewBridgeMessageType.A2UI_CATALOG) {
             return this.handleCatalogEnvelope(envelope);
@@ -436,19 +440,36 @@ export class CatalogManagement {
       .subscribe();
   }
 
-  private handleRendererReady() {
+  private handleRendererReady(envelope: MessageEnvelope) {
+    const incomingWindow = envelope.sourceWindow ?? null;
     if (this._isHandshakeInProgress()) {
-      this.logger.warn('Handshake already in progress. Ignoring RENDERER_READY.');
-      return of(null);
+      const priorWindowDetached =
+        this.handshakeWindow !== null &&
+        !this.hostCommunication.isRegisteredWindow(this.handshakeWindow);
+      if (!priorWindowDetached) {
+        this.logger.warn('Handshake already in progress. Ignoring RENDERER_READY.');
+        return of(null);
+      }
+      this.clearWatchdogTimer();
     }
 
+    this.handshakeWindow = incomingWindow;
     this._isHandshakeInProgress.set(true);
     this._handshakeState.set('in-progress');
     this._watchdogFired.set(false);
     this._catalogError.set(null);
-    this.hostCommunication.sendMessage({
-      type: PreviewBridgeMessageType.GET_CATALOG,
-    });
+    if (incomingWindow) {
+      this.hostCommunication.sendMessage(
+        {
+          type: PreviewBridgeMessageType.GET_CATALOG,
+        },
+        incomingWindow,
+      );
+    } else {
+      this.hostCommunication.sendMessage({
+        type: PreviewBridgeMessageType.GET_CATALOG,
+      });
+    }
 
     this.watchdogTimerId = setTimeout(() => {
       if (this.watchdogTimerId === null) {
@@ -458,16 +479,23 @@ export class CatalogManagement {
       this.logger.error(CATALOG_WATCHDOG_MESSAGE);
       this.settleHandshakeError(CATALOG_WATCHDOG_MESSAGE);
       this.watchdogTimerId = null;
+      this.handshakeWindow = null;
     }, CATALOG_WATCHDOG_TIMEOUT_MS);
 
     return of(null);
   }
 
   private handleCatalogEnvelope(envelope: MessageEnvelope) {
-    if (this.watchdogTimerId !== null) {
-      clearTimeout(this.watchdogTimerId);
-      this.watchdogTimerId = null;
+    if (
+      this.handshakeWindow !== null &&
+      envelope.sourceWindow &&
+      envelope.sourceWindow !== this.handshakeWindow
+    ) {
+      this.logger.warn('Ignoring A2UI_CATALOG from stale renderer window.');
+      return of(null);
     }
+    this.clearWatchdogTimer();
+    this.handshakeWindow = null;
     this._watchdogFired.set(false);
 
     const rawPayload = envelope.payload;

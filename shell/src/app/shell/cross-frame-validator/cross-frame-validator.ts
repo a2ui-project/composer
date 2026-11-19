@@ -74,6 +74,25 @@ export class CrossFrameValidator {
   private static readonly v09Validator = new V09WireValidator();
   private static readonly v10Validator = new V10WireValidator();
 
+  private static validateOptionalObjectPayload(
+    msgType: string,
+    msgPayload: unknown,
+    errors: string[] | undefined,
+    logger: Pick<TaggedLogger, 'error' | 'warn'>,
+  ): boolean {
+    if (msgPayload !== undefined && msgPayload !== null) {
+      if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
+        recordError(
+          `Malformed payload for ${msgType}: must be an object, null, or undefined.`,
+          errors,
+          logger,
+        );
+        return false;
+      }
+    }
+    return true;
+  }
+
   /**
    * Validates an outgoing message envelope and its payload structure.
    * Logs validation failures to logger.error and appends error messages to errors array if provided.
@@ -103,47 +122,15 @@ export class CrossFrameValidator {
     }
 
     switch (msgType) {
-      case PreviewBridgeMessageType.GET_CATALOG: {
-        if (msgPayload !== undefined && msgPayload !== null) {
-          if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-            recordError(
-              'Malformed payload for GET_CATALOG: must be an object, null, or undefined.',
-              errors,
-              logger,
-            );
-            return false;
-          }
-        }
-        return true;
-      }
-
-      case PreviewBridgeMessageType.GET_COMPONENT_USAGES: {
-        if (msgPayload !== undefined && msgPayload !== null) {
-          if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-            recordError(
-              'Malformed payload for GET_COMPONENT_USAGES: must be an object, null, or undefined.',
-              errors,
-              logger,
-            );
-            return false;
-          }
-        }
-        return true;
-      }
-
-      case PreviewBridgeMessageType.GET_DEMOS: {
-        if (msgPayload !== undefined && msgPayload !== null) {
-          if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-            recordError(
-              'Malformed payload for GET_DEMOS: must be an object, null, or undefined.',
-              errors,
-              logger,
-            );
-            return false;
-          }
-        }
-        return true;
-      }
+      case PreviewBridgeMessageType.GET_CATALOG:
+      case PreviewBridgeMessageType.GET_COMPONENT_USAGES:
+      case PreviewBridgeMessageType.GET_DEMOS:
+        return CrossFrameValidator.validateOptionalObjectPayload(
+          msgType,
+          msgPayload,
+          errors,
+          logger,
+        );
 
       case PreviewBridgeMessageType.RENDER_A2UI: {
         if (!msgPayload || !Array.isArray(msgPayload)) {

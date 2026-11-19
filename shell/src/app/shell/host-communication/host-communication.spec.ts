@@ -2729,5 +2729,17 @@ describe('HostCommunication', () => {
       );
       expect(missingTarget).toBe(false);
     });
+
+    it('reports whether a Window is currently registered via isRegisteredWindow', () => {
+      const otherWin = {postMessage: vi.fn()} as unknown as Window;
+      const frame = {contentWindow: otherWin} as unknown as HTMLIFrameElement;
+
+      expect(service.isRegisteredWindow(otherWin)).toBe(false);
+      service.registerIframe(frame, DefaultTarget.KEEP);
+      expect(service.isRegisteredWindow(otherWin)).toBe(true);
+
+      service.unregisterIframe(frame);
+      expect(service.isRegisteredWindow(otherWin)).toBe(false);
+    });
   });
 });

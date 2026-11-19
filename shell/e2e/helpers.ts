@@ -351,27 +351,47 @@ export function stubRendererHtml(
   options?: {
     version?: 'v0.9' | 'v1.0';
     title?: string;
+    description?: string;
+    catalogId?: string;
+    components?: Record<string, unknown>;
+    wrapCatalog?: boolean;
+    recordMessages?: boolean;
   },
 ): string {
   const version = options?.version ?? 'v0.9';
   const title = options?.title ?? 'Stub Catalog';
   const catalogId =
-    version === 'v1.0'
+    options?.catalogId ??
+    (version === 'v1.0'
       ? 'https://a2ui.org/specification/v1_0/stub_catalog.json'
-      : 'https://a2ui.org/specification/v0_9/stub_catalog.json';
+      : 'https://a2ui.org/specification/v0_9/stub_catalog.json');
 
-  const catalogPayload = {
+  const catalogObj = {
     catalogId,
     title,
-    description: 'Stub Catalog Description',
+    description: options?.description ?? 'Stub Catalog Description',
     version,
-    components: {},
+    ...(version === 'v1.0' ? {protocolVersion: '1.0'} : {}),
+    components: options?.components ?? {},
   };
+  const catalogPayload = options?.wrapCatalog
+    ? {catalog: catalogObj, catalogs: [catalogObj]}
+    : catalogObj;
+  const recordInit = options?.recordMessages
+    ? 'window.__receivedRenderA2ui = [];\n  window.__receivedMessages = [];'
+    : '';
+  const recordIncoming = options?.recordMessages
+    ? 'window.__receivedMessages.push(event.data);'
+    : '';
+  const recordRender = options?.recordMessages
+    ? 'window.__receivedRenderA2ui.push(event.data.payload);'
+    : '';
 
   return `<!DOCTYPE html>
 <html>
 <head>
 <script>
+  ${recordInit}
   let answered = false;
   let interval = null;
   function clearIntervalSafe() {
@@ -397,9 +417,11 @@ export function stubRendererHtml(
     window.parent.postMessage({ type: 'RENDERER_READY' }, '*');
   }, 100);
   window.addEventListener('message', (event) => {
+    ${recordIncoming}
     if (event.data?.type === 'GET_CATALOG') {
       respondCatalog();
     } else if (event.data?.type === 'RENDER_A2UI') {
+      ${recordRender}
       clearIntervalSafe();
     }
   });

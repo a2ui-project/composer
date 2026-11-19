@@ -36,6 +36,7 @@ describe('CatalogManagement', () => {
     latestEnvelope: WritableSignal<MessageEnvelope | null>;
     messageStream$: Subject<MessageEnvelope>;
     sendMessage: ReturnType<typeof vi.fn>;
+    isRegisteredWindow: ReturnType<typeof vi.fn>;
   };
   let indexedDbStorageMock: {
     getCatalogRecord: ReturnType<typeof vi.fn>;
@@ -56,6 +57,7 @@ describe('CatalogManagement', () => {
       latestEnvelope: signal<MessageEnvelope | null>(null),
       messageStream$: new Subject<MessageEnvelope>(),
       sendMessage: vi.fn(),
+      isRegisteredWindow: vi.fn().mockReturnValue(true),
     };
 
     indexedDbStorageMock = {
@@ -1401,6 +1403,150 @@ describe('CatalogManagement', () => {
       expect(multiV2String).toBe(stableStringify([primaryCat, secondaryCatV2]));
       expect(multiV2String).not.toBe(multiV1String);
       expect(multiV2Hash).not.toBe(multiV1Hash);
+    });
+
+    it('cancels the watchdog and re-issues GET_CATALOG when a detached frame remounts under the same resolvedUrl', async () => {
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
+      const win1 = {name: 'win1'} as unknown as Window;
+      const win2 = {name: 'win2'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      // Frame 1 announces RENDERER_READY while registered -> GET_CATALOG sent to win1
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5001,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+      expect(service.isHandshakeInProgress()).toBe(true);
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.GET_CATALOG},
+        win1,
+      );
+
+      // While win1 is STILL registered, a concurrent RENDERER_READY from win2 is still ignored
+      registered.add(win2);
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5002,
+        sourceWindow: win2,
+      });
+      TestBed.tick();
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      // Now win1 detaches (unregistered) before answering A2UI_CATALOG
+      registered.delete(win1);
+      warnSpy.mockClear();
+
+      // Advance 3s into the first watchdog window, then win2 announces RENDERER_READY
+      vi.advanceTimersByTime(3000);
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5003,
+        sourceWindow: win2,
+      });
+      TestBed.tick();
+
+      // Watchdog must have been restarted and GET_CATALOG re-issued to win2 immediately
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(2);
+      expect(hostCommunicationMock.sendMessage).toHaveBeenNthCalledWith(
+        2,
+        {type: PreviewBridgeMessageType.GET_CATALOG},
+        win2,
+      );
+
+      // Advancing past win1's original 5s deadline (+2.5s = 5.5s total) must NOT fire win1's stale watchdog
+      vi.advanceTimersByTime(2500);
+      expect(service.watchdogFired()).toBe(false);
+      expect(service.isHandshakeInProgress()).toBe(true);
+
+      // win2 completes the handshake cleanly
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalogId: 'cat-remounted', protocolVersion: '1.0'},
+        timestamp: 5004,
+        sourceWindow: win2,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.watchdogFired()).toBe(false);
+      expect(service.activeCatalog()?.catalogId).toBe('cat-remounted');
+      expect(service.activeProtocolVersion()).toBe('v1.0');
+    });
+
+    it('ignores late A2UI_CATALOG responses from a superseded handshake window', async () => {
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
+      const win1 = {name: 'win1'} as unknown as Window;
+      const win2 = {name: 'win2'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5101,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+
+      // win1 detaches and win2 takes over the handshake
+      registered.delete(win1);
+      registered.add(win2);
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5102,
+        sourceWindow: win2,
+      });
+      TestBed.tick();
+
+      // Stale A2UI_CATALOG from win1 arrives after win2 became active handshakeWindow
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalogId: 'stale-win1-cat'},
+        timestamp: 5103,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Ignoring A2UI_CATALOG from stale renderer window.',
+        }),
+      );
+      expect(service.isHandshakeInProgress()).toBe(true);
+      expect(service.handshakeState()).toBe('in-progress');
+      expect(service.activeCatalog()).toBeNull();
+      expect(service.hasReceivedCatalogResponse()).toBe(false);
+
+      // win2's own A2UI_CATALOG still settles cleanly
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalogId: 'fresh-win2-cat', protocolVersion: '1.0'},
+        timestamp: 5104,
+        sourceWindow: win2,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.handshakeState()).toBe('settled');
+      expect(service.activeCatalog()?.catalogId).toBe('fresh-win2-cat');
+      expect(service.activeProtocolVersion()).toBe('v1.0');
+      warnSpy.mockRestore();
     });
   });
 
