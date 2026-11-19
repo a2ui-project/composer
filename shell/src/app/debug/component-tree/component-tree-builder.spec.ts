@@ -381,4 +381,30 @@ describe('buildComponentTrees', () => {
     ]);
     expect(tree.unreachable.map(node => node.id)).toEqual(['hiddenA', 'hiddenB']);
   });
+
+  it('memoizes discovered reference slots across repeated calls with the same catalog', () => {
+    let schemaReads = 0;
+    const catalog: Catalog = {
+      catalogId: 'memoized',
+      components: {
+        Card: {
+          get properties() {
+            schemaReads++;
+            return {child: {$ref: `${COMMON}/ComponentId`}};
+          },
+        },
+        Text: {properties: {text: {type: 'string'}}},
+      },
+    };
+    const messages = surface([
+      {id: 'root', component: 'Card', child: 'title'},
+      {id: 'title', component: 'Text'},
+    ]);
+
+    buildComponentTrees(messages, catalog);
+    const [secondTree] = buildComponentTrees(messages, catalog);
+
+    expect(schemaReads).toBe(1);
+    expect(outline(secondTree.root)).toEqual(['Card#root', '  child:Text#title']);
+  });
 });

@@ -115,4 +115,14 @@ describe('ComponentTree', () => {
     expect(getRowViaLabels()).toEqual(['children:', 'trigger:', 'content:']);
     expect(fixture.nativeElement.querySelector('.unreachable-header')).toBeNull();
   });
+
+  it('renders a parse error message and no tree rows when the active draft is invalid JSON', () => {
+    activeDraft.set('{invalid');
+
+    fixture.detectChanges();
+
+    const errorMessage = fixture.nativeElement.querySelector('.tree-message.error');
+    expect(errorMessage?.textContent).toContain('The A2UI JSON is invalid:');
+    expect(getRowIds()).toEqual([]);
+  });
 });

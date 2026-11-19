@@ -171,23 +171,22 @@ function collectSurfaces(messages: readonly unknown[]): Map<string, SurfaceState
 
 /** Discovers the reference slots of each component type from the catalog. */
 class ReferenceSchema {
-  private readonly cache = new Map<string, readonly ReferenceSlot[] | null>();
+  private readonly cache = new Map<string, readonly ReferenceSlot[]>();
 
   constructor(private readonly catalog: Catalog | null) {}
 
   slotsFor(type: string): readonly ReferenceSlot[] {
-    if (!this.cache.has(type)) {
-      const components = this.catalog?.components;
-      const schema = components && Object.hasOwn(components, type) ? components[type] : undefined;
-      let slots: ReferenceSlot[] | null = null;
-      if (schema) {
-        slots = [];
-        this.walk(schema, [], slots, new Set());
-        slots = slots.filter(s => !(s.path.length === 1 && s.path[0] === 'id'));
-      }
+    const components = this.catalog?.components;
+    const schema = components && Object.hasOwn(components, type) ? components[type] : undefined;
+    if (!schema) return FALLBACK_SLOTS;
+    let slots = this.cache.get(type);
+    if (!slots) {
+      const discovered: ReferenceSlot[] = [];
+      this.walk(schema, [], discovered, new Set());
+      slots = discovered.filter(s => !(s.path.length === 1 && s.path[0] === 'id'));
       this.cache.set(type, slots);
     }
-    return this.cache.get(type) ?? FALLBACK_SLOTS;
+    return slots;
   }
 
   private walk(
@@ -300,6 +299,19 @@ function collect(
   collect(record[segment], path, index + 1, label ? `${label}.${segment}` : segment, kind, out);
 }
 
+const NULL_REFERENCE_SCHEMA = new ReferenceSchema(null);
+const referenceSchemaCache = new WeakMap<Catalog, ReferenceSchema>();
+
+function referenceSchemaFor(catalog: Catalog | null): ReferenceSchema {
+  if (!catalog) return NULL_REFERENCE_SCHEMA;
+  let schema = referenceSchemaCache.get(catalog);
+  if (!schema) {
+    schema = new ReferenceSchema(catalog);
+    referenceSchemaCache.set(catalog, schema);
+  }
+  return schema;
+}
+
 /**
  * Builds the component trees of all surfaces described by [messages] (a list
  * of A2UI v0.9 server-to-client messages), using [catalog] to find reference
@@ -309,7 +321,7 @@ export function buildComponentTrees(
   messages: readonly unknown[],
   catalog: Catalog | null,
 ): SurfaceComponentTree[] {
-  const schema = new ReferenceSchema(catalog);
+  const schema = referenceSchemaFor(catalog);
   const trees: SurfaceComponentTree[] = [];
   for (const [surfaceId, state] of collectSurfaces(messages)) {
     trees.push(buildSurfaceTree(surfaceId, state, schema));
