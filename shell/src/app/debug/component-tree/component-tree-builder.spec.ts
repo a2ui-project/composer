@@ -600,6 +600,7 @@ describe('updateSurfaceComponent', () => {
         },
       },
     ];
+    const snapshot = structuredClone(messages);
 
     const updatedMessages = updateSurfaceComponent(messages, 's', 'title', {
       id: 'title',
@@ -607,7 +608,8 @@ describe('updateSurfaceComponent', () => {
       text: 'Edited',
     });
 
-    expect(updatedMessages).toEqual(messages);
+    expect(updatedMessages).toBe(messages);
+    expect(messages).toEqual(snapshot);
   });
 
   it('does not mutate components after a surface was deleted', () => {
@@ -615,6 +617,7 @@ describe('updateSurfaceComponent', () => {
       ...surface([{id: 'title', component: 'Text', text: 'Hi'}]),
       {version: 'v0.9', deleteSurface: {surfaceId: 's'}},
     ];
+    const snapshot = structuredClone(messages);
 
     const updatedMessages = updateSurfaceComponent(messages, 's', 'title', {
       id: 'title',
@@ -622,11 +625,13 @@ describe('updateSurfaceComponent', () => {
       text: 'Edited',
     });
 
-    expect(updatedMessages).toEqual(messages);
+    expect(updatedMessages).toBe(messages);
+    expect(messages).toEqual(snapshot);
   });
 
-  it('leaves messages unchanged when the component is not found', () => {
+  it('returns the original messages reference when the component is not found', () => {
     const messages = surface([{id: 'root', component: 'Column', children: []}]);
+    const snapshot = structuredClone(messages);
 
     const updatedMessages = updateSurfaceComponent(messages, 's', 'missing', {
       id: 'missing',
@@ -634,6 +639,7 @@ describe('updateSurfaceComponent', () => {
       text: 'No-op',
     });
 
-    expect(updatedMessages).toEqual(messages);
+    expect(updatedMessages).toBe(messages);
+    expect(messages).toEqual(snapshot);
   });
 });
