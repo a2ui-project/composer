@@ -24,6 +24,7 @@ import {
   Binding,
   inject,
   inputBinding,
+  linkedSignal,
   outputBinding,
   signal,
 } from '@angular/core';
@@ -33,6 +34,7 @@ import {LocalStorageInteractions} from '../../storage/local-storage-interactions
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {CHAT_PANEL_COMPONENT} from '../../chat/chat-panel/chat-panel-component.token';
 import {ChatState} from '../../chat/chat-state/chat-state';
+import {StateSync} from '../../chat/state-sync/state-sync';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {RenderedFrame, RenderedFrameSizing} from '../../preview/rendered/rendered-frame';
 import {DefaultTarget} from '../host-communication/host-communication';
@@ -123,6 +125,7 @@ export class ComposerDockview {
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly chatPanelComponent = inject(CHAT_PANEL_COMPONENT);
   private readonly chatState = inject(ChatState);
+  private readonly stateSync = inject(StateSync);
 
   private rootEl?: HTMLElement;
   private dockviewApi!: DockviewComponent;
@@ -133,6 +136,10 @@ export class ComposerDockview {
   private eventsInstance?: Events;
   private errorsInstance?: Errors;
   private readonly componentTreeInstance = signal<ComponentTree | undefined>(undefined);
+  private readonly draftRevision = linkedSignal<[string, number], number>({
+    source: () => [this.stateSync.activeDraft(), this.stateSync.sessionResetNonce()],
+    computation: (_source, previous) => (previous?.value ?? -1) + 1,
+  });
 
   private resizeObserver?: ResizeObserver;
   private animationFrameId?: number;
@@ -451,7 +458,10 @@ export class ComposerDockview {
   private getPropertyEditorBindings(): Binding[] {
     return [
       inputBinding('component', () => this.componentTreeInstance()?.selectedComponent() ?? null),
-      inputBinding('resetKey', () => this.componentTreeInstance()?.selected()?.surfaceId ?? null),
+      inputBinding('resetKey', () => {
+        const selected = this.componentTreeInstance()?.selected();
+        return selected ? `${selected.surfaceId}:${selected.key}:${this.draftRevision()}` : null;
+      }),
       inputBinding('disabled', () => this.chatState.isProgrammaticStreamActive()),
       inputBinding('showHeader', () => true),
       inputBinding('showStatus', () => true),
