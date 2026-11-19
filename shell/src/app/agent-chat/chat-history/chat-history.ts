@@ -78,6 +78,8 @@ export class A2aChatHistory implements AfterViewChecked {
   readonly openInspector = output<string>();
   /** Emitted when an inline message surface finishes rendering its payload in an iframe. */
   readonly inlinePayloadRendered = output<InlineSurfaceDispatch>();
+  /** Emitted when an inline message surface resets or replaces its document. */
+  readonly inlineRenderStateReset = output<Window>();
 
   protected readonly scrollContainerRef = viewChild<ElementRef<HTMLDivElement>>('scrollContainer');
 

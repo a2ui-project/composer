@@ -88,6 +88,7 @@
                   sourceWindow: $event.sourceWindow,
                 })
               "
+              (renderStateReset)="inlineRenderStateReset.emit($event)"
             ></a2ui-composer-rendered-frame>
           </div>
         </ng-template>

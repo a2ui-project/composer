@@ -51,6 +51,7 @@
             (closeCanvas)="closeCanvasSurface()"
             (openInspector)="inspectMessage($event)"
             (inlinePayloadRendered)="onInlineSurfacePayloadRendered($event)"
+            (inlineRenderStateReset)="onSurfaceRenderStateReset($event)"
           ></a2ui-composer-chat-history>
         </div>
 
@@ -88,6 +89,7 @@
               sizing="fill"
               [defaultTarget]="DefaultTarget.REPLACE"
               (payloadRendered)="onCanvasSurfacePayloadRendered($event)"
+              (renderStateReset)="onSurfaceRenderStateReset($event)"
             ></a2ui-composer-rendered-frame>
           </div>
         </div>

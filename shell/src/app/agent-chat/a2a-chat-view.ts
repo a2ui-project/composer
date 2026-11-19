@@ -1017,6 +1017,10 @@ export class A2aChatView implements OnInit {
     this.handleSurfacePayloadRendered(event.payload, event.sourceWindow, {kind: 'canvas'});
   }
 
+  protected onSurfaceRenderStateReset(sourceWindow: Window): void {
+    this.trackedFrames.delete(sourceWindow);
+  }
+
   protected toggleMessageInspector(): void {
     this.isErrorsInspectorOpen.set(false);
     this.isMessageInspectorOpen.update(v => !v);
@@ -1280,21 +1284,83 @@ export class A2aChatView implements OnInit {
     return latest;
   }
 
+  /**
+   * Walks chat history backward from `agentMessageId` to determine which frame(s)
+   * own `surfaceId` at that point in the conversation, so an RPC targeting a moved
+   * surface never binds to an earlier turn's stale inline frame.
+   */
+  private resolveExpectedBindingsForSurface(
+    surfaceId: string,
+    agentMessageId: string,
+  ): SurfaceFrameBinding[] {
+    const msgs = this.messages();
+    const targetIdx = msgs.findIndex(m => m.id === agentMessageId);
+    const startIdx = targetIdx >= 0 ? targetIdx : msgs.length - 1;
+
+    for (let i = startIdx; i >= 0; i--) {
+      const msg = msgs[i];
+      const inlinePayload = resolveInlinePayload(msg);
+      const inInline = Boolean(
+        inlinePayload && this.extractSurfaceIds(inlinePayload).has(surfaceId),
+      );
+
+      const canvasPayloads = msg.canvasArtifacts?.length
+        ? msg.canvasArtifacts.map(artifact => artifact.payload)
+        : msg.hasCanvas && msg.a2uiPayload?.length
+          ? [msg.a2uiPayload]
+          : [];
+      const inCanvas = canvasPayloads.some(payload =>
+        this.extractSurfaceIds(payload).has(surfaceId),
+      );
+
+      if (inInline || inCanvas) {
+        const bindings: SurfaceFrameBinding[] = [];
+        if (inInline) {
+          bindings.push({kind: 'inline', messageId: msg.id});
+        }
+        if (inCanvas) {
+          bindings.push({kind: 'canvas'});
+        }
+        return bindings;
+      }
+    }
+
+    return [];
+  }
+
+  private matchesSurfaceFrameBinding(
+    actual: SurfaceFrameBinding,
+    expected: SurfaceFrameBinding,
+  ): boolean {
+    return expected.kind === 'inline'
+      ? actual.kind === 'inline' && actual.messageId === expected.messageId
+      : actual.kind === 'canvas';
+  }
+
   private resolveCandidateTrackedFrame(
     surfaceId: string | undefined,
     agentMessageId: string,
   ): {window: Window; frame: TrackedSurfaceFrame} | null {
-    const agentMsg = this.messages().find(m => m.id === agentMessageId);
-    const inlinePayload = resolveInlinePayload(agentMsg);
-
     if (surfaceId) {
-      if (inlinePayload && this.extractSurfaceIds(inlinePayload).has(surfaceId)) {
-        return this.findLatestTrackedFrame(
-          f => f.binding.kind === 'inline' && f.binding.messageId === agentMessageId,
-        );
+      const expectedBindings = this.resolveExpectedBindingsForSurface(surfaceId, agentMessageId);
+      if (expectedBindings.length > 0) {
+        for (const binding of expectedBindings) {
+          const match = this.findLatestTrackedFrame(
+            f =>
+              this.matchesSurfaceFrameBinding(f.binding, binding) &&
+              (binding.kind === 'inline' || f.surfaceIds.has(surfaceId)),
+          );
+          if (match) {
+            return match;
+          }
+        }
+        return null;
       }
       return this.findLatestTrackedFrame(f => f.surfaceIds.has(surfaceId));
     }
+
+    const agentMsg = this.messages().find(m => m.id === agentMessageId);
+    const inlinePayload = resolveInlinePayload(agentMsg);
 
     if (inlinePayload) {
       return this.findLatestTrackedFrame(
@@ -1366,7 +1432,16 @@ export class A2aChatView implements OnInit {
       if (entry.turnSignal?.aborted) {
         continue;
       }
-      const matchesSurface = entry.surfaceId ? dispatchedSurfaceIds.has(entry.surfaceId) : false;
+      let matchesSurface = false;
+      if (entry.surfaceId && dispatchedSurfaceIds.has(entry.surfaceId)) {
+        const expectedBindings = this.resolveExpectedBindingsForSurface(
+          entry.surfaceId,
+          entry.agentMessageId,
+        );
+        matchesSurface =
+          expectedBindings.length === 0 ||
+          expectedBindings.some(binding => this.matchesSurfaceFrameBinding(source, binding));
+      }
       const matchesUnscopedMessage =
         !entry.surfaceId && (source.kind === 'canvas' || entry.agentMessageId === source.messageId);
       if (matchesSurface || matchesUnscopedMessage) {
