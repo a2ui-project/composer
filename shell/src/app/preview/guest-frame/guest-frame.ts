@@ -26,6 +26,7 @@ import {
   input,
   OnInit,
   output,
+  OutputEmitterRef,
   untracked,
   viewChild,
 } from '@angular/core';
@@ -51,6 +52,14 @@ export interface GuestFrameCatalogState {
   hasReceivedCatalogResponse(): boolean;
   activeProtocolVersion(): A2uiProtocolVersion;
 }
+
+/** Emitted by {@link GuestFrame.payloadDispatched} when a payload is posted to the guest. */
+export interface PayloadDispatchedEvent {
+  initialForDocument: boolean;
+  renderId: string;
+}
+
+let nextGuestRenderId = 0;
 
 export const GUEST_FRAME_CATALOG_MANAGEMENT = new InjectionToken<GuestFrameCatalogState | null>(
   'GUEST_FRAME_CATALOG_MANAGEMENT',
@@ -139,21 +148,22 @@ export class GuestFrame implements OnInit {
    */
   readonly rendererReady = output<void>();
   /**
-   * Emits whenever `syncPayload` dispatches `RENDER_A2UI` to the guest frame:
-   * `true` for the first payload sent to the current document, and `false` for
-   * subsequent payload updates on the same document.
+   * Emits whenever `syncPayload` dispatches `RENDER_A2UI` to the guest frame,
+   * carrying `initialForDocument` and the assigned `renderId`.
    */
-  readonly payloadDispatched = output<boolean>();
-  /** The guest rendered the payload. */
-  readonly renderSuccess = output<void>();
-  /** The guest failed to render the payload. */
-  readonly renderError = output<void>();
+  readonly payloadDispatched = output<PayloadDispatchedEvent>();
+  /** The guest rendered a payload, carrying the echoed `renderId` when available. */
+  readonly renderSuccess = output<string | undefined>();
+  /** The guest failed to render a payload, carrying the echoed `renderId` when available. */
+  readonly renderError = output<string | undefined>();
   /**
    * The renderer URL changed, so the iframe now shows another renderer's
    * document, or none, and that document starts its own handshake. Not emitted
    * when the frame mounts, nor for a reload of the same URL.
    */
   readonly documentReplaced = output<void>();
+  /** Emitted when a same-URL reload resets the guest document state before its next handshake. */
+  readonly documentReset = output<void>();
 
   private readonly iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('guestIframe');
 
@@ -193,6 +203,8 @@ export class GuestFrame implements OnInit {
    * writes it, or null while the document has been sent nothing.
    */
   private lastSentPayload: string | null = null;
+  /** Whether the active document's PreviewBridge announced renderId echo support. */
+  private bridgeSupportsRenderId = false;
 
   constructor() {
     // A new iframe only appears along with a new renderer URL, so the effect
@@ -299,6 +311,7 @@ export class GuestFrame implements OnInit {
     } else {
       this.resetForNewDocument();
       this.loadedCurrentDocument = true;
+      this.documentReset.emit();
     }
     this.readySinceLoad = false;
   }
@@ -309,6 +322,7 @@ export class GuestFrame implements OnInit {
     this.readySinceLoad = false;
     this.reloadedOnLoad = false;
     this.lastSentPayload = null;
+    this.bridgeSupportsRenderId = false;
     const iframe = this.iframeRef()?.nativeElement;
     if (iframe) {
       this.hostCommunication.registerIframe(iframe, this.defaultTarget());
@@ -325,6 +339,7 @@ export class GuestFrame implements OnInit {
       case PreviewBridgeMessageType.RENDERER_READY: {
         const wasReady = this.readyForCurrentLoad;
         this.readyForCurrentLoad = true;
+        this.bridgeSupportsRenderId = envelope.supportsRenderId === true;
         if (wasReady) {
           this.readySinceLoad = true;
         }
@@ -342,18 +357,31 @@ export class GuestFrame implements OnInit {
         }
         return;
       case PreviewBridgeMessageType.RENDER_SUCCESS:
-        this.readySinceLoad = false;
-        this.reloadedOnLoad = false;
-        this.renderSuccess.emit();
+        this.handleRenderAck(envelope, this.renderSuccess);
         return;
       case PreviewBridgeMessageType.RENDER_ERROR:
-        this.readySinceLoad = false;
-        this.reloadedOnLoad = false;
-        this.renderError.emit();
+        this.handleRenderAck(envelope, this.renderError);
         return;
       default:
         return;
     }
+  }
+
+  private handleRenderAck(
+    envelope: MessageEnvelope,
+    emitter: OutputEmitterRef<string | undefined>,
+  ): void {
+    this.readySinceLoad = false;
+    this.reloadedOnLoad = false;
+    const renderId =
+      typeof envelope.renderId === 'string' && envelope.renderId ? envelope.renderId : undefined;
+    if (renderId) {
+      this.bridgeSupportsRenderId = true;
+    } else if (this.bridgeSupportsRenderId) {
+      // A renderId-capable bridge omits renderId on non-GuestFrame sends (e.g. direct RPCs).
+      return;
+    }
+    emitter.emit(renderId);
   }
 
   /**
@@ -405,8 +433,9 @@ export class GuestFrame implements OnInit {
     const content = stableStringify(payload);
     if (content === this.lastSentPayload) return;
     const initialForDocument = this.lastSentPayload === null;
+    const renderId = `render-${++nextGuestRenderId}`;
     this.lastSentPayload = content;
-    this.hostCommunication.sendRenderA2UI(payload, iframe);
-    this.payloadDispatched.emit(initialForDocument);
+    this.hostCommunication.sendRenderA2UI(payload, iframe, renderId);
+    this.payloadDispatched.emit({initialForDocument, renderId});
   }
 }

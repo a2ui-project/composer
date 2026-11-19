@@ -1107,5 +1107,167 @@ describe('RenderedFrame Live Preview Viewport', () => {
       expect(emitted[0].payload).toEqual(samplePayload);
       expect(await harness.getAppliedHeightPx()).toBe(350);
     });
+
+    it('settles coalesced dispatches when two payloads receive a single RENDER_SUCCESS for the latest renderId', async () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      const secondPayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'surf-2', catalogId: 'cat-1'}},
+      ];
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}),
+        supportsRenderId: true,
+      } as MessageEnvelope);
+      fixture.detectChanges();
+
+      fixture.componentRef.setInput('payload', secondPayload);
+      fixture.detectChanges();
+
+      const sendCalls = vi.mocked(hostCommunicationServiceMock.sendRenderA2UI!).mock.calls;
+      expect(sendCalls).toHaveLength(2);
+      const secondRenderId = sendCalls[1][2] as string;
+      expect(typeof secondRenderId).toBe('string');
+
+      // PreviewBridge coalesced P1 away and sent one RENDER_SUCCESS for P2's renderId
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}),
+        renderId: secondRenderId,
+      } as MessageEnvelope);
+      emitFromGuest(surfaceResizeEnvelope(380));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].payload).toEqual(secondPayload);
+      expect(await harness.getAppliedHeightPx()).toBe(380);
+    });
+
+    it('ignores an untagged RPC RENDER_SUCCESS arriving while a payload is in flight on a renderId-capable bridge', async () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}),
+        supportsRenderId: true,
+      } as MessageEnvelope);
+      fixture.detectChanges();
+
+      const sendCalls = vi.mocked(hostCommunicationServiceMock.sendRenderA2UI!).mock.calls;
+      const firstRenderId = sendCalls[0][2] as string;
+      expect(typeof firstRenderId).toBe('string');
+
+      // Untagged RPC ack arrives before P1 finishes rendering -> must NOT settle P1 or unblock SURFACE_RESIZE
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      emitFromGuest(surfaceResizeEnvelope(220));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(0);
+      expect(await harness.getAppliedHeightPx()).toBeNull();
+
+      // Now P1's tagged RENDER_SUCCESS arrives -> emits P1 and unblocks SURFACE_RESIZE
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}),
+        renderId: firstRenderId,
+      } as MessageEnvelope);
+      emitFromGuest(surfaceResizeEnvelope(410));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].payload).toEqual(samplePayload);
+      expect(await harness.getAppliedHeightPx()).toBe(410);
+    });
+
+    it('emits renderStateReset with the last known window on initial dispatch, URL change, same-URL reload, empty payload, session reset, and destroy', async () => {
+      const resets: Window[] = [];
+      fixture.componentInstance.renderStateReset.subscribe(win => resets.push(win));
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      const iframe = await harness.getIframe();
+      await iframe!.dispatchEvent('load');
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+      expect(resets.includes(guestWindow)).toBe(true);
+
+      resets.length = 0;
+      // Same-URL reload
+      await iframe!.dispatchEvent('load');
+      fixture.detectChanges();
+      expect(resets.includes(guestWindow)).toBe(true);
+
+      resets.length = 0;
+      // Empty payload
+      fixture.componentRef.setInput('payload', []);
+      fixture.detectChanges();
+      expect(resets.includes(guestWindow)).toBe(true);
+
+      resets.length = 0;
+      // Session reset
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      expect(resets.includes(guestWindow)).toBe(true);
+
+      resets.length = 0;
+      // Renderer URL replacement
+      resolvedUrlSignal.set('http://localhost:4200/other-renderer');
+      fixture.detectChanges();
+      expect(resets.includes(guestWindow)).toBe(true);
+
+      const currentGuestWindow = await guestWindowOf(harness);
+      resets.length = 0;
+      fixture.destroy();
+      expect(resets).toHaveLength(1);
+      expect(resets.includes(currentGuestWindow)).toBe(true);
+    });
+
+    it('ignores stale RENDER_ERROR renderId without latching error or emitting reset, and latches on matching coalesced RENDER_ERROR', async () => {
+      const resets: Window[] = [];
+      fixture.componentInstance.renderStateReset.subscribe(win => resets.push(win));
+
+      const secondPayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'surf-2', catalogId: 'cat-1'}},
+      ];
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}),
+        supportsRenderId: true,
+      } as MessageEnvelope);
+      fixture.detectChanges();
+
+      fixture.componentRef.setInput('payload', secondPayload);
+      fixture.detectChanges();
+
+      const sendCalls = vi.mocked(hostCommunicationServiceMock.sendRenderA2UI!).mock.calls;
+      const secondRenderId = sendCalls[1][2] as string;
+      resets.length = 0;
+
+      // Unrecognized/stale renderId on RENDER_ERROR must not latch error, drop queue, or emit reset
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDER_ERROR, {message: 'stale error'}),
+        renderId: 'render-unknown-999',
+      } as MessageEnvelope);
+      fixture.detectChanges();
+      expect(resets).toHaveLength(0);
+
+      // Matching coalesced renderId (P2) settles P1+P2, latches hasRenderError, and emits renderStateReset
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDER_ERROR, {message: 'p2 failed'}),
+        renderId: secondRenderId,
+      } as MessageEnvelope);
+      emitFromGuest(surfaceResizeEnvelope(320));
+      fixture.detectChanges();
+
+      expect(resets.includes(guestWindow)).toBe(true);
+      expect(await harness.getAppliedHeightPx()).toBeNull();
+    });
   });
 });

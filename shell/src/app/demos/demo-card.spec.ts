@@ -304,7 +304,11 @@ describe('DemoCard sandboxed live demo frame', () => {
     // would go to the default target instead, which is never a card.
     expect(sendMessageSpy).toHaveBeenCalledTimes(1);
     expect(sendMessageSpy).toHaveBeenCalledWith(
-      {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
+      {
+        type: PreviewBridgeMessageType.RENDER_A2UI,
+        payload: DEMO.a2ui,
+        renderId: expect.any(String),
+      },
       iframe,
     );
     expect(fixture.componentInstance.state()).toBe(DemoCardState.READY);
@@ -332,7 +336,14 @@ describe('DemoCard sandboxed live demo frame', () => {
       ([message]) => (message as {type?: string}).type === PreviewBridgeMessageType.RENDER_A2UI,
     );
     expect(renderCalls).toEqual([
-      [{type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui}, RENDERER_ORIGIN],
+      [
+        {
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload: DEMO.a2ui,
+          renderId: expect.any(String),
+        },
+        RENDERER_ORIGIN,
+      ],
     ]);
   });
 
@@ -374,7 +385,11 @@ describe('DemoCard sandboxed live demo frame', () => {
     expect(sendMessageSpy).toHaveBeenCalledTimes(2);
     expect(sendMessageSpy).toHaveBeenNthCalledWith(
       2,
-      {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
+      {
+        type: PreviewBridgeMessageType.RENDER_A2UI,
+        payload: DEMO.a2ui,
+        renderId: expect.any(String),
+      },
       iframe,
     );
     expect(fixture.componentInstance.state()).toBe(DemoCardState.READY);
@@ -880,7 +895,11 @@ describe('DemoCard sandboxed live demo frame', () => {
 
     expect(sendMessageSpy).toHaveBeenCalledTimes(1);
     expect(sendMessageSpy).toHaveBeenCalledWith(
-      {type: PreviewBridgeMessageType.RENDER_A2UI, payload: v1Demo.a2ui},
+      {
+        type: PreviewBridgeMessageType.RENDER_A2UI,
+        payload: v1Demo.a2ui,
+        renderId: expect.any(String),
+      },
       iframe,
     );
   });

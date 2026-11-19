@@ -44,6 +44,10 @@ export declare interface MessageEnvelope {
   type: string;
   /** Optional payload attached to the message transaction */
   payload?: unknown;
+  /** Optional render dispatch correlation ID echoed by PreviewBridge */
+  renderId?: string;
+  /** Capability flag announced on RENDERER_READY when PreviewBridge echoes renderId */
+  supportsRenderId?: boolean;
   /** Fully resolved origin URI string of the dispatching sender */
   origin: string;
   /** Epoch millisecond timestamp recording when the message was received */
@@ -221,7 +225,7 @@ export class HostCommunication implements OnDestroy {
    * inside the message would make the send throw.
    */
   private readonly outboundMessageBuffer: Array<{
-    message: {type: PreviewBridgeMessageType; payload?: unknown};
+    message: {type: PreviewBridgeMessageType; payload?: unknown; renderId?: string};
     target?: HTMLIFrameElement | Window | null;
   }> = [];
 
@@ -358,6 +362,8 @@ export class HostCommunication implements OnDestroy {
       const envelope: MessageEnvelope = {
         type,
         payload: data.payload,
+        ...(typeof data.renderId === 'string' && data.renderId ? {renderId: data.renderId} : {}),
+        ...(data.supportsRenderId === true ? {supportsRenderId: true} : {}),
         origin: event.origin,
         timestamp: Date.now(),
         sourceWindow: (event.source as Window) ?? null,
@@ -807,7 +813,7 @@ export class HostCommunication implements OnDestroy {
    * @param target Optional explicit target iframe element or window reference
    */
   sendMessage(
-    message: {type: PreviewBridgeMessageType; payload?: unknown},
+    message: {type: PreviewBridgeMessageType; payload?: unknown; renderId?: string},
     target?: HTMLIFrameElement | Window | null,
   ): void {
     if (!CrossFrameValidator.validateOutgoingMessage(message, undefined, this.logger)) {
@@ -888,12 +894,18 @@ export class HostCommunication implements OnDestroy {
    * Helper utility dispatching a RENDER_A2UI layout array to the preview renderer.
    * @param payload Array of layout nodes or configuration objects
    * @param target Optional explicit target iframe element or window reference
+   * @param renderId Optional dispatch ID echoed by PreviewBridge on render completion
    */
-  sendRenderA2UI(payload: unknown[], target?: HTMLIFrameElement | Window | null): void {
+  sendRenderA2UI(
+    payload: unknown[],
+    target?: HTMLIFrameElement | Window | null,
+    renderId?: string,
+  ): void {
     this.sendMessage(
       {
         type: PreviewBridgeMessageType.RENDER_A2UI,
         payload: payload,
+        ...(renderId !== undefined ? {renderId} : {}),
       },
       target,
     );

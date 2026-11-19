@@ -27,9 +27,10 @@
     [autoRejectAgentFunctions]="autoRejectAgentFunctions()"
     [frameTitle]="'Rendered Preview'"
     (documentReplaced)="onDocumentReplaced()"
+    (documentReset)="onDocumentReset()"
     (payloadDispatched)="onPayloadDispatched($event)"
-    (renderSuccess)="onRenderSuccess()"
-    (renderError)="onRenderError()"
+    (renderSuccess)="onRenderSuccess($event)"
+    (renderError)="onRenderError($event)"
     (surfaceResize)="onSurfaceResize($event)"
   >
     <div class="rendered-frame-placeholder">Rendered UI Placeholder</div>

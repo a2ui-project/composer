@@ -285,6 +285,14 @@ export class PreviewBridge {
 
   /** The scheduled macro-task timer identifier deferred for layout payload processing. */
   private renderTimeoutId?: ReturnType<typeof setTimeout>;
+  /** Render ID associated with the currently deferred createSurface timer, if any. */
+  private pendingRenderId?: string;
+  /** Incremental updates queued behind an uncommitted createSurface timer to preserve FIFO ack order. */
+  private readonly deferredFollowUpRenders: Array<{
+    payload: unknown;
+    isStreaming: boolean;
+    renderId?: string;
+  }> = [];
 
   private surfaceResizeTimeoutId?: ReturnType<typeof setTimeout>;
   private forceNextSurfaceResize = false;
@@ -656,6 +664,7 @@ export class PreviewBridge {
     // surfaces, structurally eliminating the inter-frame timing race conditions.
     this.sendMessage({
       type: PreviewBridgeMessageType.RENDERER_READY,
+      supportsRenderId: true,
     });
     // The host ignores RENDERER_READY until it has the catalog it already asked for,
     // so a request the previous renderer left unanswered is answered now.
@@ -673,6 +682,8 @@ export class PreviewBridge {
             clearTimeout(this.renderTimeoutId);
             this.renderTimeoutId = undefined;
           }
+          this.pendingRenderId = undefined;
+          this.deferredFollowUpRenders.length = 0;
           this.activeRenderer = null;
           this.activeProtocolVersion = 'v0.9';
         }
@@ -731,6 +742,8 @@ export class PreviewBridge {
       clearTimeout(this.renderTimeoutId);
       this.renderTimeoutId = undefined;
     }
+    this.pendingRenderId = undefined;
+    this.deferredFollowUpRenders.length = 0;
     this.handleBlockingOverlay(false);
     this.isListening = false;
     this.activeRenderer = null;
@@ -840,12 +853,16 @@ export class PreviewBridge {
         this.handleIncomingDataModelChange(data.payload);
         break;
 
-      case PreviewBridgeMessageType.RENDER_A2UI:
+      case PreviewBridgeMessageType.RENDER_A2UI: {
+        const renderId =
+          typeof data.renderId === 'string' && data.renderId ? data.renderId : undefined;
         this.dispatchRenderA2ui(
           data.payload !== undefined ? data.payload : data,
           Boolean(data.isStreaming),
+          renderId,
         );
         break;
+      }
 
       case PreviewBridgeMessageType.GET_CATALOG:
         void this.handleGetCatalog();
@@ -930,7 +947,11 @@ export class PreviewBridge {
    * If a createSurface instruction is present, it synchronously triggers a clear/unmount,
    * then defers the rendering actual layout command payload to a clean event cycle task.
    */
-  private dispatchRenderA2ui(payload: unknown, isStreaming: boolean = false): void {
+  private dispatchRenderA2ui(
+    payload: unknown,
+    isStreaming: boolean = false,
+    renderId?: string,
+  ): void {
     // If a dynamic layout setup message is received before the framework application has
     // bootstrapped and attached its renderer, we print a warning and ignore the payload.
     // This should not ever happen since the host Shell is strictly designed never to dispatch
@@ -963,18 +984,39 @@ export class PreviewBridge {
       if (this.renderTimeoutId) {
         clearTimeout(this.renderTimeoutId);
       }
+      this.deferredFollowUpRenders.length = 0;
+      this.pendingRenderId = renderId;
       this.renderTimeoutId = setTimeout(() => {
+        const scheduledRenderId = this.pendingRenderId;
+        const followUps = this.deferredFollowUpRenders.splice(0);
         this.renderTimeoutId = undefined;
+        this.pendingRenderId = undefined;
         try {
-          this.handleRenderA2ui(payload, isStreaming);
+          this.handleRenderA2ui(payload, isStreaming, true, scheduledRenderId);
         } catch (err) {
           console.error('PreviewBridge: Error during deferred RENDER_A2UI payload dispatch:', err);
         }
+        for (const followUp of followUps) {
+          if (!this.activeRenderer) {
+            break;
+          }
+          try {
+            this.handleRenderA2ui(followUp.payload, followUp.isStreaming, true, followUp.renderId);
+          } catch (err) {
+            console.error(
+              'PreviewBridge: Error during deferred follow-up RENDER_A2UI payload dispatch:',
+              err,
+            );
+          }
+        }
       }, 0);
+    } else if (payload !== null && this.renderTimeoutId !== undefined) {
+      // Queue behind the uncommitted createSurface timer so execution and renderId acks stay FIFO.
+      this.deferredFollowUpRenders.push({payload, isStreaming, renderId});
     } else {
       // Incremental state updates bypass the unmounting phase to prevent flicker
       try {
-        this.handleRenderA2ui(payload, isStreaming);
+        this.handleRenderA2ui(payload, isStreaming, true, renderId);
       } catch (err) {
         console.error('PreviewBridge: Error during direct RENDER_A2UI payload dispatch:', err);
       }
@@ -989,6 +1031,7 @@ export class PreviewBridge {
     payload: unknown,
     isStreaming: boolean = false,
     scheduleResize = true,
+    renderId?: string,
   ): void {
     if (!this.activeRenderer) return;
 
@@ -1076,7 +1119,10 @@ export class PreviewBridge {
         if (this.activeRenderer.config.onError) {
           this.activeRenderer.config.onError(null);
         }
-        this.sendMessage({type: PreviewBridgeMessageType.RENDER_SUCCESS});
+        this.sendMessage({
+          type: PreviewBridgeMessageType.RENDER_SUCCESS,
+          ...(renderId !== undefined ? {renderId} : {}),
+        });
       } catch (err: unknown) {
         console.error('PreviewBridge: Error during message processing:', err);
         if (!isStreaming && this.activeRenderer.config.onError) {
@@ -1085,6 +1131,7 @@ export class PreviewBridge {
         this.sendMessage({
           type: PreviewBridgeMessageType.RENDER_ERROR,
           error: safeSerialize(err),
+          ...(renderId !== undefined ? {renderId} : {}),
         });
       }
 
@@ -1115,6 +1162,8 @@ export class PreviewBridge {
       clearTimeout(this.renderTimeoutId);
       this.renderTimeoutId = undefined;
     }
+    this.pendingRenderId = undefined;
+    this.deferredFollowUpRenders.length = 0;
     if (!this.activeRenderer) return;
 
     const {processor, config, activeSurfaceIds} = this.activeRenderer;

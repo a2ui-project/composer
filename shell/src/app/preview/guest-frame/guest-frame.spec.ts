@@ -62,9 +62,10 @@ type FrameEvent =
       [frameTitle]="'Test preview'"
       (surfaceResize)="record({output: 'surfaceResize', report: $event})"
       (rendererReady)="record({output: 'rendererReady'})"
-      (renderSuccess)="record({output: 'renderSuccess'})"
-      (renderError)="record({output: 'renderError'})"
+      (renderSuccess)="onRenderSuccess($event)"
+      (renderError)="onRenderError($event)"
       (documentReplaced)="record({output: 'documentReplaced'})"
+      (documentReset)="documentResetCount = documentResetCount + 1"
     >
       <p>No renderer</p>
     </a2ui-composer-guest-frame>
@@ -75,9 +76,21 @@ class TestHost {
   readonly autoRejectAgentFunctions = signal<boolean>(false);
   defaultTarget = DefaultTarget.REPLACE;
   readonly events: FrameEvent[] = [];
+  readonly renderAcks: Array<{type: 'success' | 'error'; renderId?: string}> = [];
+  documentResetCount = 0;
 
   /** Called with each emission as it happens, for checks on ordering. */
   onEvent: (event: FrameEvent) => void = () => {};
+
+  protected onRenderSuccess(renderId?: string): void {
+    this.renderAcks.push({type: 'success', renderId});
+    this.record({output: 'renderSuccess'});
+  }
+
+  protected onRenderError(renderId?: string): void {
+    this.renderAcks.push({type: 'error', renderId});
+    this.record({output: 'renderError'});
+  }
 
   protected record(event: FrameEvent): void {
     this.events.push(event);
@@ -297,7 +310,11 @@ describe('GuestFrame', () => {
         fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
 
         expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
-        expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(PAYLOAD, iframe);
+        expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(
+          PAYLOAD,
+          iframe,
+          expect.any(String),
+        );
       });
 
       it('sends once for load, READY, READY', async () => {
@@ -310,7 +327,11 @@ describe('GuestFrame', () => {
         fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
 
         expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
-        expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(PAYLOAD, iframe);
+        expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(
+          PAYLOAD,
+          iframe,
+          expect.any(String),
+        );
       });
 
       it('holds a payload that changes before READY and sends only the latest on READY', async () => {
@@ -326,7 +347,11 @@ describe('GuestFrame', () => {
         fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
 
         expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
-        expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(NEXT_PAYLOAD, iframe);
+        expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(
+          NEXT_PAYLOAD,
+          iframe,
+          expect.any(String),
+        );
       });
 
       it('sends a payload that changes after READY at once', async () => {
@@ -338,7 +363,11 @@ describe('GuestFrame', () => {
         fixture.detectChanges();
 
         expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
-        expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(NEXT_PAYLOAD, iframe);
+        expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+          NEXT_PAYLOAD,
+          iframe,
+          expect.any(String),
+        );
       });
 
       it('sends a payload that arrives after an empty READY', async () => {
@@ -354,7 +383,11 @@ describe('GuestFrame', () => {
         fixture.componentInstance.payload.set(PAYLOAD);
         fixture.detectChanges();
         expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
-        expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(PAYLOAD, iframe);
+        expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(
+          PAYLOAD,
+          iframe,
+          expect.any(String),
+        );
 
         fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
         expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
@@ -379,7 +412,11 @@ describe('GuestFrame', () => {
         fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
         fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
         expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
-        expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(NEXT_PAYLOAD, iframe);
+        expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+          NEXT_PAYLOAD,
+          iframe,
+          expect.any(String),
+        );
       });
 
       it('sends again after a reload, when the first document announced itself before its load', async () => {
@@ -408,7 +445,11 @@ describe('GuestFrame', () => {
         fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
 
         expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
-        expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+        expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+          PAYLOAD,
+          iframe,
+          expect.any(String),
+        );
       });
 
       it('holds a payload change between a reload and its READY', async () => {
@@ -425,7 +466,11 @@ describe('GuestFrame', () => {
 
         fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
         expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
-        expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(NEXT_PAYLOAD, iframe);
+        expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+          NEXT_PAYLOAD,
+          iframe,
+          expect.any(String),
+        );
       });
 
       describe('a reload that announces itself before its load', () => {
@@ -450,7 +495,11 @@ describe('GuestFrame', () => {
           const {iframe} = await reloadAnnouncedBeforeLoad();
 
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
-          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+            PAYLOAD,
+            iframe,
+            expect.any(String),
+          );
         });
 
         it('delivers the payload on READY #3 when a StrictMode guest (READY #1 -> load #1 -> READY #2) reloads with load #2 before READY #3', async () => {
@@ -460,7 +509,11 @@ describe('GuestFrame', () => {
           // at load #2 and needs the payload when its READY #3 arrives.
           fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(3);
-          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+            PAYLOAD,
+            iframe,
+            expect.any(String),
+          );
 
           // A StrictMode repeat READY #4 on Document 2 does not send again.
           fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
@@ -481,7 +534,11 @@ describe('GuestFrame', () => {
 
           fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
-          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+            PAYLOAD,
+            iframe,
+            expect.any(String),
+          );
         });
 
         it('delivers the payload on load #2 without revoking readiness when Document 1 loaded before READY #1 and Document 2 announced READY #2 before load #2', async () => {
@@ -498,7 +555,11 @@ describe('GuestFrame', () => {
           await harness.simulateFrameLoad();
 
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
-          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+            PAYLOAD,
+            iframe,
+            expect.any(String),
+          );
           expect(hostCommunication.registerIframe).not.toHaveBeenCalled();
         });
 
@@ -509,7 +570,11 @@ describe('GuestFrame', () => {
           fixture.detectChanges();
 
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(3);
-          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(NEXT_PAYLOAD, iframe);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+            NEXT_PAYLOAD,
+            iframe,
+            expect.any(String),
+          );
         });
 
         it('delivers the payload on READY #3 after a StrictMode guest loaded before its two READY announcements, both with and without RENDER_SUCCESS', async () => {
@@ -529,7 +594,11 @@ describe('GuestFrame', () => {
           fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
           fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
-          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+            PAYLOAD,
+            iframe,
+            expect.any(String),
+          );
 
           // Reload again before RENDER_SUCCESS arrives after the StrictMode repeat READY:
           // load #3 sends in case READY was pre-load, and READY #5 still delivers to the new document.
@@ -539,7 +608,11 @@ describe('GuestFrame', () => {
           fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
           fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(4);
-          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+            PAYLOAD,
+            iframe,
+            expect.any(String),
+          );
         });
       });
 
@@ -609,7 +682,11 @@ describe('GuestFrame', () => {
           fixture.detectChanges();
 
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(3);
-          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+            PAYLOAD,
+            iframe,
+            expect.any(String),
+          );
         });
 
         it('is sent again after the payload is cleared to null or empty and then restored', async () => {
@@ -623,14 +700,22 @@ describe('GuestFrame', () => {
           fixture.componentInstance.payload.set(structuredClone(PAYLOAD));
           fixture.detectChanges();
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
-          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+            PAYLOAD,
+            iframe,
+            expect.any(String),
+          );
 
           fixture.componentInstance.payload.set([]);
           fixture.detectChanges();
           fixture.componentInstance.payload.set(structuredClone(PAYLOAD));
           fixture.detectChanges();
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(3);
-          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(
+            PAYLOAD,
+            iframe,
+            expect.any(String),
+          );
         });
 
         it('is sent to a new document after a renderer URL change', async () => {
@@ -760,6 +845,50 @@ describe('GuestFrame', () => {
         await harness.simulateFrameLoad();
 
         expect(fixture.componentInstance.events).toEqual([{output: 'rendererReady'}]);
+        expect(fixture.componentInstance.documentResetCount).toBe(1);
+      });
+
+      it('suppresses untagged RENDER_SUCCESS/RENDER_ERROR once guest announces supportsRenderId, while forwarding tagged acks', async () => {
+        const {fixture, harness} = await mount(host => host.payload.set(PAYLOAD));
+        const iframe = await iframeOf(harness);
+        await harness.simulateFrameLoad();
+
+        messages.next({
+          ...bridgeEnvelope(
+            PreviewBridgeMessageType.RENDERER_READY,
+            {},
+            {
+              sourceWindow: iframe.contentWindow!,
+            },
+          ),
+          supportsRenderId: true,
+        } as MessageEnvelope);
+        fixture.detectChanges();
+
+        const sentRenderId = hostCommunication.sendRenderA2UI.mock.calls[0]?.[2];
+        expect(typeof sentRenderId).toBe('string');
+
+        // Untagged ack (e.g. RPC ack) must be suppressed
+        fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDER_SUCCESS);
+        fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDER_ERROR);
+        expect(fixture.componentInstance.renderAcks).toEqual([]);
+
+        // Tagged ack forwards renderId
+        messages.next({
+          ...bridgeEnvelope(
+            PreviewBridgeMessageType.RENDER_SUCCESS,
+            {},
+            {
+              sourceWindow: iframe.contentWindow!,
+            },
+          ),
+          renderId: sentRenderId,
+        } as MessageEnvelope);
+        fixture.detectChanges();
+
+        expect(fixture.componentInstance.renderAcks).toEqual([
+          {type: 'success', renderId: sentRenderId},
+        ]);
       });
 
       it('emits every message of a burst in one tick, in order', async () => {
@@ -940,7 +1069,14 @@ describe('GuestFrame', () => {
         ([message]) => (message as {type?: string}).type === PreviewBridgeMessageType.RENDER_A2UI,
       );
       expect(renders).toEqual([
-        [{type: PreviewBridgeMessageType.RENDER_A2UI, payload: NEXT_PAYLOAD}, RENDERER_ORIGIN],
+        [
+          {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: NEXT_PAYLOAD,
+            renderId: expect.any(String),
+          },
+          RENDERER_ORIGIN,
+        ],
       ]);
     });
 
@@ -1039,7 +1175,11 @@ describe('GuestFrame', () => {
       hasReceivedCatalogResponseSignal.set(true);
       fixture.detectChanges();
 
-      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(PAYLOAD, iframe);
+      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(
+        PAYLOAD,
+        iframe,
+        expect.any(String),
+      );
     });
 
     it('dispatches default v0.9 payload when handshake settles on v0.9 after an error', async () => {
@@ -1060,7 +1200,11 @@ describe('GuestFrame', () => {
       );
       fixture.detectChanges();
 
-      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(PAYLOAD, iframe);
+      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(
+        PAYLOAD,
+        iframe,
+        expect.any(String),
+      );
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
@@ -1104,7 +1248,11 @@ describe('GuestFrame', () => {
       activeProtocolVersionSignal.set('v1.0');
       fixture.detectChanges();
 
-      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(v1Payload, iframe);
+      expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledWith(
+        v1Payload,
+        iframe,
+        expect.any(String),
+      );
     });
   });
 });

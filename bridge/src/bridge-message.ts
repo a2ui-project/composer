@@ -115,6 +115,10 @@ export declare interface BridgeMessage {
   type: PreviewBridgeMessageType;
   /** Optional payload data associated with the message event. */
   payload?: unknown;
+  /** Optional host-assigned dispatch identifier echoed on RENDER_SUCCESS / RENDER_ERROR. */
+  renderId?: string;
+  /** Capability flag announced on RENDERER_READY when the bridge echoes renderId. */
+  supportsRenderId?: boolean;
   /** Extensible custom properties. */
   [key: string]: unknown;
 }

@@ -1205,7 +1205,7 @@ describe('A2aChatView', () => {
       const iframe = await canvasIframe();
       expect(iframe).toBeInstanceOf(HTMLIFrameElement);
       announce(iframe);
-      expect(renderCalls()).toContainEqual([payload, iframe]);
+      expect(renderCalls()).toContainEqual([payload, iframe, expect.any(String)]);
     });
 
     it('never sends a canvas payload without a target', async () => {
@@ -1230,7 +1230,6 @@ describe('A2aChatView', () => {
       const calls = renderCalls();
       expect(calls.map(call => call[0])).toEqual(expect.arrayContaining([first, second]));
       for (const call of calls) {
-        expect(call).toHaveLength(2);
         expect(call[1]).toBe(iframe);
       }
     });

@@ -16,19 +16,23 @@
 
 import {
   Component,
-  DestroyRef,
   inject,
   effect,
   computed,
   untracked,
   input,
+  OnDestroy,
   output,
   signal,
   viewChild,
 } from '@angular/core';
 import {type SurfaceResizePayload} from 'a2ui-bridge';
 import {clampContentHeight} from '../content-height';
-import {GuestFrame, GUEST_FRAME_CATALOG_MANAGEMENT} from '../guest-frame/guest-frame';
+import {
+  GuestFrame,
+  GUEST_FRAME_CATALOG_MANAGEMENT,
+  PayloadDispatchedEvent,
+} from '../guest-frame/guest-frame';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {DefaultTarget} from '../../shell/host-communication/host-communication';
 import {ChatState} from '../../chat/chat-state/chat-state';
@@ -41,6 +45,10 @@ export type RenderedFrameSizing = 'fill' | 'content';
 export interface RenderedSurfaceDispatch {
   payload: unknown[];
   sourceWindow: Window;
+}
+
+interface InFlightSurfaceDispatch extends RenderedSurfaceDispatch {
+  renderId: string;
 }
 
 /**
@@ -65,10 +73,9 @@ export interface RenderedSurfaceDispatch {
   templateUrl: './rendered-frame.ng.html',
   styleUrl: './rendered-frame.scss',
 })
-export class RenderedFrame {
+export class RenderedFrame implements OnDestroy {
   private readonly chatState = inject(ChatState);
   private readonly stateSync = inject(StateSync);
-  private readonly destroyRef = inject(DestroyRef);
 
   readonly guestFrame = viewChild(GuestFrame);
 
@@ -87,6 +94,14 @@ export class RenderedFrame {
    * in the inner GuestFrame.
    */
   readonly payloadRendered = output<RenderedSurfaceDispatch>();
+
+  /**
+   * Emits when this frame's rendered state is cleared or replaced (document
+   * replacement, same-URL reload, empty payload, session reset, render error,
+   * or teardown), carrying the associated guest Window so parents can drop
+   * stale tracking entries immediately.
+   */
+  readonly renderStateReset = output<Window>();
 
   /**
    * The A2UI messages to render in the guest. Sent once the guest's document
@@ -130,8 +145,9 @@ export class RenderedFrame {
   private readonly reportedHeight = signal<number | null>(null);
 
   private lastHandledResetNonce = this.stateSync.sessionResetNonce();
-  private readonly inFlightDispatches: RenderedSurfaceDispatch[] = [];
+  private readonly inFlightDispatches: InFlightSurfaceDispatch[] = [];
   private hasRenderError = false;
+  private lastKnownWindow: Window | null = null;
 
   /**
    * Height applied in content sizing, as a CSS length: the latest report
@@ -156,14 +172,10 @@ export class RenderedFrame {
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
   constructor() {
-    this.destroyRef.onDestroy(() => {
-      this.resetRenderState({clearHeight: false});
-    });
-
     effect(() => {
       const payload = this.payload();
       if (payload !== undefined && (!Array.isArray(payload) || payload.length === 0)) {
-        this.resetRenderState();
+        this.resetRenderState({notifyReset: true});
       }
     });
 
@@ -172,49 +184,96 @@ export class RenderedFrame {
       const nonce = this.stateSync.sessionResetNonce();
       if (nonce > this.lastHandledResetNonce) {
         this.lastHandledResetNonce = nonce;
-        this.resetRenderState();
+        this.resetRenderState({notifyReset: true});
       }
     });
   }
 
-  private resetRenderState(options: {clearHeight?: boolean} = {}): void {
+  ngOnDestroy(): void {
+    this.resetRenderState({clearHeight: false, notifyReset: true});
+  }
+
+  private rememberContentWindow(): Window | null {
+    const win = this.contentWindow;
+    if (win) {
+      this.lastKnownWindow = win;
+    }
+    return win ?? this.lastKnownWindow;
+  }
+
+  private emitRenderStateReset(): void {
+    const win = this.rememberContentWindow();
+    if (win) {
+      this.renderStateReset.emit(win);
+    }
+  }
+
+  private resetRenderState(options: {clearHeight?: boolean; notifyReset?: boolean} = {}): void {
     this.inFlightDispatches.length = 0;
     this.hasRenderError = false;
     if (options.clearHeight !== false) {
       untracked(() => this.reportedHeight.set(null));
     }
+    if (options.notifyReset) {
+      this.emitRenderStateReset();
+    }
   }
 
   protected onDocumentReplaced(): void {
-    this.resetRenderState();
+    this.resetRenderState({notifyReset: true});
   }
 
-  protected onPayloadDispatched(initialForDocument: boolean): void {
-    if (initialForDocument) {
-      this.inFlightDispatches.length = 0;
-      this.hasRenderError = false;
-      this.reportedHeight.set(null);
+  protected onDocumentReset(): void {
+    this.resetRenderState({notifyReset: true});
+  }
+
+  protected onPayloadDispatched(event: PayloadDispatchedEvent): void {
+    const sourceWindow = this.rememberContentWindow();
+    if (event.initialForDocument) {
+      this.resetRenderState({notifyReset: true});
     }
     const payload = this.payload();
-    const sourceWindow = this.contentWindow;
     if (Array.isArray(payload) && sourceWindow) {
-      this.inFlightDispatches.push({payload, sourceWindow});
+      this.inFlightDispatches.push({renderId: event.renderId, payload, sourceWindow});
     }
   }
 
-  protected onRenderSuccess(): void {
-    const completed = this.inFlightDispatches.shift();
+  private consumeInFlightDispatch(renderId?: string): InFlightSurfaceDispatch | undefined {
+    if (renderId !== undefined) {
+      const idx = this.inFlightDispatches.findIndex(dispatch => dispatch.renderId === renderId);
+      if (idx === -1) {
+        return undefined;
+      }
+      const settled = this.inFlightDispatches.splice(0, idx + 1);
+      return settled[settled.length - 1];
+    }
+    return this.inFlightDispatches.shift();
+  }
+
+  protected onRenderSuccess(renderId?: string): void {
+    const completed = this.consumeInFlightDispatch(renderId);
+    if (renderId !== undefined && !completed) {
+      return;
+    }
     this.hasRenderError = false;
     if (completed) {
-      this.payloadRendered.emit(completed);
+      this.lastKnownWindow = completed.sourceWindow;
+      this.payloadRendered.emit({
+        payload: completed.payload,
+        sourceWindow: completed.sourceWindow,
+      });
     }
   }
 
-  protected onRenderError(): void {
-    this.inFlightDispatches.shift();
+  protected onRenderError(renderId?: string): void {
+    const settled = this.consumeInFlightDispatch(renderId);
+    if (renderId !== undefined && !settled) {
+      return;
+    }
     if (this.inFlightDispatches.length === 0) {
       this.hasRenderError = true;
       this.reportedHeight.set(null);
+      this.emitRenderStateReset();
     }
   }
 
