@@ -50,6 +50,7 @@ import {ChatPanel} from '../../chat/chat-panel/chat-panel';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {DataModel} from '../../debug/data-model/data-model';
+import {ComponentTree} from '../../debug/component-tree/component-tree';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -155,11 +156,12 @@ describe('ComposerWorkspace Dashboard', () => {
     // so we verify they were instantiated by the Angular view container.
     const manager = fixture.debugElement.injector.get(ComposerDockview);
     const refs = manager.dynamicComponentRefs;
-    expect(refs.length).toBe(7);
+    expect(refs.length).toBe(8);
     const types = refs.map(r => r.componentType);
     expect(types).toContain(ChatPanel);
     expect(types).toContain(RenderedFrame);
     expect(types).toContain(RawFrame);
+    expect(types).toContain(ComponentTree);
     expect(types).toContain(DataModel);
   });
 
@@ -389,6 +391,36 @@ describe('ComposerWorkspace Dashboard', () => {
         const restored = await returnToWorkspace();
         expect(restored.api.getGroupPanel(ComposerPanelId.Rendered)?.title).toBe('My preview');
         expect(restored.api.getGroupPanel(ComposerPanelId.Events)?.api.isActive).toBe(true);
+        expect(restored.api.panels.map(panel => panel.id).sort()).toEqual(
+          Object.values(ComposerPanelId).sort(),
+        );
+        expect(errorSpy).not.toHaveBeenCalled();
+      });
+
+      it('adds missing panels as inactive tabs at their default positions when restoring an older layout', async () => {
+        const manager = fixture.debugElement.injector.get(ComposerDockview);
+        const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
+        manager.setPanelTitle(ComposerPanelId.Rendered, 'My preview');
+        manager.openPanel(ComposerPanelId.Events);
+        const componentTreePanel = manager.api.getGroupPanel(ComposerPanelId.ComponentTree);
+        expect(componentTreePanel).toBeDefined();
+        manager.api.removePanel(componentTreePanel!);
+
+        const legacyLayout = manager.api.toJSON();
+        expect(legacyLayout.panels[ComposerPanelId.ComponentTree]).toBeUndefined();
+        fixture.destroy();
+        storage.setItem(LocalStorageKey.DOCKVIEW_LAYOUT, JSON.stringify(legacyLayout));
+
+        const restored = await returnToWorkspace();
+        const restoredRendered = restored.api.getGroupPanel(ComposerPanelId.Rendered);
+        const restoredComponentTree = restored.api.getGroupPanel(ComposerPanelId.ComponentTree);
+
+        expect(restoredRendered?.title).toBe('My preview');
+        expect(restoredRendered?.group.activePanel?.id).toBe(ComposerPanelId.Rendered);
+        expect(restored.api.getGroupPanel(ComposerPanelId.Events)?.api.isActive).toBe(true);
+        expect(restoredComponentTree).toBeDefined();
+        expect(restoredComponentTree?.group).toBe(restoredRendered?.group);
+        expect(restored.isPanelVisible(ComposerPanelId.ComponentTree)).toBe(false);
         expect(restored.api.panels.map(panel => panel.id).sort()).toEqual(
           Object.values(ComposerPanelId).sort(),
         );

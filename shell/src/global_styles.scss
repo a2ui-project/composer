@@ -316,3 +316,11 @@ body .dv-dockview .dv-watermark-container {
     pointer-events: auto !important;
   }
 }
+
+// Component Tree panel tooltips can span multiple lines; they render in the
+// global CDK overlay, so their styles must be global.
+.component-tree-tooltip .mdc-tooltip__surface {
+  max-width: 640px;
+  white-space: pre-line;
+  text-align: left;
+}

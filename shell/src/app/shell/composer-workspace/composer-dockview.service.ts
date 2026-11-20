@@ -24,7 +24,7 @@ import {
   inject,
 } from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
-import {DockviewComponent} from 'dockview-core';
+import {AddPanelOptions, DockviewComponent} from 'dockview-core';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {CHAT_PANEL_COMPONENT} from '../../chat/chat-panel/chat-panel-component.token';
@@ -35,6 +35,7 @@ import {DataModel} from '../../debug/data-model/data-model';
 import {Events} from '../../debug/events/events';
 import {Errors} from '../../debug/errors/errors';
 import {RawMessages} from '../../debug/raw-messages/raw-messages';
+import {ComponentTree} from '../../debug/component-tree/component-tree';
 import {ComposerPanelId} from './composer-panel-id';
 
 /**
@@ -375,6 +376,9 @@ export class ComposerDockview {
       case ComposerPanelId.RawMessages:
         type = RawMessages;
         break;
+      case ComposerPanelId.ComponentTree:
+        type = ComponentTree;
+        break;
     }
 
     if (!type) {
@@ -475,89 +479,105 @@ export class ComposerDockview {
       }
     }
 
+    const chatWidth = Math.floor(width * CHAT_PANEL_MAX_WIDTH_FRACTION);
+    const debugHeight = Math.round(height * DEBUG_DRAWER_HEIGHT_RATIO);
+    const previewHeight = height - debugHeight;
+
+    const addPanel = (options: AddPanelOptions) => {
+      if (!this.dockviewApi.getGroupPanel(options.id)) {
+        this.dockviewApi.addPanel(layoutRestored ? {...options, inactive: true} : options);
+      }
+    };
+
+    // 1. Chat panel (Gemini Assistant) on the left
+    addPanel({
+      id: ComposerPanelId.Chat,
+      component: ComposerPanelId.Chat,
+      title: 'Gemini Assistant',
+      initialWidth: chatWidth,
+      minimumWidth: CHAT_PANEL_MIN_WIDTH,
+    });
+
+    // 2. Rendered preview split to the right of Chat
+    addPanel({
+      id: ComposerPanelId.Rendered,
+      component: ComposerPanelId.Rendered,
+      title: 'Rendered A2UI Preview',
+      position: {direction: 'right', referencePanel: ComposerPanelId.Chat},
+      initialWidth: width - chatWidth,
+      initialHeight: previewHeight,
+      minimumWidth: PREVIEW_PANEL_MIN_WIDTH,
+      minimumHeight: PREVIEW_PANEL_MIN_HEIGHT,
+    });
+
+    // 3. Raw JSON editor and Component Tree tabbed within Rendered preview group
+    addPanel({
+      id: ComposerPanelId.Raw,
+      component: ComposerPanelId.Raw,
+      title: 'A2UI JSON Editor',
+      position: {
+        direction: 'within',
+        referencePanel: ComposerPanelId.Rendered,
+      },
+      inactive: true,
+    });
+    addPanel({
+      id: ComposerPanelId.ComponentTree,
+      component: ComposerPanelId.ComponentTree,
+      title: 'Component Tree',
+      position: {
+        direction: 'within',
+        referencePanel: ComposerPanelId.Rendered,
+      },
+      inactive: true,
+    });
+
+    // 4. Debug drawer split below Rendered preview
+    addPanel({
+      id: ComposerPanelId.DataModel,
+      component: ComposerPanelId.DataModel,
+      title: 'Data Model',
+      position: {
+        direction: 'below',
+        referencePanel: ComposerPanelId.Rendered,
+      },
+      initialHeight: debugHeight,
+      minimumHeight: DEBUG_DRAWER_MIN_HEIGHT,
+    });
+
+    // 5. Secondary debug tabs placed within Data Model group
+    addPanel({
+      id: ComposerPanelId.Events,
+      component: ComposerPanelId.Events,
+      title: 'Events',
+      position: {
+        direction: 'within',
+        referencePanel: ComposerPanelId.DataModel,
+      },
+      inactive: true,
+    });
+    addPanel({
+      id: ComposerPanelId.Errors,
+      component: ComposerPanelId.Errors,
+      title: 'Errors',
+      position: {
+        direction: 'within',
+        referencePanel: ComposerPanelId.DataModel,
+      },
+      inactive: true,
+    });
+    addPanel({
+      id: ComposerPanelId.RawMessages,
+      component: ComposerPanelId.RawMessages,
+      title: 'Raw Messages',
+      position: {
+        direction: 'within',
+        referencePanel: ComposerPanelId.DataModel,
+      },
+      inactive: true,
+    });
+
     if (!layoutRestored) {
-      const chatWidth = Math.floor(width * CHAT_PANEL_MAX_WIDTH_FRACTION);
-      const debugHeight = Math.round(height * DEBUG_DRAWER_HEIGHT_RATIO);
-      const previewHeight = height - debugHeight;
-
-      // 1. Chat panel (Gemini Assistant) on the left
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Chat,
-        component: ComposerPanelId.Chat,
-        title: 'Gemini Assistant',
-        initialWidth: chatWidth,
-        minimumWidth: CHAT_PANEL_MIN_WIDTH,
-      });
-
-      // 2. Rendered preview split to the right of Chat
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Rendered,
-        component: ComposerPanelId.Rendered,
-        title: 'Rendered A2UI Preview',
-        position: {direction: 'right', referencePanel: ComposerPanelId.Chat},
-        initialWidth: width - chatWidth,
-        initialHeight: previewHeight,
-        minimumWidth: PREVIEW_PANEL_MIN_WIDTH,
-        minimumHeight: PREVIEW_PANEL_MIN_HEIGHT,
-      });
-
-      // 3. Raw JSON editor tabbed within Rendered preview group
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Raw,
-        component: ComposerPanelId.Raw,
-        title: 'A2UI JSON Editor',
-        position: {
-          direction: 'within',
-          referencePanel: ComposerPanelId.Rendered,
-        },
-        inactive: true,
-      });
-
-      // 4. Debug drawer split below Rendered preview
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.DataModel,
-        component: ComposerPanelId.DataModel,
-        title: 'Data Model',
-        position: {
-          direction: 'below',
-          referencePanel: ComposerPanelId.Rendered,
-        },
-        initialHeight: debugHeight,
-        minimumHeight: DEBUG_DRAWER_MIN_HEIGHT,
-      });
-
-      // 5. Secondary debug tabs placed within Data Model group
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Events,
-        component: ComposerPanelId.Events,
-        title: 'Events',
-        position: {
-          direction: 'within',
-          referencePanel: ComposerPanelId.DataModel,
-        },
-        inactive: true,
-      });
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Errors,
-        component: ComposerPanelId.Errors,
-        title: 'Errors',
-        position: {
-          direction: 'within',
-          referencePanel: ComposerPanelId.DataModel,
-        },
-        inactive: true,
-      });
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.RawMessages,
-        component: ComposerPanelId.RawMessages,
-        title: 'Raw Messages',
-        position: {
-          direction: 'within',
-          referencePanel: ComposerPanelId.DataModel,
-        },
-        inactive: true,
-      });
-
       // Explicitly activate default primary tabs for each panel group.
       // Secondary tabs were appended to their groups above, so activating the
       // default primary panels here cleanly executes Dockview's doSetActivePanel
