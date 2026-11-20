@@ -303,6 +303,9 @@ export class A2aChatView implements OnInit {
       }
 
       const card = await this.a2aTransport.getAgentCard(normalizedUrl);
+      if (this.destroyRef.destroyed) {
+        return;
+      }
 
       this.configProvider.setA2aAgentUrl(normalizedUrl);
       this.agentCard.set(card);
@@ -311,6 +314,9 @@ export class A2aChatView implements OnInit {
       this.showsInlineConfig.set(false);
       this.closeConfigDialog();
     } catch (err: unknown) {
+      if (this.destroyRef.destroyed) {
+        return;
+      }
       const errorMsg = err instanceof Error ? err.message : 'Failed to connect to agent endpoint.';
       this.connectionError.set(errorMsg);
       this.recordInspectorEvent(createErrorEvent(err));
@@ -898,7 +904,7 @@ export class A2aChatView implements OnInit {
   }
 
   protected openConfigPanel(): void {
-    if (this.configDialogRef || this.showsInlineConfig()) return;
+    if (this.destroyRef.destroyed || this.configDialogRef || this.showsInlineConfig()) return;
 
     const ref = this.dialog.open(this.configPanelTemplate(), {
       ariaLabel: 'A2A Agent Configuration',

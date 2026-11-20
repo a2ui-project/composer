@@ -17,6 +17,7 @@
 import {signal, WritableSignal} from '@angular/core';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
+import {MatDialog} from '@angular/material/dialog';
 import {Subject} from 'rxjs';
 import {PreviewBridgeMessageType, RenderA2uiItem, ThemePreference} from 'a2ui-bridge';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
@@ -201,6 +202,7 @@ describe('A2aChatView', () => {
     expect(panel).not.toBeNull();
     await panel!.clickClear();
     await dialog!.close();
+    expect(await harness.isConfigDialogOpen()).toBe(false);
 
     await header.clickSettings();
 
@@ -283,6 +285,43 @@ describe('A2aChatView', () => {
     } finally {
       failedFixture.destroy();
     }
+  });
+
+  it('does not open config dialog if connection fails after destroy', async () => {
+    let rejectConnect!: (reason?: unknown) => void;
+    mockA2aTransport.getAgentCard = vi.fn().mockReturnValue(
+      new Promise((_, reject) => {
+        rejectConnect = reject;
+      }),
+    );
+
+    const connectPromise = fixture.componentInstance.connectToAgent('http://localhost:9999');
+    expect(mockA2aTransport.getAgentCard).toHaveBeenCalledWith('http://localhost:9999');
+    fixture.destroy();
+
+    rejectConnect(new Error('Agent unreachable'));
+    await connectPromise;
+
+    expect(TestBed.inject(MatDialog).openDialogs).toHaveLength(0);
+  });
+
+  it('does not persist agent URL if connection resolves after destroy', async () => {
+    let resolveConnect!: (value: unknown) => void;
+    mockA2aTransport.getAgentCard = vi.fn().mockReturnValue(
+      new Promise(resolve => {
+        resolveConnect = resolve;
+      }),
+    );
+    vi.mocked(mockConfigProvider.setA2aAgentUrl!).mockClear();
+
+    const connectPromise = fixture.componentInstance.connectToAgent('http://localhost:9999');
+    expect(mockA2aTransport.getAgentCard).toHaveBeenCalledWith('http://localhost:9999');
+    fixture.destroy();
+
+    resolveConnect({name: 'Late Agent'});
+    await connectPromise;
+
+    expect(mockConfigProvider.setA2aAgentUrl).not.toHaveBeenCalled();
   });
 
   it('dismisses config dialog on close when agent is connected', async () => {
