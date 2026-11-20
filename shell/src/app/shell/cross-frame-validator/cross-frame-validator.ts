@@ -28,12 +28,70 @@ import {V09WireValidator} from './v0-9-wire-validator';
 import {V10WireValidator} from './v1-0-wire-validator';
 
 /**
+ * Error payload substituted when an incoming A2UI_CATALOG fails validation or
+ * bridge resolution.
+ */
+export interface CatalogHandshakeErrorPayload {
+  readonly error: {readonly message?: string};
+}
+
+function isCatalogHandshakeErrorShape(value: Record<string, unknown>): boolean {
+  if (!('error' in value)) {
+    return false;
+  }
+  const errorObj = value['error'];
+  if (!errorObj || typeof errorObj !== 'object' || Array.isArray(errorObj)) {
+    return false;
+  }
+  if ('message' in errorObj) {
+    const msg = (errorObj as Record<string, unknown>)['message'];
+    return msg === undefined || typeof msg === 'string';
+  }
+  return true;
+}
+
+/**
+ * Type guard verifying whether an incoming catalog handshake payload represents
+ * an error payload sent by the preview bridge or synthesized by the host frame.
+ */
+export function isCatalogHandshakeErrorPayload(
+  value: unknown,
+): value is CatalogHandshakeErrorPayload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  if (hasPrototypePollution(value)) {
+    return false;
+  }
+  return isCatalogHandshakeErrorShape(value as Record<string, unknown>);
+}
+
+/**
  * Hardens postMessage channels by validating outgoing layout schemas,
  * component hierarchies, and data binding payloads prior to transmission.
  */
 export class CrossFrameValidator {
   private static readonly v09Validator = new V09WireValidator();
   private static readonly v10Validator = new V10WireValidator();
+
+  private static validateOptionalObjectPayload(
+    msgType: string,
+    msgPayload: unknown,
+    errors: string[] | undefined,
+    logger: Pick<TaggedLogger, 'error' | 'warn'>,
+  ): boolean {
+    if (msgPayload !== undefined && msgPayload !== null) {
+      if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
+        recordError(
+          `Malformed payload for ${msgType}: must be an object, null, or undefined.`,
+          errors,
+          logger,
+        );
+        return false;
+      }
+    }
+    return true;
+  }
 
   /**
    * Validates an outgoing message envelope and its payload structure.
@@ -64,47 +122,15 @@ export class CrossFrameValidator {
     }
 
     switch (msgType) {
-      case PreviewBridgeMessageType.GET_CATALOG: {
-        if (msgPayload !== undefined && msgPayload !== null) {
-          if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-            recordError(
-              'Malformed payload for GET_CATALOG: must be an object, null, or undefined.',
-              errors,
-              logger,
-            );
-            return false;
-          }
-        }
-        return true;
-      }
-
-      case PreviewBridgeMessageType.GET_COMPONENT_USAGES: {
-        if (msgPayload !== undefined && msgPayload !== null) {
-          if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-            recordError(
-              'Malformed payload for GET_COMPONENT_USAGES: must be an object, null, or undefined.',
-              errors,
-              logger,
-            );
-            return false;
-          }
-        }
-        return true;
-      }
-
-      case PreviewBridgeMessageType.GET_DEMOS: {
-        if (msgPayload !== undefined && msgPayload !== null) {
-          if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-            recordError(
-              'Malformed payload for GET_DEMOS: must be an object, null, or undefined.',
-              errors,
-              logger,
-            );
-            return false;
-          }
-        }
-        return true;
-      }
+      case PreviewBridgeMessageType.GET_CATALOG:
+      case PreviewBridgeMessageType.GET_COMPONENT_USAGES:
+      case PreviewBridgeMessageType.GET_DEMOS:
+        return CrossFrameValidator.validateOptionalObjectPayload(
+          msgType,
+          msgPayload,
+          errors,
+          logger,
+        );
 
       case PreviewBridgeMessageType.RENDER_A2UI: {
         if (!msgPayload || !Array.isArray(msgPayload)) {
@@ -211,28 +237,7 @@ export class CrossFrameValidator {
       }
 
       case PreviewBridgeMessageType.MCP_REQUEST: {
-        if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
-          recordError('Malformed payload for MCP_REQUEST: must be an object.', errors, logger);
-          return false;
-        }
-        const mcpReq = msgPayload as {requestId?: unknown; toolName?: unknown};
-        if (typeof mcpReq.requestId !== 'string' || !mcpReq.requestId.trim()) {
-          recordError(
-            'Malformed payload for MCP_REQUEST: must contain a non-empty requestId string.',
-            errors,
-            logger,
-          );
-          return false;
-        }
-        if (typeof mcpReq.toolName !== 'string' || !mcpReq.toolName.trim()) {
-          recordError(
-            'Malformed payload for MCP_REQUEST: must contain a non-empty toolName string.',
-            errors,
-            logger,
-          );
-          return false;
-        }
-        return true;
+        return CrossFrameValidator.validateMcpRequestPayload(msgPayload, errors, logger);
       }
 
       case PreviewBridgeMessageType.MCP_RESPONSE: {
@@ -302,6 +307,10 @@ export class CrossFrameValidator {
 
       case PreviewBridgeMessageType.SEND_TO_SERVER: {
         return CrossFrameValidator.validateSendToServerPayload(msgPayload, errors, logger);
+      }
+
+      case PreviewBridgeMessageType.MCP_REQUEST: {
+        return CrossFrameValidator.validateMcpRequestPayload(msgPayload, errors, logger);
       }
 
       // Validates dimensional updates dispatched by the embedded preview iframe
@@ -407,13 +416,13 @@ export class CrossFrameValidator {
 
     const payloadObj = payload as Record<string, unknown>;
 
-    if (payloadObj['error'] !== undefined) {
-      if (
-        !payloadObj['error'] ||
-        typeof payloadObj['error'] !== 'object' ||
-        Array.isArray(payloadObj['error'])
-      ) {
-        recordError('Malformed error in A2UI_CATALOG: must be an object.', errors, logger);
+    if ('error' in payloadObj && payloadObj['error'] !== undefined) {
+      if (!isCatalogHandshakeErrorShape(payloadObj)) {
+        recordError(
+          'Malformed error in A2UI_CATALOG: must match { error: { message?: string } }.',
+          errors,
+          logger,
+        );
         return false;
       }
       return true;
@@ -557,5 +566,53 @@ export class CrossFrameValidator {
       logger,
     );
     return false;
+  }
+
+  private static validateMcpRequestPayload(
+    payload: unknown,
+    errors: string[] | undefined,
+    logger: Pick<TaggedLogger, 'error' | 'warn'>,
+  ): boolean {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      recordError('Malformed payload for MCP_REQUEST: must be an object.', errors, logger);
+      return false;
+    }
+    if (hasPrototypePollution(payload)) {
+      recordError(
+        'Malformed payload for MCP_REQUEST: prototype pollution key detected.',
+        errors,
+        logger,
+      );
+      return false;
+    }
+    const mcpReq = payload as {requestId?: unknown; toolName?: unknown; args?: unknown};
+    if (typeof mcpReq.requestId !== 'string' || !mcpReq.requestId.trim()) {
+      recordError(
+        'Malformed payload for MCP_REQUEST: must contain a non-empty requestId string.',
+        errors,
+        logger,
+      );
+      return false;
+    }
+    if (typeof mcpReq.toolName !== 'string' || !mcpReq.toolName.trim()) {
+      recordError(
+        'Malformed payload for MCP_REQUEST: must contain a non-empty toolName string.',
+        errors,
+        logger,
+      );
+      return false;
+    }
+    if (
+      mcpReq.args !== undefined &&
+      (!mcpReq.args || typeof mcpReq.args !== 'object' || Array.isArray(mcpReq.args))
+    ) {
+      recordError(
+        'Malformed payload for MCP_REQUEST: args property must be an object if present.',
+        errors,
+        logger,
+      );
+      return false;
+    }
+    return true;
   }
 }
