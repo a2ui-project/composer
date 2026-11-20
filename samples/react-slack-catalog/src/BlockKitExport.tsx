@@ -22,21 +22,18 @@ interface BlockKitExportProps {
 }
 
 /**
- * Shows the Slack Block Kit JSON for the current preview, ready to paste into
- * Slack's Block Kit Builder or an app, with a button to copy it.
+ * Shows the Slack Block Kit JSON for the current preview, with a button to copy
+ * it. Each image drawn for a component, such as a chart, is in Slack's
+ * uploaded-file form with the placeholder file ID `RENDERED_AT_SEND`, which the
+ * app that sends the message replaces with the ID of the image it uploads.
+ * Without drawn images, the JSON is ready to paste into Slack's Block Kit
+ * Builder or an app.
  */
 export function BlockKitExport({snapshot}: BlockKitExportProps) {
   const canCopy = snapshot.status === PreviewStatus.READY;
   const blockKitJson = useMemo(
-    () =>
-      JSON.stringify(
-        {
-          blocks: canCopy ? snapshot.blocks : [],
-        },
-        null,
-        2,
-      ),
-    [canCopy, snapshot.blocks],
+    () => JSON.stringify({blocks: canCopy ? snapshot.exportBlocks : []}, null, 2),
+    [canCopy, snapshot.exportBlocks],
   );
   const [copyStatus, setCopyStatus] = useState('');
 

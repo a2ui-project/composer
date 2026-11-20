@@ -48,7 +48,11 @@ import {
   type InputDispatchEntry,
 } from './form-input';
 import {parseHttpUrl} from './http-url';
+import {exportDrawnImages, noteDrawnImages, placeDrawnImage} from './drawn-image-blocks';
+import {type DrawnImageStore} from './drawn-image-store';
+import {lowerChart} from './lower-chart';
 import {lowerImage} from './lower-image';
+import {lowerScorecard} from './lower-scorecard';
 import {lowerTable} from './lower-table';
 import {type LowerComponentContext, type LoweringState} from './lowering-context';
 import {LoweringError} from './lowering-error';
@@ -101,8 +105,14 @@ class WaitingForComponentError extends Error {
  * diagnostics, and no actions or inputs.
  *
  * @param revision The render number, used in the generated `action_id`s.
+ * @param drawnImages Serves the images drawn for components sent as images: charts and
+ *     scorecards.
  */
-export function lowerSurface(surface: SurfaceModel, revision: number): LoweredSurface {
+export function lowerSurface(
+  surface: SurfaceModel,
+  revision: number,
+  drawnImages: DrawnImageStore,
+): LoweredSurface {
   const noControls = {actions: new Map(), inputs: new Map()};
   if (surface.componentsModel.entries.next().done) {
     return {snapshot: {...createEmptySnapshot(revision), surfaceId: surface.id}, ...noControls};
@@ -113,11 +123,14 @@ export function lowerSurface(surface: SurfaceModel, revision: number): LoweredSu
     diagnostics: [],
     actions: new Map(),
     inputs: new Map(),
+    drawnImages,
+    drawnComponents: [],
     nextActionOrdinal: 1,
   };
 
   try {
     const ir = wrapTopLevelButtons(lowerComponent(surface, 'root', '/', new Set(), state));
+    noteDrawnImages(state);
     const limitEvidence = collectOutputLimitEvidence(ir);
     const blocks = renderBlockKit(ir);
     const actions = filterActionsForBlocks(state.actions, blocks, state.diagnostics);
@@ -135,6 +148,7 @@ export function lowerSurface(surface: SurfaceModel, revision: number): LoweredSu
         surfaceId: surface.id,
         status: PreviewStatus.READY,
         blocks,
+        exportBlocks: exportDrawnImages(blocks, drawnImages),
         diagnostics: state.diagnostics,
       },
       actions,
@@ -148,6 +162,7 @@ export function lowerSurface(surface: SurfaceModel, revision: number): LoweredSu
           surfaceId: surface.id,
           status: PreviewStatus.WAITING,
           blocks: [],
+          exportBlocks: [],
           diagnostics: [
             {
               level: DiagnosticLevel.INFO,
@@ -180,6 +195,7 @@ export function lowerSurface(surface: SurfaceModel, revision: number): LoweredSu
         surfaceId: surface.id,
         status: PreviewStatus.ERROR,
         blocks: [],
+        exportBlocks: [],
         diagnostics: [diagnostic],
       },
       ...noControls,
@@ -279,6 +295,8 @@ function lowerComponent(
           return entry;
         },
         diagnostics: state.diagnostics,
+        placeDrawnImage: image =>
+          placeDrawnImage(state, {componentType: model.type, componentId}, image),
       }),
     );
   } finally {
@@ -332,6 +350,10 @@ function lowerSupportedComponent(
       return lowerFormInput(context.input(type), props);
     case 'Table':
       return lowerTable(props, context);
+    case 'Chart':
+      return lowerChart(props, context);
+    case 'Scorecard':
+      return lowerScorecard(props, context);
     case 'MarketSnapshot':
       // `lowerComponent` validated these props against MarketSnapshotSchema.
       return lowerMarketSnapshot(props as MarketSnapshotProps, context);

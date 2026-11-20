@@ -83,6 +83,7 @@ const readySnapshot = (blocks: KnownBlock[]): PreviewSnapshot => ({
   surfaceId: 'surface-1',
   status: PreviewStatus.READY,
   blocks,
+  exportBlocks: blocks,
   diagnostics: [],
 });
 

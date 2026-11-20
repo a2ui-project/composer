@@ -30,9 +30,15 @@ export enum PreviewStatus {
 
 /** How serious a preview diagnostic is. */
 export enum DiagnosticLevel {
-  /** Nothing is wrong; the preview is reporting progress. */
+  /**
+   * Nothing is wrong. The preview notes something about the render, such as a component
+   * it is waiting for, or images the app that sends the message must upload.
+   */
   INFO = 'info',
-  /** The preview rendered, but Slack can't show part of the surface as authored. */
+  /**
+   * The preview rendered, but not all of the surface as authored: part of it is
+   * approximated, cut to fit Slack's limits, or left out.
+   */
   WARNING = 'warning',
   /** The preview could not render, or an interaction failed. */
   ERROR = 'error',
@@ -45,8 +51,15 @@ export enum DiagnosticLevel {
  */
 export enum DiagnosticCode {
   A2UI_COMPONENT_CYCLE = 'A2UI_COMPONENT_CYCLE',
+  /** A pie or donut Chart was left out because all of its values are zero. */
+  A2UI_EMPTY_CHART = 'A2UI_EMPTY_CHART',
   A2UI_INPUT_ERROR = 'A2UI_INPUT_ERROR',
   A2UI_INVALID_ACTION = 'A2UI_INVALID_ACTION',
+  /**
+   * A Chart was left out because a value isn't a number, or a pie or donut has a negative
+   * value or more slices than it has colors.
+   */
+  A2UI_INVALID_CHART_DATA = 'A2UI_INVALID_CHART_DATA',
   A2UI_INVALID_IMAGE_ALT_TEXT = 'A2UI_INVALID_IMAGE_ALT_TEXT',
   A2UI_INVALID_IMAGE_URL = 'A2UI_INVALID_IMAGE_URL',
   /** A TextField or DateTimeInput whose value isn't bound to a data model path. */
@@ -59,6 +72,8 @@ export enum DiagnosticCode {
   A2UI_INVALID_MARKET_SOURCE_NAME = 'A2UI_INVALID_MARKET_SOURCE_NAME',
   /** A MarketSnapshot `sourceUrl` that isn't an HTTP(S) URL its source link can hold. */
   A2UI_INVALID_MARKET_SOURCE_URL = 'A2UI_INVALID_MARKET_SOURCE_URL',
+  /** A Scorecard was left out because a team's name or score is empty or missing. */
+  A2UI_INVALID_SCORECARD = 'A2UI_INVALID_SCORECARD',
   A2UI_INVALID_TABLE_CELL = 'A2UI_INVALID_TABLE_CELL',
   A2UI_INVALID_TABLE_HEADER = 'A2UI_INVALID_TABLE_HEADER',
   A2UI_INVALID_TABLE_ROW = 'A2UI_INVALID_TABLE_ROW',
@@ -83,6 +98,13 @@ export enum DiagnosticCode {
   SLACK_HEADER_TEXT_LIMIT_EXCEEDED = 'SLACK_HEADER_TEXT_LIMIT_EXCEEDED',
   SLACK_HEADER_TEXT_TRUNCATED = 'SLACK_HEADER_TEXT_TRUNCATED',
   SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED = 'SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED',
+  /** A Chart's or Scorecard's accessibility label was cut to Slack's alt text limit. */
+  SLACK_IMAGE_ALT_TEXT_TRUNCATED = 'SLACK_IMAGE_ALT_TEXT_TRUNCATED',
+  /**
+   * Charts or Scorecards are drawn as images in the preview, which one note per render
+   * names. The app that sends the message to Slack renders each and uploads the image.
+   */
+  SLACK_IMAGE_RENDERED_AT_SEND = 'SLACK_IMAGE_RENDERED_AT_SEND',
   /** Slack image blocks ignore the A2UI Image `fit` and `variant` hints. */
   SLACK_IMAGE_STYLE_APPROXIMATED = 'SLACK_IMAGE_STYLE_APPROXIMATED',
   SLACK_IMAGE_TITLE_TEXT_LIMIT_EXCEEDED = 'SLACK_IMAGE_TITLE_TEXT_LIMIT_EXCEEDED',
@@ -131,6 +153,12 @@ export interface PreviewSnapshot {
   status: PreviewStatus;
   /** The Slack Block Kit blocks; empty unless `status` is `READY`. */
   blocks: KnownBlock[];
+  /**
+   * The blocks "Generated Block Kit" exports; empty unless `status` is `READY`. They are
+   * `blocks` with each drawn image as a placeholder for the file that the app that sends
+   * the message to Slack uploads, instead of a local image URL.
+   */
+  exportBlocks: KnownBlock[];
   /** Problems found in this render. */
   diagnostics: PreviewDiagnostic[];
 }
@@ -141,6 +169,7 @@ export function createEmptySnapshot(revision: number): PreviewSnapshot {
     revision,
     status: PreviewStatus.EMPTY,
     blocks: [],
+    exportBlocks: [],
     diagnostics: [],
   };
 }

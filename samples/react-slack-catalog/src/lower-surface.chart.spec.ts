@@ -1,0 +1,429 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {type A2uiMessage} from '@a2ui/web_core/v0_9';
+import {describe, expect, it} from 'vitest';
+import {CHART_MAX_POINTS} from './catalog';
+import {ChartType, PIE_CHART_MAX_SLICES} from './chart-image';
+import {stubBlobUrls, surfaceMessages} from './drawn-images.helpers';
+import {createSlackPreviewSession} from './preview-session';
+import {DiagnosticCode, DiagnosticLevel, PreviewStatus} from './preview-snapshot';
+import {SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} from './slack-limits';
+
+const {createSurface, updateComponents, updateData} = surfaceMessages('charts');
+
+const chartMessage = (chart: Record<string, unknown>): A2uiMessage =>
+  updateComponents([
+    {id: 'root', component: 'Column', children: ['title', 'possession']},
+    {id: 'title', component: 'Text', variant: 'h1', text: 'Match stats'},
+    {id: 'possession', component: 'Chart', ...chart},
+  ]);
+
+const PIE = {
+  type: 'pie',
+  title: 'Possession',
+  data: [
+    {label: 'Argentina', value: 70},
+    {label: 'Mexico', value: 30},
+  ],
+};
+
+describe('Slack charts', () => {
+  const blobUrls = stubBlobUrls();
+
+  const PIE_ALT = 'Pie chart, Possession: Argentina 70, Mexico 30';
+
+  const NEGATIVE_SLICE = {
+    ...PIE,
+    data: [
+      {label: 'Argentina', value: 70},
+      {label: 'Mexico', value: -30},
+    ],
+  };
+
+  it('draws a chart as an image next to native blocks', async () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, chartMessage(PIE)]);
+    const snapshot = session.getSnapshot();
+
+    expect(snapshot.status).toBe(PreviewStatus.READY);
+    expect(snapshot.blocks).toEqual([
+      expect.objectContaining({type: 'header'}),
+      {type: 'image', image_url: 'blob:image-1', alt_text: PIE_ALT},
+    ]);
+    expect((await blobUrls.drawnSvgs())[0]).toContain('Argentina · 70 (70%)');
+  });
+
+  it('exports a drawn chart as an uploaded file', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, chartMessage(PIE)]);
+    const snapshot = session.getSnapshot();
+
+    expect(snapshot.exportBlocks).toEqual([
+      snapshot.blocks[0],
+      {type: 'image', slack_file: {id: 'RENDERED_AT_SEND'}, alt_text: PIE_ALT},
+    ]);
+  });
+
+  it('keeps the URL of an Image next to a drawn chart in the export', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      updateComponents([
+        {id: 'root', component: 'Column', children: ['logo', 'possession']},
+        {
+          id: 'logo',
+          component: 'Image',
+          url: 'https://example.com/logo.png',
+          description: 'Team logo',
+        },
+        {id: 'possession', component: 'Chart', ...PIE},
+      ]),
+    ]);
+
+    expect(session.getSnapshot().exportBlocks).toEqual([
+      {type: 'image', image_url: 'https://example.com/logo.png', alt_text: 'Team logo'},
+      {type: 'image', slack_file: {id: 'RENDERED_AT_SEND'}, alt_text: PIE_ALT},
+    ]);
+  });
+
+  const QUARTERS = [
+    {label: 'Q1', value: 12},
+    {label: 'Q2', value: 18},
+  ];
+  const THREE_CHARTS = [
+    {id: 'root', component: 'Column', children: ['bars', 'line', 'donut']},
+    {id: 'bars', component: 'Chart', type: 'verticalBar', data: QUARTERS},
+    {id: 'line', component: 'Chart', type: 'line', data: QUARTERS},
+    {id: 'donut', component: 'Chart', type: 'donut', data: QUARTERS},
+  ];
+
+  it('draws every chart in a message, in message order', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, updateComponents(THREE_CHARTS)]);
+
+    expect(session.getSnapshot().blocks).toEqual([
+      {type: 'image', image_url: 'blob:image-1', alt_text: 'Bar chart: Q1 12, Q2 18'},
+      {type: 'image', image_url: 'blob:image-2', alt_text: 'Line chart: Q1 12, Q2 18'},
+      {type: 'image', image_url: 'blob:image-3', alt_text: 'Donut chart: Q1 12, Q2 18'},
+    ]);
+  });
+
+  it('names every drawn chart in one note that they must be uploaded to Slack', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, updateComponents(THREE_CHARTS)]);
+
+    expect(
+      session
+        .getSnapshot()
+        .diagnostics.filter(({code}) => code === DiagnosticCode.SLACK_IMAGE_RENDERED_AT_SEND)
+        .map(({message}) => message),
+    ).toEqual([
+      expect.stringMatching(/^Chart "bars", Chart "line", and Chart "donut" are drawn as images/),
+    ]);
+  });
+
+  it('says the chart is drawn in the preview and must be uploaded to Slack', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, chartMessage(PIE)]);
+
+    expect(session.getSnapshot().diagnostics).toContainEqual({
+      level: DiagnosticLevel.INFO,
+      code: DiagnosticCode.SLACK_IMAGE_RENDERED_AT_SEND,
+      message:
+        'Chart "possession" is drawn as an image in this preview. The app that sends the message to Slack must render it to a PNG and upload it. The Generated Block Kit export marks it with the placeholder file ID RENDERED_AT_SEND, which that app replaces with the ID of the uploaded file.',
+    });
+  });
+
+  it('reports a chart in document order, before the components after it', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      updateComponents([
+        {id: 'root', component: 'Column', children: ['possession', 'note']},
+        {id: 'possession', component: 'Chart', ...NEGATIVE_SLICE},
+        {id: 'note', component: 'Card', child: 'note-text'},
+        {id: 'note-text', component: 'Text', text: 'Illustrative numbers'},
+      ]),
+    ]);
+
+    expect(session.getSnapshot().diagnostics.map(({componentId}) => componentId)).toEqual([
+      'possession',
+      'note',
+    ]);
+  });
+
+  it('uses the accessibility label as alt text when the chart has one', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      chartMessage({...PIE, accessibility: {label: 'Argentina had most of the ball'}}),
+    ]);
+
+    expect(session.getSnapshot().blocks[1]).toMatchObject({
+      alt_text: 'Argentina had most of the ball',
+    });
+  });
+
+  it("warns when it cuts the accessibility label to Slack's alt text limit", () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      chartMessage({
+        ...PIE,
+        accessibility: {label: 'x'.repeat(SLACK_IMAGE_ALT_TEXT_MAX_LENGTH + 1)},
+      }),
+    ]);
+
+    expect(session.getSnapshot().diagnostics).toContainEqual(
+      expect.objectContaining({
+        level: DiagnosticLevel.WARNING,
+        code: DiagnosticCode.SLACK_IMAGE_ALT_TEXT_TRUNCATED,
+        componentId: 'possession',
+      }),
+    );
+  });
+
+  it('redraws a chart whose values are bound to the data model', async () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      updateData({argentina: 70, mexico: 30}),
+      chartMessage({
+        ...PIE,
+        data: [
+          {label: 'Argentina', value: {path: '/argentina'}},
+          {label: 'Mexico', value: {path: '/mexico'}},
+        ],
+      }),
+    ]);
+    session.processMessages([updateData(60, '/argentina')]);
+
+    expect((await blobUrls.drawnSvgs()).at(-1)).toContain('Argentina · 60 (67%)');
+    expect(session.getSnapshot().blocks[1]).toMatchObject({
+      alt_text: 'Pie chart, Possession: Argentina 60, Mexico 30',
+    });
+  });
+
+  it('leaves out a pie chart with a negative slice and renders the rest', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, chartMessage(NEGATIVE_SLICE)]);
+    const snapshot = session.getSnapshot();
+
+    expect(snapshot.status).toBe(PreviewStatus.READY);
+    expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
+    expect(blobUrls.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('says why it left out a pie chart with a negative slice', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, chartMessage(NEGATIVE_SLICE)]);
+
+    expect(session.getSnapshot().diagnostics).toContainEqual({
+      level: DiagnosticLevel.WARNING,
+      code: DiagnosticCode.A2UI_INVALID_CHART_DATA,
+      componentId: 'possession',
+      message:
+        'Chart "possession" has a negative value for "Mexico". Pie and donut slices must be zero or more.',
+    });
+  });
+
+  /** The possession pie, with Argentina's value bound to `/argentina`. */
+  const BOUND_PIE = {
+    ...PIE,
+    data: [
+      {label: 'Argentina', value: {path: '/argentina'}},
+      {label: 'Mexico', value: 30},
+    ],
+  };
+  const NOT_A_NUMBER_WARNING = {
+    level: DiagnosticLevel.WARNING,
+    code: DiagnosticCode.A2UI_INVALID_CHART_DATA,
+    componentId: 'possession',
+    message: `Chart "possession" has a value for "Argentina" that isn't a number. Use a number such as 70.`,
+  };
+
+  it('skips a chart whose bound value is missing', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, chartMessage(BOUND_PIE)]);
+    const snapshot = session.getSnapshot();
+
+    expect(snapshot.diagnostics).toContainEqual(NOT_A_NUMBER_WARNING);
+    expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
+    expect(blobUrls.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("skips a chart whose bound value is text that isn't a number", () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      updateData({argentina: 'seventy'}),
+      chartMessage(BOUND_PIE),
+    ]);
+    const snapshot = session.getSnapshot();
+
+    expect(snapshot.diagnostics).toContainEqual(NOT_A_NUMBER_WARNING);
+    expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
+    expect(blobUrls.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('draws a bound value that is a number written as text', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      updateData({argentina: '70'}),
+      chartMessage(BOUND_PIE),
+    ]);
+
+    expect(session.getSnapshot().blocks[1]).toEqual({
+      type: 'image',
+      image_url: 'blob:image-1',
+      alt_text: PIE_ALT,
+    });
+  });
+
+  it('skips a pie chart that has only zero values', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      chartMessage({
+        type: 'pie',
+        data: [
+          {label: 'Argentina', value: 0},
+          {label: 'Mexico', value: 0},
+        ],
+      }),
+    ]);
+    const snapshot = session.getSnapshot();
+
+    expect(snapshot.diagnostics).toContainEqual({
+      level: DiagnosticLevel.WARNING,
+      code: DiagnosticCode.A2UI_EMPTY_CHART,
+      componentId: 'possession',
+      message: `Chart "possession" has only zero values, so it has no slices to draw. Give at least one value above zero.`,
+    });
+    expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
+    expect(blobUrls.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('draws a bar chart that has only zero values', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      chartMessage({
+        type: 'verticalBar',
+        data: [
+          {label: 'Q1', value: 0},
+          {label: 'Q2', value: 0},
+        ],
+      }),
+    ]);
+
+    expect(session.getSnapshot().blocks).toEqual([
+      expect.objectContaining({type: 'header'}),
+      {type: 'image', image_url: 'blob:image-1', alt_text: 'Bar chart: Q1 0, Q2 0'},
+    ]);
+  });
+
+  it.each([ChartType.PIE, ChartType.DONUT])(
+    'skips a %s chart with more slices than it has colors',
+    type => {
+      const session = createSlackPreviewSession();
+
+      session.processMessages([
+        createSurface,
+        chartMessage({
+          type,
+          data: Array.from({length: PIE_CHART_MAX_SLICES + 1}, (_, index) => ({
+            label: `Slice ${index + 1}`,
+            value: 1,
+          })),
+        }),
+      ]);
+      const snapshot = session.getSnapshot();
+
+      expect(snapshot.diagnostics).toContainEqual({
+        level: DiagnosticLevel.WARNING,
+        code: DiagnosticCode.A2UI_INVALID_CHART_DATA,
+        componentId: 'possession',
+        message: `Chart "possession" has ${PIE_CHART_MAX_SLICES + 1} slices, but a pie or donut chart has colors for at most ${PIE_CHART_MAX_SLICES}. Combine the smallest slices, or use a bar chart.`,
+      });
+      expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
+      expect(blobUrls.createObjectURL).not.toHaveBeenCalled();
+    },
+  );
+
+  it(`rejects more than ${CHART_MAX_POINTS} points through the catalog schema`, () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      chartMessage({
+        data: Array.from({length: CHART_MAX_POINTS + 1}, (_, index) => ({
+          label: `P${index}`,
+          value: index,
+        })),
+      }),
+    ]);
+
+    expect(session.getSnapshot()).toMatchObject({
+      status: PreviewStatus.ERROR,
+      diagnostics: [expect.objectContaining({code: DiagnosticCode.A2UI_PROCESS_MESSAGE_ERROR})],
+    });
+  });
+
+  it('revokes the URL of a chart image after two renders in a row leave it out', () => {
+    const session = createSlackPreviewSession();
+    session.processMessages([createSurface, chartMessage(PIE)]);
+
+    session.processMessages([
+      updateComponents([{id: 'root', component: 'Text', text: 'No chart now'}]),
+    ]);
+    // The render before still showed the chart, which React may not have replaced yet.
+    expect(blobUrls.revokeObjectURL).not.toHaveBeenCalled();
+    session.processMessages([
+      updateComponents([{id: 'root', component: 'Text', text: 'Still no chart'}]),
+    ]);
+
+    expect(blobUrls.revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:image-1');
+  });
+
+  it('revokes the URL of every chart image it still shows when disposed', () => {
+    const session = createSlackPreviewSession();
+    session.processMessages([createSurface, chartMessage(PIE)]);
+
+    session.dispose();
+
+    expect(blobUrls.revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:image-1');
+  });
+});

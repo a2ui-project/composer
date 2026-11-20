@@ -126,6 +126,8 @@ Complete example message arrays are also served by the renderer:
 - `/examples/car-booking.json`
 - `/examples/data-bound-action.json`
 - `/examples/market-snapshot.json`
+- `/examples/match-report.json`, which mixes native blocks with a `Scorecard`
+  and a `Chart` drawn as images
 
 With the dev server running, fetch one of those files from
 `http://localhost:3460/examples/...`, paste the JSON into the workspace A2UI
@@ -150,12 +152,96 @@ demo wall (`/demos`) has no Slack demos yet.
 | `TextField`      | Slack input block with `plain_text_input`               | Writable data binding; `shortText` or `longText`.                                                                                                                                |
 | `DateTimeInput`  | Slack input block with `datepicker`                     | Writable data binding; date only, in `YYYY-MM-DD` format.                                                                                                                        |
 | `Table`          | Slack table block                                       | Aligned headers and body cells, including data bindings. Supports 1–20 columns and 1–99 body rows with matching cell counts.                                                     |
+| `Chart`          | Slack image block, drawn by the renderer                | Bar, line, pie, or donut chart from 1–20 labeled values (1–8 for pie and donut), literal or bound. Drawn as an image; see React components drawn as images.                      |
+| `Scorecard`      | Slack image block, drawn by the renderer                | One match result: two teams with names and scores, plus an optional status and competition, literal or bound. Drawn as an image, like `Chart`.                                   |
 | `MarketSnapshot` | Header, summary, table, context, and acknowledge button | Custom component: three market rows with HTTP(S) source links, `whyItMatters`, and `searchedAt`. Source URLs can't hold `*`; names can't hold `<`, `>`, `[`, `]` or line breaks. |
 
 Unsupported components, invalid props, catalog mismatches, expression failures,
 component cycles, and Slack output limit failures show diagnostics and clear the
 stale preview/export/actions until a valid update arrives. Missing child
 components put the preview in a waiting state and recover when the child arrives.
+
+## React components drawn as images
+
+Most of the catalog becomes native Slack blocks. `Chart` and `Scorecard` don't:
+the renderer draws each with a React component and sends it as an image, so one
+Slack message carries both kinds. The component is rendered once, to static SVG
+markup, with `renderToStaticMarkup` from `react-dom/server`, and that markup is
+the image. So a component drawn this way can't use state, effects, or event
+handlers, since none of them run, and must draw only SVG elements, not HTML.
+This section uses these terms:
+
+- **Channels**: CopilotKit's channel SDK. Its Slack renderer turns Channels UI
+  components into Block Kit.
+- **Channels UI** (`@copilotkit/channels-ui`): the components a Channels message
+  is built from, such as `Header`, `Table`, `Image`, and `Chart`. The sample
+  lowers A2UI components to them.
+- **`renderBlockKit`** (`@copilotkit/channels-slack`): the Slack renderer's
+  function that turns Channels UI components into Slack blocks.
+- **The app that sends the message**: whatever sends the message to Slack,
+  built with Channels or not. The preview stands in for it in the browser.
+
+For each drawn component:
+
+- The preview draws it as SVG in the browser and shows it as a Slack image
+  block, between the native blocks around it.
+- The image's alt text is the component's `accessibility.label`, or else the
+  drawing described in words, cut to Slack's 2,000-character alt text limit. A
+  label that is cut adds a `SLACK_IMAGE_ALT_TEXT_TRUNCATED` warning.
+- `Generated Block Kit` exports that block in Slack's uploaded-file form,
+  `{"type": "image", "slack_file": {"id": "RENDERED_AT_SEND"}, ...}`. The app
+  that sends the message renders the component to a PNG, uploads it, and puts
+  the uploaded file's ID in place of `RENDERED_AT_SEND`.
+
+One info diagnostic per render, `SLACK_IMAGE_RENDERED_AT_SEND`, names every
+drawn component and says that the app that sends the message must upload its
+image.
+
+The `Copy JSON` and `Open in Block Kit Builder` buttons of the Tightknit
+renderer, which draws the preview (see Actions), use the preview blocks, so a
+drawn image there carries a local `blob:` URL that only loads inside the
+preview. Copy from `Generated Block Kit` instead.
+
+The Tightknit renderer draws with `slack-blocks-to-jsx`, which the root
+`package.json` pins through `resolutions` to 1.1.2, the version this sample
+uses itself. Version 1.4.1, which the renderer's own version range resolves to,
+accepts only some URL schemes in an image's `src`, and not `blob:`, so the drawn
+images would show no picture. Its `<Message>` takes a `urlTransform` prop that
+can allow more schemes, but the Tightknit renderer's `Renderer` doesn't pass one
+through ([TightknitAI/storybook-addon-slack-block-kit#94](https://github.com/TightknitAI/storybook-addon-slack-block-kit/issues/94)),
+so the pin can go once it does.
+
+### Chart
+
+Slack's native chart block, `data_visualization` (`Slack.Block.DataVisualization`
+in `@copilotkit/channels-slack`), draws only pie, bar, area, and line charts. It
+limits titles to 50 characters, labels to 20, and a message to 2 charts, and its
+pie values must be above 0. `renderBlockKit` also skips the chart nodes that
+Channels UI's `Chart` produces. So this sample draws every `Chart` as an image
+on purpose, which also covers the donut and horizontal bar charts the native
+block lacks. Like `Scorecard`, the chart is drawn while its A2UI component is
+lowered, so its diagnostics appear in document order with the others.
+
+The catalog schema allows 1 to 20 values, a limit of this catalog rather than of
+Slack. Every value must be a number. A pie or donut chart can have at most 8
+values, one for each of its colors, so no two slices look alike, and its values
+must be zero or more, with at least one above zero. Otherwise the chart is
+skipped with an `A2UI_INVALID_CHART_DATA` or `A2UI_EMPTY_CHART` warning, and the
+rest of the message still renders. A bar or line chart whose values are all zero
+is drawn, with its axes and labels.
+
+### Scorecard
+
+`Scorecard` shows one match result: a `home` and an `away` team, each with a
+`name` and a `score`, plus an optional `status`, such as `Full time`, and an
+optional `competition`. A score can be a number or text such as `3 (4)`, and
+every field accepts data bindings. Slack has no block for a scorecard, and
+Channels UI has no scorecard component either, so the sample draws it. It
+shows that a component Channels UI doesn't have can be sent this way too, as
+long as its React component renders to static SVG as described above.
+
+If a team's name or score is empty or missing, the scorecard is skipped with an
+`A2UI_INVALID_SCORECARD` warning, and the rest of the message still renders.
 
 ## Actions
 
@@ -188,9 +274,10 @@ When the preview is ready, the `Generated Block Kit` section contains:
 }
 ```
 
-with the current Slack blocks in place of the empty array. `Copy Block Kit`
-copies the same JSON. If iframe clipboard access is unavailable, the JSON
-remains selectable in the expanded section.
+with the current Slack blocks in place of the empty array. Each image drawn for
+a `Chart` or `Scorecard` is in Slack's uploaded-file form; see React components
+drawn as images. `Copy Block Kit` copies the same JSON. If iframe clipboard
+access is unavailable, the JSON remains selectable in the expanded section.
 
 ## Static hosting
 

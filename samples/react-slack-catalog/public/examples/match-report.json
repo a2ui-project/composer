@@ -1,0 +1,66 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "match-report",
+      "catalogId": "https://a2ui-project.github.io/composer/catalogs/slack/v1"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "match-report",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "final-score", "scorers", "possession", "share"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "variant": "h1",
+          "text": "Match report"
+        },
+        {
+          "id": "final-score",
+          "component": "Scorecard",
+          "home": {"name": "Argentina", "score": 2},
+          "away": {"name": "Mexico", "score": 0},
+          "status": "Full time",
+          "competition": "World Cup, Group C"
+        },
+        {
+          "id": "scorers",
+          "component": "Table",
+          "columns": [{"header": "Scorer"}, {"header": "Minute", "align": "right"}],
+          "rows": [
+            ["Lionel Messi", "64'"],
+            ["Enzo Fernández", "87'"]
+          ]
+        },
+        {
+          "id": "possession",
+          "component": "Chart",
+          "type": "pie",
+          "title": "Possession",
+          "data": [
+            {"label": "Argentina", "value": 70},
+            {"label": "Mexico", "value": 30}
+          ]
+        },
+        {
+          "id": "share",
+          "component": "Button",
+          "child": "share-label",
+          "action": {"event": {"name": "share_result"}}
+        },
+        {
+          "id": "share-label",
+          "component": "Text",
+          "text": "Share result"
+        }
+      ]
+    }
+  }
+]
