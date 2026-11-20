@@ -41,42 +41,50 @@
       <div class="welcome-card">
         <div class="welcome-header">
           <div class="welcome-avatar">
-            <mat-icon class="avatar-icon">smart_toy</mat-icon>
+            <mat-icon class="avatar-icon" aria-hidden="true">{{
+              isAgentConnected() ? 'smart_toy' : 'link_off'
+            }}</mat-icon>
           </div>
           <div class="welcome-meta">
-            <h3 class="welcome-title">{{ getAgentDisplayName() }}</h3>
+            <h3 class="welcome-title">
+              {{ isAgentConnected() ? getAgentDisplayName() : 'No A2A agent connected' }}
+            </h3>
             <p class="welcome-desc">
               {{
-                agentInfo()?.description ||
-                  'An agent that responds with text and/or A2UI components.'
+                isAgentConnected()
+                  ? agentInfo()?.description ||
+                    'An agent that responds with text and/or A2UI components.'
+                  : 'Configure an A2A agent endpoint to start testing conversational A2UI surfaces.'
               }}
             </p>
           </div>
         </div>
 
-        <div class="capability-chips">
-          <span class="cap-chip streaming-chip">
-            <mat-icon class="chip-icon">bolt</mat-icon>
-            <span>Streaming</span>
-          </span>
-          <span class="cap-chip extension-chip">
-            <mat-icon class="chip-icon">shield</mat-icon>
-            <span>A2UI Protocol Extension</span>
-          </span>
-          @if (agentInfo()?.skills && agentInfo()!.skills!.length > 0) {
-            @for (skill of agentInfo()!.skills; track skill.id || skill.name) {
-              <span class="cap-chip extension-chip">
-                <mat-icon class="chip-icon">shield</mat-icon>
-                <span>{{ skill.name }}</span>
-              </span>
+        @if (isAgentConnected()) {
+          <div class="capability-chips">
+            <span class="cap-chip streaming-chip">
+              <mat-icon class="chip-icon">bolt</mat-icon>
+              <span>Streaming</span>
+            </span>
+            <span class="cap-chip extension-chip">
+              <mat-icon class="chip-icon">shield</mat-icon>
+              <span>A2UI Protocol Extension</span>
+            </span>
+            @if (agentInfo()?.skills && agentInfo()!.skills!.length > 0) {
+              @for (skill of agentInfo()!.skills; track skill.id || skill.name) {
+                <span class="cap-chip extension-chip">
+                  <mat-icon class="chip-icon">shield</mat-icon>
+                  <span>{{ skill.name }}</span>
+                </span>
+              }
             }
-          }
-        </div>
+          </div>
 
-        <div class="ready-banner">
-          <mat-icon class="banner-icon">chat_bubble</mat-icon>
-          <span class="banner-text">Agent is connected and ready. Send a prompt to begin.</span>
-        </div>
+          <div class="ready-banner">
+            <mat-icon class="banner-icon">chat_bubble</mat-icon>
+            <span class="banner-text">Agent is connected and ready. Send a prompt to begin.</span>
+          </div>
+        }
       </div>
     </div>
   } @else {

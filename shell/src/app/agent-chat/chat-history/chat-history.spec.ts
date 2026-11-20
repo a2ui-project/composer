@@ -88,6 +88,26 @@ describe('A2aChatHistory', () => {
     expect(await harness.getCapabilityCount()).toBeGreaterThanOrEqual(2); // Streaming + A2UI + skills
   });
 
+  it('renders welcome showcase when only agentCard is provided', async () => {
+    fixture.componentRef.setInput('isConnecting', false);
+    fixture.componentRef.setInput('agentCard', {
+      name: 'Card-Only Agent',
+    });
+    fixture.detectChanges();
+
+    expect(await harness.hasWelcomeShowcase()).toBe(true);
+    expect(await harness.getShowcaseTitleText()).toBe('Card-Only Agent');
+    expect(await harness.getCapabilityCount()).toBe(2);
+  });
+
+  it('renders disconnected state when no agent is connected', async () => {
+    fixture.componentRef.setInput('isConnecting', false);
+    fixture.detectChanges();
+
+    expect(await harness.getShowcaseTitleText()).toBe('No A2A agent connected');
+    expect(await harness.getCapabilityCount()).toBe(0);
+  });
+
   it('renders messages list when messages are provided', async () => {
     fixture.componentRef.setInput('messages', [
       {

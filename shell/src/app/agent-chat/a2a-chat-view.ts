@@ -303,6 +303,9 @@ export class A2aChatView implements OnInit {
       }
 
       const card = await this.a2aTransport.getAgentCard(normalizedUrl);
+      if (this.destroyRef.destroyed) {
+        return;
+      }
 
       this.configProvider.setA2aAgentUrl(normalizedUrl);
       this.agentCard.set(card);
@@ -311,6 +314,9 @@ export class A2aChatView implements OnInit {
       this.showsInlineConfig.set(false);
       this.closeConfigDialog();
     } catch (err: unknown) {
+      if (this.destroyRef.destroyed) {
+        return;
+      }
       const errorMsg = err instanceof Error ? err.message : 'Failed to connect to agent endpoint.';
       this.connectionError.set(errorMsg);
       this.recordInspectorEvent(createErrorEvent(err));
@@ -318,7 +324,7 @@ export class A2aChatView implements OnInit {
     } finally {
       this.isConnecting.set(false);
       if (this.configDialogRef) {
-        this.configDialogRef.disableClose = !this.agentCard();
+        this.configDialogRef.disableClose = false;
       }
     }
   }
@@ -332,10 +338,8 @@ export class A2aChatView implements OnInit {
     this.configProvider.setA2aAgentUrl('');
     this.configProvider.setA2aTenantId('');
     this.agentCard.set(null);
-    if (this.configDialogRef) {
-      this.configDialogRef.disableClose = true;
-    }
     this.agentInfo.set(null);
+    this.connectionError.set(null);
     this.messages.set([]);
     this.inspectorEvents.set([]);
     this.inspectorSearchQuery.set('');
@@ -900,13 +904,13 @@ export class A2aChatView implements OnInit {
   }
 
   protected openConfigPanel(): void {
-    if (this.configDialogRef || this.showsInlineConfig()) return;
+    if (this.destroyRef.destroyed || this.configDialogRef || this.showsInlineConfig()) return;
 
     const ref = this.dialog.open(this.configPanelTemplate(), {
       ariaLabel: 'A2A Agent Configuration',
       maxWidth: '480px',
       width: '100%',
-      disableClose: !this.agentCard() || this.isConnecting(),
+      disableClose: this.isConnecting(),
     });
     this.configDialogRef = ref;
     ref

@@ -76,6 +76,11 @@ export class A2aInputAreaHarness extends ComponentHarness {
     return btn ? btn.isDisabled() : true;
   }
 
+  async isDisabled(): Promise<boolean> {
+    const el = await this.getTextarea();
+    return el.getProperty<boolean>('disabled');
+  }
+
   async getAttachmentChipCount(): Promise<number> {
     const chips = await this.getAttachmentChips();
     return chips.length;

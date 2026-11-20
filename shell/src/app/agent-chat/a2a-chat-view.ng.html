@@ -56,7 +56,7 @@
         <div class="input-wrapper">
           <a2ui-composer-input-area
             [isStreaming]="isStreaming()"
-            [disabled]="isConnecting()"
+            [disabled]="isConnecting() || !agentCard()"
             (sendMessage)="sendUserMessage($event)"
             (stopGeneration)="cancelActiveGeneration()"
           ></a2ui-composer-input-area>
@@ -136,7 +136,7 @@
       [initialBackendMode]="configProvider.a2aBackendMode()"
       [isConnecting]="isConnecting()"
       [connectionError]="connectionError()"
-      [canCancel]="!!agentCard()"
+      [canCancel]="!showsInlineConfig()"
       (saveAndConnect)="saveAgentConfiguration($event)"
       (clearConfig)="clearAgentConfiguration()"
       (dismissPanel)="closeConfigDialog()"

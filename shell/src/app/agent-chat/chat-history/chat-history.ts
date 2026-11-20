@@ -18,6 +18,7 @@ import {
   AfterViewChecked,
   Component,
   ElementRef,
+  computed,
   effect,
   input,
   output,
@@ -76,6 +77,11 @@ export class A2aChatHistory implements AfterViewChecked {
   readonly closeCanvas = output<void>();
   /** Emitted with the message ID when the user clicks to open the protocol inspector drawer. */
   readonly openInspector = output<string>();
+
+  /** Whether an agent is currently connected and ready for conversation. */
+  protected readonly isAgentConnected = computed(() =>
+    Boolean(this.agentInfo() || this.agentCard()),
+  );
 
   protected readonly scrollContainerRef = viewChild<ElementRef<HTMLDivElement>>('scrollContainer');
 

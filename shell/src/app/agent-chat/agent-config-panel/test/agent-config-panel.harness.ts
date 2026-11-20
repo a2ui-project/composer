@@ -56,6 +56,11 @@ export class AgentConfigPanelHarness extends ComponentHarness {
     return btn.click();
   }
 
+  async hasCancelButton(): Promise<boolean> {
+    const btn = await this.getCancelButton();
+    return btn !== null;
+  }
+
   async clickCancel(): Promise<void> {
     const btn = await this.getCancelButton();
     if (btn) {

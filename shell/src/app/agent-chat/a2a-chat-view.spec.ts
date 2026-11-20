@@ -17,6 +17,7 @@
 import {signal, WritableSignal} from '@angular/core';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
+import {MatDialog} from '@angular/material/dialog';
 import {Subject} from 'rxjs';
 import {PreviewBridgeMessageType, RenderA2uiItem, ThemePreference} from 'a2ui-bridge';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
@@ -151,44 +152,176 @@ describe('A2aChatView', () => {
   it('opens config panel as non-dialog when no stored URL is configured', async () => {
     mockAgentUrlSignal.set('');
     const newFixture = TestBed.createComponent(A2aChatView);
-    newFixture.detectChanges();
-    const newHarness = await TestbedHarnessEnvironment.harnessForFixture(
-      newFixture,
-      A2aChatViewHarness,
-    );
+    try {
+      newFixture.detectChanges();
+      const newHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        newFixture,
+        A2aChatViewHarness,
+      );
 
-    expect(await newHarness.isConfigPanelOpen()).toBe(true);
-    expect(await newHarness.isConfigDialogOpen()).toBe(false);
-    newFixture.destroy();
+      expect(await newHarness.isConfigPanelOpen()).toBe(true);
+      expect(await newHarness.isConfigDialogOpen()).toBe(false);
+      const panel = await newHarness.getConfigPanel();
+      expect(panel).not.toBeNull();
+      expect(await panel!.hasCancelButton()).toBe(false);
+    } finally {
+      newFixture.destroy();
+    }
   });
 
-  it('opens config panel as a MatDialog when stored URL is configured and prevents dismissal after clearing address', async () => {
+  it('allows dismissing config dialog after clearing address and shows disconnected state', async () => {
     const header = await harness.getHeader();
     await header.clickSettings();
 
     const dialog = await harness.getConfigDialog();
-    expect(dialog).not.toBeNull();
-
     const panel = await harness.getConfigPanel();
-    await panel?.clickClear();
-    await dialog?.close();
+    expect(dialog).not.toBeNull();
+    expect(panel).not.toBeNull();
+
+    await panel!.clickClear();
+    expect(await panel!.hasCancelButton()).toBe(true);
+
+    await dialog!.close();
+
+    expect(await harness.isConfigDialogOpen()).toBe(false);
+    const history = await harness.getHistory();
+    expect(await history.getShowcaseTitleText()).toBe('No A2A agent connected');
+    expect(await history.getCapabilityCount()).toBe(0);
+
+    const inputArea = await harness.getInputArea();
+    expect(await inputArea.isDisabled()).toBe(true);
+  });
+
+  it('reopens config dialog from header after dismissing without a connected agent', async () => {
+    const header = await harness.getHeader();
+    await header.clickSettings();
+
+    const dialog = await harness.getConfigDialog();
+    const panel = await harness.getConfigPanel();
+    expect(dialog).not.toBeNull();
+    expect(panel).not.toBeNull();
+    await panel!.clickClear();
+    await dialog!.close();
+    expect(await harness.isConfigDialogOpen()).toBe(false);
+
+    await header.clickSettings();
 
     expect(await harness.isConfigDialogOpen()).toBe(true);
   });
 
-  it('opens config dialog when initial auto-connect fails', async () => {
+  it('dismisses failed initial auto-connect dialog via Escape and shows disconnected state', async () => {
     mockA2aTransport.getAgentCard = vi.fn().mockRejectedValue(new Error('Agent unreachable'));
     const failedFixture = TestBed.createComponent(A2aChatView);
-    failedFixture.detectChanges();
-    const failedHarness = await TestbedHarnessEnvironment.harnessForFixture(
-      failedFixture,
-      A2aChatViewHarness,
+    try {
+      failedFixture.detectChanges();
+      const failedHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        failedFixture,
+        A2aChatViewHarness,
+      );
+
+      expect(await failedHarness.isConfigDialogOpen()).toBe(true);
+      const panel = await failedHarness.getConfigPanel();
+      const dialog = await failedHarness.getConfigDialog();
+      expect(panel).not.toBeNull();
+      expect(dialog).not.toBeNull();
+      expect(await panel!.getErrorMessage()).toContain('Agent unreachable');
+      expect(await panel!.hasCancelButton()).toBe(true);
+
+      await dialog!.close();
+
+      expect(await failedHarness.isConfigDialogOpen()).toBe(false);
+      const history = await failedHarness.getHistory();
+      expect(await history.getShowcaseTitleText()).toBe('No A2A agent connected');
+      expect(await history.getCapabilityCount()).toBe(0);
+      const inputArea = await failedHarness.getInputArea();
+      expect(await inputArea.isDisabled()).toBe(true);
+    } finally {
+      failedFixture.destroy();
+    }
+  });
+
+  it('dismisses failed initial auto-connect dialog via Cancel button', async () => {
+    mockA2aTransport.getAgentCard = vi.fn().mockRejectedValue(new Error('Agent unreachable'));
+    const failedFixture = TestBed.createComponent(A2aChatView);
+    try {
+      failedFixture.detectChanges();
+      const failedHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        failedFixture,
+        A2aChatViewHarness,
+      );
+
+      const panel = await failedHarness.getConfigPanel();
+      expect(panel).not.toBeNull();
+
+      await panel!.clickCancel();
+
+      expect(await failedHarness.isConfigDialogOpen()).toBe(false);
+      const history = await failedHarness.getHistory();
+      expect(await history.getShowcaseTitleText()).toBe('No A2A agent connected');
+      const inputArea = await failedHarness.getInputArea();
+      expect(await inputArea.isDisabled()).toBe(true);
+    } finally {
+      failedFixture.destroy();
+    }
+  });
+
+  it('clears connection error banner when clearing address in config dialog', async () => {
+    mockA2aTransport.getAgentCard = vi.fn().mockRejectedValue(new Error('Agent unreachable'));
+    const failedFixture = TestBed.createComponent(A2aChatView);
+    try {
+      failedFixture.detectChanges();
+      const failedHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        failedFixture,
+        A2aChatViewHarness,
+      );
+
+      const panel = await failedHarness.getConfigPanel();
+      expect(panel).not.toBeNull();
+      expect(await panel!.getErrorMessage()).toContain('Agent unreachable');
+
+      await panel!.clickClear();
+
+      expect(await panel!.getErrorMessage()).toBeNull();
+    } finally {
+      failedFixture.destroy();
+    }
+  });
+
+  it('does not open config dialog if connection fails after destroy', async () => {
+    let rejectConnect!: (reason?: unknown) => void;
+    mockA2aTransport.getAgentCard = vi.fn().mockReturnValue(
+      new Promise((_, reject) => {
+        rejectConnect = reject;
+      }),
     );
 
-    expect(await failedHarness.isConfigDialogOpen()).toBe(true);
-    const panel = await failedHarness.getConfigPanel();
-    expect(await panel?.getErrorMessage()).toContain('Agent unreachable');
-    failedFixture.destroy();
+    const connectPromise = fixture.componentInstance.connectToAgent('http://localhost:9999');
+    expect(mockA2aTransport.getAgentCard).toHaveBeenCalledWith('http://localhost:9999');
+    fixture.destroy();
+
+    rejectConnect(new Error('Agent unreachable'));
+    await connectPromise;
+
+    expect(TestBed.inject(MatDialog).openDialogs).toHaveLength(0);
+  });
+
+  it('does not persist agent URL if connection resolves after destroy', async () => {
+    let resolveConnect!: (value: unknown) => void;
+    mockA2aTransport.getAgentCard = vi.fn().mockReturnValue(
+      new Promise(resolve => {
+        resolveConnect = resolve;
+      }),
+    );
+    vi.mocked(mockConfigProvider.setA2aAgentUrl!).mockClear();
+
+    const connectPromise = fixture.componentInstance.connectToAgent('http://localhost:9999');
+    expect(mockA2aTransport.getAgentCard).toHaveBeenCalledWith('http://localhost:9999');
+    fixture.destroy();
+
+    resolveConnect({name: 'Late Agent'});
+    await connectPromise;
+
+    expect(mockConfigProvider.setA2aAgentUrl).not.toHaveBeenCalled();
   });
 
   it('dismisses config dialog on close when agent is connected', async () => {
