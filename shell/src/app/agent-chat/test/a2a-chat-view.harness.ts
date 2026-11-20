@@ -15,6 +15,8 @@
  */
 
 import {ComponentHarness, HarnessPredicate} from '@angular/cdk/testing';
+import {UnitTestElement} from '@angular/cdk/testing/testbed';
+import {MatButtonHarness} from '@angular/material/button/testing';
 import {MatDialogHarness} from '@angular/material/dialog/testing';
 import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.harness';
 import {AgentConfigPanelHarness} from '../agent-config-panel/test/agent-config-panel.harness';
@@ -66,4 +68,46 @@ export class A2aChatViewHarness extends ComponentHarness {
   readonly getSideCanvasFrame = this.locatorForOptional(
     new HarnessPredicate(RenderedFrameHarness, {ancestor: '.side-canvas-viewport'}),
   );
+
+  private readonly getCloseSideCanvasButton = this.locatorForOptional(
+    MatButtonHarness.with({selector: 'button[aria-label="Close Canvas Preview"]'}),
+  );
+
+  async closeSideCanvas(): Promise<void> {
+    const btn = await this.getCloseSideCanvasButton();
+    if (!btn) {
+      throw new Error('Close Canvas Preview button is not rendered');
+    }
+    await btn.click();
+  }
+
+  private readonly attachedIframes: HTMLIFrameElement[] = [];
+
+  /**
+   * Cleans up all attached child iframes by removing them from the host DOM.
+   */
+  cleanupAttachedIframes(): void {
+    for (const iframe of this.attachedIframes) {
+      iframe.remove();
+    }
+    this.attachedIframes.length = 0;
+  }
+
+  /**
+   * Attaches an iframe to the host component DOM and returns the element and its contentWindow.
+   *
+   * @return The attached iframe element and its contentWindow reference.
+   */
+  async attachChildIframe(): Promise<{iframe: HTMLIFrameElement; contentWindow: Window}> {
+    const host = await this.host();
+    if (!(host instanceof UnitTestElement)) {
+      throw new Error(
+        'Host element must be an instance of UnitTestElement to attach child iframes',
+      );
+    }
+    const iframe = document.createElement('iframe');
+    host.element.appendChild(iframe);
+    this.attachedIframes.push(iframe);
+    return {iframe, contentWindow: iframe.contentWindow!};
+  }
 }

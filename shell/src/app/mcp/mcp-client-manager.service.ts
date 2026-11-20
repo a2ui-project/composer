@@ -17,18 +17,53 @@
 import {Injectable, inject, signal} from '@angular/core';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
-import {Catalog, catalogDeclaresFunction} from '../storage/models/catalog-storage.model';
+import {
+  Catalog,
+  CatalogJson,
+  catalogDeclaresFunction,
+} from '../storage/models/catalog-storage.model';
 import {LocalStorageKey} from '../storage/models/local-storage-keys';
 import {MCP_SERVER_CONNECTOR, McpServerConnection} from './mcp-server-connector';
 
-export interface McpToolInfo {
+export declare interface McpToolInfo {
   name: string;
   description?: string;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
 }
 
-export interface McpServerConfig {
+/**
+ * Checks whether a single catalog or any catalog in a list declares `callMcpTool`
+ * (either directly in `functions` or in `$defs`), indicating MCP tool support.
+ */
+export function catalogSupportsMcp(
+  catalog:
+    | Catalog
+    | CatalogJson
+    | null
+    | undefined
+    | readonly (Catalog | CatalogJson | null | undefined)[],
+): boolean {
+  if (!catalog) {
+    return false;
+  }
+  const list = Array.isArray(catalog)
+    ? (catalog as readonly (Catalog | CatalogJson | null | undefined)[])
+    : [catalog as Catalog | CatalogJson | null | undefined];
+  return list.some(c => {
+    if (!c) {
+      return false;
+    }
+    if (catalogDeclaresFunction(c, 'callMcpTool')) {
+      return true;
+    }
+    return Boolean(
+      c['$defs'] && ('callMcpTool' in c['$defs'] || 'catalog_callMcpTool' in c['$defs']),
+    );
+  });
+}
+
+export declare interface McpServerConfig {
   id: string;
   name?: string;
   url: string;
@@ -66,22 +101,18 @@ export class McpClientManagerService {
   }
 
   /**
-   * Checks whether the active catalog includes `callMcpTool` to determine if the renderer supports MCP mode.
+   * Checks whether the active catalog (or any catalog in a list) includes `callMcpTool`
+   * to determine if the renderer supports MCP mode.
    */
-  doesCatalogSupportMcp(catalog: Catalog | null | undefined): boolean {
-    if (!catalog) {
-      return false;
-    }
-    if (catalogDeclaresFunction(catalog, 'callMcpTool')) {
-      return true;
-    }
-    if (
-      catalog.$defs &&
-      ('callMcpTool' in catalog.$defs || 'catalog_callMcpTool' in catalog.$defs)
-    ) {
-      return true;
-    }
-    return false;
+  doesCatalogSupportMcp(
+    catalog:
+      | Catalog
+      | CatalogJson
+      | null
+      | undefined
+      | readonly (Catalog | CatalogJson | null | undefined)[],
+  ): boolean {
+    return catalogSupportsMcp(catalog);
   }
 
   private loadFromStorage(): void {

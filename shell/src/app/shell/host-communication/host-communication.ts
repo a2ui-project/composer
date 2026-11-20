@@ -44,6 +44,10 @@ export declare interface MessageEnvelope {
   type: string;
   /** Optional payload attached to the message transaction */
   payload?: unknown;
+  /** Optional render dispatch correlation ID echoed by PreviewBridge */
+  renderId?: string;
+  /** Capability flag announced on RENDERER_READY when PreviewBridge echoes renderId */
+  supportsRenderId?: boolean;
   /** Fully resolved origin URI string of the dispatching sender */
   origin: string;
   /** Epoch millisecond timestamp recording when the message was received */
@@ -221,7 +225,7 @@ export class HostCommunication implements OnDestroy {
    * inside the message would make the send throw.
    */
   private readonly outboundMessageBuffer: Array<{
-    message: {type: PreviewBridgeMessageType; payload?: unknown};
+    message: {type: PreviewBridgeMessageType; payload?: unknown; renderId?: string};
     target?: HTMLIFrameElement | Window | null;
   }> = [];
 
@@ -358,6 +362,8 @@ export class HostCommunication implements OnDestroy {
       const envelope: MessageEnvelope = {
         type,
         payload: data.payload,
+        ...(typeof data.renderId === 'string' && data.renderId ? {renderId: data.renderId} : {}),
+        ...(data.supportsRenderId === true ? {supportsRenderId: true} : {}),
         origin: event.origin,
         timestamp: Date.now(),
         sourceWindow: (event.source as Window) ?? null,
@@ -805,14 +811,15 @@ export class HostCommunication implements OnDestroy {
    * Validates and dispatches a structured postMessage payload to the registered guest frame.
    * @param message Structured message payload
    * @param target Optional explicit target iframe element or window reference
+   * @returns `true` if posted or queued in the outbound buffer; `false` if rejected or undeliverable
    */
   sendMessage(
-    message: {type: PreviewBridgeMessageType; payload?: unknown},
+    message: {type: PreviewBridgeMessageType; payload?: unknown; renderId?: string},
     target?: HTMLIFrameElement | Window | null,
-  ): void {
+  ): boolean {
     if (!CrossFrameValidator.validateOutgoingMessage(message, undefined, this.logger)) {
       this.logger.error('Blocked dispatch of malformed message type...', message);
-      return;
+      return false;
     }
 
     // Callers can run inside effects (GuestFrame's payload effect, this
@@ -823,14 +830,14 @@ export class HostCommunication implements OnDestroy {
     if (!untracked(() => this.isTargetReady(target))) {
       this.logger.info('Queueing outbound message; renderer is not yet ready.', message);
       this.outboundMessageBuffer.push({message, target});
-      return;
+      return true;
     }
 
     const targetWindow = this.resolveTargetWindow(target);
-    if (!targetWindow) return;
+    if (!targetWindow) return false;
 
     const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-    if (!expectedUrl) return;
+    if (!expectedUrl) return false;
 
     try {
       const targetOrigin = this.environmentContext.resolveRendererUrl(expectedUrl).origin;
@@ -844,8 +851,10 @@ export class HostCommunication implements OnDestroy {
           sourceWindow: targetWindow,
         });
       }
+      return true;
     } catch (err) {
       // Ignore malformed URL
+      return false;
     }
   }
 
@@ -888,12 +897,19 @@ export class HostCommunication implements OnDestroy {
    * Helper utility dispatching a RENDER_A2UI layout array to the preview renderer.
    * @param payload Array of layout nodes or configuration objects
    * @param target Optional explicit target iframe element or window reference
+   * @param renderId Optional dispatch ID echoed by PreviewBridge on render completion
+   * @returns `true` if posted or queued; `false` if rejected or undeliverable
    */
-  sendRenderA2UI(payload: unknown[], target?: HTMLIFrameElement | Window | null): void {
-    this.sendMessage(
+  sendRenderA2UI(
+    payload: unknown[],
+    target?: HTMLIFrameElement | Window | null,
+    renderId?: string,
+  ): boolean {
+    return this.sendMessage(
       {
         type: PreviewBridgeMessageType.RENDER_A2UI,
         payload: payload,
+        ...(renderId !== undefined ? {renderId} : {}),
       },
       target,
     );

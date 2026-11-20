@@ -461,6 +461,8 @@ export interface A2aTransportOptions {
   tenantId?: string;
   headers?: Record<string, string>;
   abortSignal?: AbortSignal;
+  protocolVersion?: string;
+  supportedCatalogIds?: string[];
 }
 
 /**

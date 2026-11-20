@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal, DestroyRef} from '@angular/core';
+import {Component, Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatTableModule} from '@angular/material/table';
 import {JsonPipe} from '@angular/common';
@@ -24,6 +24,9 @@ import {
 } from '../../shell/host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {formatTimestamp} from '../../utils/date.utils';
+import {PendingRpcRegistry, PendingRpcEntry} from './pending-rpc-registry';
+import {RpcReplyForm} from './rpc-reply-form/rpc-reply-form';
+import {V10WireValidator} from '../../shell/cross-frame-validator/v1-0-wire-validator';
 
 /** Exposes the unminified dynamic details mapping of cross-frame custom events */
 interface RawActionDetails {
@@ -39,18 +42,40 @@ interface RawActionDetails {
 /** Represents raw event envelopes carrying action payloads sent to the backend */
 interface RawServerPayload {
   action?: string | RawActionDetails;
+  callAgentFunction?: unknown;
+  rendererFunctionResponse?: unknown;
+  [key: string]: unknown;
 }
 
 /**
  * A structured telemetry record representing a custom event or interaction
  * event captured within the isolated renderer.
  */
-export interface DisplayEventLogItem {
+export declare interface DisplayEventLogItem {
   time: string;
   action: string;
   surface: string;
   component: string;
   context: Record<string, unknown> | null;
+  callAgentFunction?: PendingRpcEntry;
+  functionCallId?: string;
+}
+
+/**
+ * Owns the debug-log clear watermark across `Events` tab unmount/remount cycles.
+ */
+@Injectable({providedIn: 'root'})
+export class EventsLogState {
+  private clearedAtMs = Number.NEGATIVE_INFINITY;
+
+  markCleared(atMs: number = Date.now()): number {
+    this.clearedAtMs = atMs;
+    return atMs;
+  }
+
+  isBeforeClear(timestampMs: number): boolean {
+    return timestampMs < this.clearedAtMs;
+  }
 }
 
 /**
@@ -60,12 +85,14 @@ export interface DisplayEventLogItem {
 @Component({
   selector: 'a2ui-composer-events',
   standalone: true,
-  imports: [MatTableModule, JsonPipe],
+  imports: [MatTableModule, JsonPipe, RpcReplyForm],
   templateUrl: './events.ng.html',
   styleUrl: './events.scss',
 })
 export class Events {
   private readonly hostComm = inject(HostCommunication);
+  private readonly pendingRpcRegistry = inject(PendingRpcRegistry);
+  private readonly logState = inject(EventsLogState);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly eventsLog = signal<DisplayEventLogItem[]>([]);
@@ -102,6 +129,12 @@ export class Events {
       this.eventsLog.update(logs => {
         const newLogs = [mappedItem, ...logs];
         if (newLogs.length > 100) {
+          const evicted = newLogs.slice(100);
+          for (const item of evicted) {
+            if (item.functionCallId) {
+              this.pendingRpcRegistry.evict(item.functionCallId);
+            }
+          }
           newLogs.length = 100;
         }
         return newLogs;
@@ -110,10 +143,73 @@ export class Events {
   }
 
   private mapEnvelopeToEvent(envelope: MessageEnvelope): DisplayEventLogItem | null {
+    if (envelope.timestamp !== undefined && this.logState.isBeforeClear(envelope.timestamp)) {
+      return null;
+    }
+
     // NOTE: Bracket notation is used to access properties on the parsed postMessage payload
     // to prevent compiler minification renaming from breaking property reads.
     const payload = envelope.payload as RawServerPayload | undefined;
-    if (!payload || !payload['action']) {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
+    if (payload['callAgentFunction']) {
+      if (!this.pendingRpcRegistry.isRegisteredFrame(envelope.sourceWindow)) {
+        return null;
+      }
+      const details = V10WireValidator.extractCallAgentFunctionDetails(
+        payload['callAgentFunction'],
+      );
+      if (!details) {
+        return null;
+      }
+
+      const caf = payload['callAgentFunction'] as Record<string, unknown>;
+      const callFunc = caf['callFunction'] ?? caf;
+
+      const entry = this.pendingRpcRegistry.registerRpc({
+        functionCallId: details.functionCallId,
+        surfaceId: details.surfaceId,
+        callFunction: callFunc,
+        sourceWindow: envelope.sourceWindow!,
+        startedAtMs: envelope.timestamp || Date.now(),
+      });
+
+      return {
+        time: formatTimestamp(envelope.timestamp || Date.now()),
+        action: details.functionName
+          ? `callAgentFunction: ${details.functionName}`
+          : 'callAgentFunction',
+        surface: details.surfaceId,
+        component: details.catalogId || '',
+        context: details.args as Record<string, unknown> | null,
+        callAgentFunction: entry,
+        functionCallId: details.functionCallId,
+      };
+    }
+
+    if (payload['rendererFunctionResponse']) {
+      const resp = payload['rendererFunctionResponse'] as Record<string, unknown>;
+      const surfaceId = typeof resp['surfaceId'] === 'string' ? resp['surfaceId'] : '';
+      const functionCallId =
+        typeof resp['functionCallId'] === 'string' ? resp['functionCallId'] : '';
+      const contextData = (resp['result'] ?? resp['value'] ?? resp['error'] ?? null) as Record<
+        string,
+        unknown
+      > | null;
+
+      return {
+        time: formatTimestamp(envelope.timestamp || Date.now()),
+        action: 'rendererFunctionResponse',
+        surface: surfaceId,
+        component: functionCallId,
+        context: contextData,
+        functionCallId: functionCallId || undefined,
+      };
+    }
+
+    if (!payload['action']) {
       return null;
     }
     let action = payload['action'];
@@ -141,6 +237,8 @@ export class Events {
   }
 
   clearLogs(): void {
+    const clearedAtMs = this.logState.markCleared(Date.now());
+    this.pendingRpcRegistry.clearAll(clearedAtMs);
     this.eventsLog.set([]);
   }
 }

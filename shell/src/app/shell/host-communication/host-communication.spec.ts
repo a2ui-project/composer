@@ -2530,5 +2530,77 @@ describe('HostCommunication', () => {
       expect(catalogEnvelope?.payload).toEqual(catalogPayload);
       expect(catalogEnvelope?.sourceWindow).toBe(mockIframeWindow);
     });
+
+    it('propagates renderId and supportsRenderId on MessageEnvelope and includes renderId in sendRenderA2UI', () => {
+      const emitted: MessageEnvelope[] = [];
+      service.messageStream$.subscribe(e => emitted.push(e));
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            type: PreviewBridgeMessageType.RENDERER_READY,
+            supportsRenderId: true,
+          },
+        }),
+      );
+
+      const readyEnvelope = emitted.find(e => e.type === PreviewBridgeMessageType.RENDERER_READY);
+      expect(readyEnvelope?.supportsRenderId).toBe(true);
+
+      const postMessageSpy = vi.spyOn(mockIframeWindow, 'postMessage');
+      const payload = [{version: 'v0.9', updateDataModel: {surfaceId: 's-1', value: {a: 1}}}];
+      service.sendRenderA2UI(payload, mockIframeWindow, 'render-42');
+
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+          renderId: 'render-42',
+        },
+        'http://localhost:3000',
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            type: PreviewBridgeMessageType.RENDER_SUCCESS,
+            renderId: 'render-42',
+          },
+        }),
+      );
+
+      const successEnvelope = emitted.find(e => e.type === PreviewBridgeMessageType.RENDER_SUCCESS);
+      expect(successEnvelope?.renderId).toBe('render-42');
+    });
+
+    it('returns true when sendMessage/sendRenderA2UI posts or queues and false on validation or missing target failure', () => {
+      const queued = service.sendRenderA2UI(
+        [{version: 'v0.9', updateDataModel: {surfaceId: 's-1', value: {a: 1}}}],
+        mockIframeWindow,
+      );
+      expect(queued).toBe(true);
+
+      const invalid = service.sendMessage({type: '' as PreviewBridgeMessageType}, mockIframeWindow);
+      expect(invalid).toBe(false);
+
+      // Mark mockIframeWindow ready so isRendererReady() is true, then pass a detached unregistered iframe
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      const detachedIframe = {contentWindow: null} as unknown as HTMLIFrameElement;
+      const missingTarget = service.sendRenderA2UI(
+        [{version: 'v0.9', updateDataModel: {surfaceId: 's-1', value: {a: 1}}}],
+        detachedIframe,
+      );
+      expect(missingTarget).toBe(false);
+    });
   });
 });

@@ -359,13 +359,24 @@ describe('McpClientManagerService', () => {
     expect(malformedService.servers()).toHaveLength(2);
   });
 
-  it('checks whether a catalog supports MCP via doesCatalogSupportMcp', () => {
+  it('checks whether a catalog supports MCP via doesCatalogSupportMcp for single and multi-catalogs', () => {
     expect(service.doesCatalogSupportMcp(null)).toBe(false);
     expect(service.doesCatalogSupportMcp(undefined)).toBe(false);
+    expect(service.doesCatalogSupportMcp([])).toBe(false);
+    expect(service.doesCatalogSupportMcp([null, undefined])).toBe(false);
     expect(service.doesCatalogSupportMcp({functions: {required: {}}})).toBe(false);
     expect(service.doesCatalogSupportMcp({functions: {callMcpTool: {}}})).toBe(true);
     expect(service.doesCatalogSupportMcp({$defs: {callMcpTool: {}}})).toBe(true);
     expect(service.doesCatalogSupportMcp({$defs: {catalog_callMcpTool: {}}})).toBe(true);
+
+    const basicCatalog = {components: {Text: {}, Button: {}}};
+    const mcpCatalog = {functions: {callMcpTool: {type: 'object'}}};
+    const noMcpCatalog = {components: {Card: {}}, functions: {otherFunc: {}}};
+
+    // Multi-catalog: [BasicCatalog, McpFunctionsCatalog] -> true
+    expect(service.doesCatalogSupportMcp([basicCatalog, mcpCatalog])).toBe(true);
+    // Multi-catalog without callMcpTool -> false
+    expect(service.doesCatalogSupportMcp([basicCatalog, noMcpCatalog])).toBe(false);
   });
 
   it('finds callMcpTool in a catalog that lists its functions', () => {

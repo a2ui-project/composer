@@ -30,7 +30,8 @@ import {MatDialogHarness} from '@angular/material/dialog/testing';
 import {MatMenuHarness} from '@angular/material/menu/testing';
 import {AppConfigProvider, AuthType} from '../../settings/app-config-provider/app-config-provider';
 import {MatInputHarness} from '@angular/material/input/testing';
-import {Catalog} from '../../storage/models/catalog-storage.model';
+import type {A2uiProtocolVersion} from 'a2ui-bridge';
+import {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
 import {RendererSelection} from '../renderer-selection/renderer-selection';
@@ -38,10 +39,10 @@ import {RendererOption} from '../../settings/settings-service/settings.service';
 import {FailureParseResult} from '../a2ui-payload-parser/a2ui-payload-parser';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {
-  ChatPromptFactoryService,
+  ChatPromptFactory,
   CustomInstructionPreset,
   CustomInstructionsState,
-} from '../chat-prompt-factory/chat-prompt-factory.service';
+} from '../chat-prompt-factory/chat-prompt-factory';
 import {CustomInstructionsDialogHarness} from '../custom-instructions-dialog/test/custom-instructions-dialog.harness';
 import {ComposerPanelId} from '../../shell/composer-workspace/composer-panel-id';
 import {StateSync} from '../state-sync/state-sync';
@@ -131,6 +132,8 @@ class MockChatPromptFactoryService {
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>({}); // non-null by default
+  readonly activeCatalogs = signal<CatalogJson[]>([]);
+  readonly activeProtocolVersion = signal<A2uiProtocolVersion>('v0.9');
 }
 
 class MockAppConfigProvider {
@@ -184,7 +187,7 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
         },
         provideRouter([]),
         {provide: ChatCoordinator, useClass: MockChatCoordinator},
-        {provide: ChatPromptFactoryService, useClass: MockChatPromptFactoryService},
+        {provide: ChatPromptFactory, useClass: MockChatPromptFactoryService},
         {provide: RendererSelection, useClass: MockRendererSelection},
         {provide: ChatState, useClass: MockChatState},
         {provide: CatalogManagement, useClass: MockCatalogManagement},
@@ -196,7 +199,7 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
 
     chatServiceMock = TestBed.inject(ChatCoordinator) as unknown as MockChatCoordinator;
     promptFactoryMock = TestBed.inject(
-      ChatPromptFactoryService,
+      ChatPromptFactory,
     ) as unknown as MockChatPromptFactoryService;
     chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
     catalogManagementServiceMock = TestBed.inject(
@@ -611,6 +614,49 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
     ]);
 
     chatStateMock.chatHistory.set([{role: MessageRole.MODEL, content: malformedArray}]);
+    expect(() => fixture.detectChanges()).not.toThrow();
+
+    const bubbles = await harness.getBubblesText();
+    expect(bubbles[0]).toBe('1 component in this canvas');
+  });
+
+  it('counts inline components in v1.0 createSurface messages', async () => {
+    const v1Payload = JSON.stringify([
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's1',
+          components: [
+            {id: 't1', component: 'Text'},
+            {id: 'b1', component: 'Button'},
+          ],
+        },
+      },
+    ]);
+
+    chatStateMock.chatHistory.set([{role: MessageRole.MODEL, content: v1Payload}]);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    expect(bubbles[0]).toBe('2 components in this canvas');
+  });
+
+  it('handles null, array, and primitive items in parsed JSON arrays safely without throwing', async () => {
+    const mixedPayload = JSON.stringify([
+      null,
+      42,
+      'primitive string',
+      [],
+      {
+        version: '1.0',
+        createSurface: {
+          surfaceId: 's1',
+          components: [{id: 'c1', component: 'Button'}],
+        },
+      },
+    ]);
+
+    chatStateMock.chatHistory.set([{role: MessageRole.MODEL, content: mixedPayload}]);
     expect(() => fixture.detectChanges()).not.toThrow();
 
     const bubbles = await harness.getBubblesText();

@@ -91,6 +91,9 @@
           (openCanvas)="openCanvas.emit($event)"
           (closeCanvas)="closeCanvas.emit()"
           (openInspector)="openInspector.emit($event)"
+          (inlinePayloadRendered)="inlinePayloadRendered.emit($event)"
+          (inlineRenderStateReset)="inlineRenderStateReset.emit($event)"
+          (inlineDocumentReset)="inlineDocumentReset.emit($event)"
         ></a2ui-composer-chat-message>
       }
     </div>

@@ -21,12 +21,18 @@ import {
   computed,
   untracked,
   input,
+  OnDestroy,
+  output,
   signal,
   viewChild,
 } from '@angular/core';
 import {type SurfaceResizePayload} from 'a2ui-bridge';
 import {clampContentHeight} from '../content-height';
-import {GuestFrame, GUEST_FRAME_CATALOG_MANAGEMENT} from '../guest-frame/guest-frame';
+import {
+  GuestFrame,
+  GUEST_FRAME_CATALOG_MANAGEMENT,
+  PayloadDispatchedEvent,
+} from '../guest-frame/guest-frame';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {DefaultTarget} from '../../shell/host-communication/host-communication';
 import {ChatState} from '../../chat/chat-state/chat-state';
@@ -34,6 +40,16 @@ import {StateSync} from '../../chat/state-sync/state-sync';
 
 /** How a {@link RenderedFrame} is sized; see {@link RenderedFrame.sizing}. */
 export type RenderedFrameSizing = 'fill' | 'content';
+
+/** Payload and target window emitted once a dispatched surface finishes rendering. */
+export interface RenderedSurfaceDispatch {
+  payload: unknown[];
+  sourceWindow: Window;
+}
+
+interface InFlightSurfaceDispatch extends RenderedSurfaceDispatch {
+  renderId: string;
+}
 
 /**
  * Renders the active preview target in a {@link GuestFrame}, which owns the
@@ -57,17 +73,42 @@ export type RenderedFrameSizing = 'fill' | 'content';
   templateUrl: './rendered-frame.ng.html',
   styleUrl: './rendered-frame.scss',
 })
-export class RenderedFrame {
+export class RenderedFrame implements OnDestroy {
   private readonly chatState = inject(ChatState);
   private readonly stateSync = inject(StateSync);
 
   readonly guestFrame = viewChild(GuestFrame);
+
+  get contentWindow(): Window | null {
+    return this.guestFrame()?.contentWindow ?? null;
+  }
 
   /**
    * Automatically rejects incoming agent function calls with NO_AGENT_CONNECTED
    * when no live agent is connected to the session.
    */
   readonly autoRejectAgentFunctions = input<boolean>(false);
+
+  /**
+   * Emits after a dispatched RENDER_A2UI payload finishes rendering (`RENDER_SUCCESS`)
+   * in the inner GuestFrame.
+   */
+  readonly payloadRendered = output<RenderedSurfaceDispatch>();
+
+  /**
+   * Emits when this frame's rendered state is cleared or replaced (document
+   * replacement, same-URL reload, empty payload, session reset, render error,
+   * rejected dispatch, or teardown), carrying the associated guest Window so
+   * parents can drop stale tracking entries immediately.
+   */
+  readonly renderStateReset = output<Window>();
+
+  /**
+   * Emits only when this frame's hosted guest document is replaced, reloaded, or
+   * destroyed (`documentReplaced`, same-URL reload `documentReset`, or teardown),
+   * not on same-document render errors or rejected dispatches.
+   */
+  readonly documentReset = output<Window>();
 
   /**
    * The A2UI messages to render in the guest. Sent once the guest's document
@@ -111,8 +152,9 @@ export class RenderedFrame {
   private readonly reportedHeight = signal<number | null>(null);
 
   private lastHandledResetNonce = this.stateSync.sessionResetNonce();
-  private awaitingRender = false;
+  private readonly inFlightDispatches: InFlightSurfaceDispatch[] = [];
   private hasRenderError = false;
+  private lastKnownWindow: Window | null = null;
 
   /**
    * Height applied in content sizing, as a CSS length: the latest report
@@ -140,9 +182,7 @@ export class RenderedFrame {
     effect(() => {
       const payload = this.payload();
       if (payload !== undefined && (!Array.isArray(payload) || payload.length === 0)) {
-        this.awaitingRender = false;
-        this.hasRenderError = false;
-        untracked(() => this.reportedHeight.set(null));
+        this.resetRenderState({notifyReset: true});
       }
     });
 
@@ -151,36 +191,115 @@ export class RenderedFrame {
       const nonce = this.stateSync.sessionResetNonce();
       if (nonce > this.lastHandledResetNonce) {
         this.lastHandledResetNonce = nonce;
-        this.awaitingRender = false;
-        this.hasRenderError = false;
-        untracked(() => this.reportedHeight.set(null));
+        this.resetRenderState({notifyReset: true});
       }
     });
   }
 
-  protected onDocumentReplaced(): void {
-    this.awaitingRender = false;
-    this.hasRenderError = false;
-    this.reportedHeight.set(null);
+  ngOnDestroy(): void {
+    this.resetRenderState({clearHeight: false, notifyReset: true, notifyDocumentReset: true});
   }
 
-  protected onPayloadDispatched(initialForDocument: boolean): void {
-    this.awaitingRender = true;
-    if (initialForDocument) {
-      this.hasRenderError = false;
-      this.reportedHeight.set(null);
+  private rememberContentWindow(): Window | null {
+    const win = this.contentWindow;
+    if (win) {
+      this.lastKnownWindow = win;
+    }
+    return win ?? this.lastKnownWindow;
+  }
+
+  private emitRenderStateReset(): void {
+    const win = this.rememberContentWindow();
+    if (win) {
+      this.renderStateReset.emit(win);
     }
   }
 
-  protected onRenderSuccess(): void {
-    this.awaitingRender = false;
-    this.hasRenderError = false;
+  private emitDocumentReset(): void {
+    const win = this.rememberContentWindow();
+    if (win) {
+      this.documentReset.emit(win);
+    }
   }
 
-  protected onRenderError(): void {
-    this.awaitingRender = false;
-    this.hasRenderError = true;
-    this.reportedHeight.set(null);
+  private resetRenderState(
+    options: {clearHeight?: boolean; notifyReset?: boolean; notifyDocumentReset?: boolean} = {},
+  ): void {
+    this.inFlightDispatches.length = 0;
+    this.hasRenderError = false;
+    if (options.clearHeight !== false) {
+      untracked(() => this.reportedHeight.set(null));
+    }
+    if (options.notifyDocumentReset) {
+      this.emitDocumentReset();
+    }
+    if (options.notifyReset) {
+      this.emitRenderStateReset();
+    }
+  }
+
+  protected onDocumentReplaced(): void {
+    this.resetRenderState({notifyReset: true, notifyDocumentReset: true});
+  }
+
+  protected onDocumentReset(): void {
+    this.resetRenderState({notifyReset: true, notifyDocumentReset: true});
+  }
+
+  protected onRenderRejected(): void {
+    // GuestFrame emits renderError(undefined) immediately after renderRejected,
+    // which latches hasRenderError and emits renderStateReset once.
+    this.resetRenderState();
+  }
+
+  protected onPayloadDispatched(event: PayloadDispatchedEvent): void {
+    const sourceWindow = this.rememberContentWindow();
+    if (event.initialForDocument) {
+      this.resetRenderState({notifyReset: true});
+    }
+    const payload = this.payload();
+    if (Array.isArray(payload) && sourceWindow) {
+      this.inFlightDispatches.push({renderId: event.renderId, payload, sourceWindow});
+    }
+  }
+
+  private consumeInFlightDispatch(renderId?: string): InFlightSurfaceDispatch | undefined {
+    if (renderId !== undefined) {
+      const idx = this.inFlightDispatches.findIndex(dispatch => dispatch.renderId === renderId);
+      if (idx === -1) {
+        return undefined;
+      }
+      const settled = this.inFlightDispatches.splice(0, idx + 1);
+      return settled[settled.length - 1];
+    }
+    return this.inFlightDispatches.shift();
+  }
+
+  protected onRenderSuccess(renderId?: string): void {
+    const completed = this.consumeInFlightDispatch(renderId);
+    if (renderId !== undefined && !completed) {
+      return;
+    }
+    this.hasRenderError = false;
+    if (completed) {
+      this.lastKnownWindow = completed.sourceWindow;
+      this.payloadRendered.emit({
+        payload: completed.payload,
+        sourceWindow: completed.sourceWindow,
+      });
+    }
+  }
+
+  protected onRenderError(renderId?: string): void {
+    const settled = this.consumeInFlightDispatch(renderId);
+    if (renderId !== undefined && !settled) {
+      return;
+    }
+    if (this.inFlightDispatches.length === 0) {
+      this.hasRenderError = true;
+      this.reportedHeight.set(null);
+      this.emitRenderStateReset();
+    }
   }
 
   /**
@@ -193,7 +312,7 @@ export class RenderedFrame {
     const currentPayload = untracked(() => this.payload());
     if (
       this.hasRenderError ||
-      this.awaitingRender ||
+      this.inFlightDispatches.length > 0 ||
       report.contentReady === false ||
       (currentPayload !== undefined &&
         (!Array.isArray(currentPayload) || currentPayload.length === 0))

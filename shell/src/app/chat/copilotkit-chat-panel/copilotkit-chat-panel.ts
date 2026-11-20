@@ -33,7 +33,10 @@ import {MatMenuModule} from '@angular/material/menu';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {RouterLink} from '@angular/router';
 import {AutoScroll, ChatPanelBase} from '../chat-panel/chat-panel-base';
-import {isRenderA2uiItem, parseAndHealJsonLines} from '../a2ui-payload-parser/a2ui-payload-parser';
+import {
+  countBlockComponents,
+  parseAndHealJsonLines,
+} from '../a2ui-payload-parser/a2ui-payload-parser';
 import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {RendererSelection} from '../renderer-selection/renderer-selection';
 
@@ -177,11 +180,7 @@ export class CopilotKitChatPanel extends ChatPanelBase {
           : undefined);
       const isSnapshot = !!isLayout && !parseError;
       const componentCount =
-        isSnapshot && parsed?.success
-          ? parsed.blocks
-              .filter(isRenderA2uiItem)
-              .reduce((count, block) => count + (block.updateComponents?.components.length ?? 0), 0)
-          : null;
+        isSnapshot && parsed?.success ? countBlockComponents(parsed.blocks) : null;
       const displayContent = parseError
         ? 'This response could not update the canvas.'
         : isSnapshot

@@ -866,4 +866,486 @@ describe('RenderedFrame Live Preview Viewport', () => {
       expect(hostCommunicationServiceMock.sendRenderA2UI).not.toHaveBeenCalled();
     });
   });
+
+  describe('payloadRendered on render completion', () => {
+    const samplePayload = [
+      {version: 'v0.9', createSurface: {surfaceId: 'surf-1', catalogId: 'cat-1'}},
+    ];
+
+    it('defers payloadRendered until RENDER_SUCCESS arrives and does not re-emit on subsequent RENDER_SUCCESS', () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+
+      expect(hostCommunicationServiceMock.sendRenderA2UI).toHaveBeenCalledTimes(1);
+      expect(emitted).toHaveLength(0);
+
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].payload).toEqual(samplePayload);
+      expect(emitted[0].sourceWindow).toBe(guestWindow);
+
+      // A follow-up RENDER_SUCCESS (e.g. from a one-shot callRendererFunction) must not re-emit.
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(1);
+    });
+
+    it('clears pending dispatch state on RENDER_ERROR so a later RENDER_SUCCESS does not emit stale payload', () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+      expect(emitted).toHaveLength(0);
+
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_ERROR, {message: 'boom'}));
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(0);
+    });
+
+    it('clears pending dispatch state on document replacement and session reset', () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      fixture.detectChanges();
+      expect(emitted).toHaveLength(0);
+
+      // Re-arm via payload change and clear via URL change (document replacement)
+      const nextPayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'surf-2', catalogId: 'cat-1'}},
+      ];
+      fixture.componentRef.setInput('payload', nextPayload);
+      fixture.detectChanges();
+      expect(hostCommunicationServiceMock.sendRenderA2UI).toHaveBeenCalledTimes(2);
+
+      resolvedUrlSignal.set('http://localhost:4200/other-renderer');
+      fixture.detectChanges();
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      fixture.detectChanges();
+      expect(emitted).toHaveLength(0);
+    });
+
+    it('clears pending dispatch state when payload becomes empty', () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+
+      fixture.componentRef.setInput('payload', []);
+      fixture.detectChanges();
+
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(0);
+    });
+
+    it('emits pipelined payloads in FIFO order and keeps blocking pre-render SURFACE_RESIZE until the last settles', async () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      const secondPayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'surf-2', catalogId: 'cat-1'}},
+      ];
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+
+      // Pipelined P2 arrives before P1's RENDER_SUCCESS
+      fixture.componentRef.setInput('payload', secondPayload);
+      fixture.detectChanges();
+      expect(hostCommunicationServiceMock.sendRenderA2UI).toHaveBeenCalledTimes(2);
+      expect(emitted).toHaveLength(0);
+
+      // P1 settles -> emits P1, but P2 is still awaiting render so SURFACE_RESIZE remains blocked
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      emitFromGuest(surfaceResizeEnvelope(48));
+      fixture.detectChanges();
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].payload).toEqual(samplePayload);
+      expect(await harness.getAppliedHeightPx()).toBeNull();
+
+      // P2 settles -> emits P2 and allows SURFACE_RESIZE
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      emitFromGuest(surfaceResizeEnvelope(360));
+      fixture.detectChanges();
+      expect(emitted).toHaveLength(2);
+      expect(emitted[1].payload).toEqual(secondPayload);
+      expect(await harness.getAppliedHeightPx()).toBe(360);
+
+      // Subsequent extra RENDER_SUCCESS does not re-emit
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      fixture.detectChanges();
+      expect(emitted).toHaveLength(2);
+    });
+
+    it('does not let a RENDER_ERROR for an earlier pipelined payload suppress RENDER_SUCCESS for a newer payload', () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      const secondPayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'surf-2', catalogId: 'cat-1'}},
+      ];
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+
+      fixture.componentRef.setInput('payload', secondPayload);
+      fixture.detectChanges();
+
+      // P1 errors; P2 succeeds
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_ERROR, {message: 'p1 failed'}));
+      fixture.detectChanges();
+      expect(emitted).toHaveLength(0);
+
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      fixture.detectChanges();
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].payload).toEqual(secondPayload);
+    });
+
+    it('clears in-flight dispatches when destroyed while awaiting render', () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+
+      fixture.destroy();
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      expect(emitted).toHaveLength(0);
+    });
+
+    it('latches hasRenderError and blocks SURFACE_RESIZE when pipelined P1 succeeds and P2 errors', async () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      const secondPayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'surf-2', catalogId: 'cat-1'}},
+      ];
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+
+      fixture.componentRef.setInput('payload', secondPayload);
+      fixture.detectChanges();
+
+      // P1 succeeds; P2 fails
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_ERROR, {message: 'p2 failed'}));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].payload).toEqual(samplePayload);
+
+      // hasRenderError must now be latched, blocking SURFACE_RESIZE
+      emitFromGuest(surfaceResizeEnvelope(320));
+      fixture.detectChanges();
+      expect(await harness.getAppliedHeightPx()).toBeNull();
+    });
+
+    it('clears stale inFlightDispatches on same-URL iframe reload before RENDER_SUCCESS', async () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+
+      // Simulate initial document load + RENDERER_READY dispatching P1
+      const iframe = await harness.getIframe();
+      await iframe!.dispatchEvent('load');
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+      expect(hostCommunicationServiceMock.sendRenderA2UI).toHaveBeenCalledTimes(1);
+
+      // Same-URL iframe reload before P1's RENDER_SUCCESS arrives
+      await iframe!.dispatchEvent('load');
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+      expect(hostCommunicationServiceMock.sendRenderA2UI).toHaveBeenCalledTimes(2);
+
+      // A single RENDER_SUCCESS from the reloaded document should settle the queue and allow SURFACE_RESIZE
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      emitFromGuest(surfaceResizeEnvelope(350));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].payload).toEqual(samplePayload);
+      expect(await harness.getAppliedHeightPx()).toBe(350);
+    });
+
+    it('settles coalesced dispatches when two payloads receive a single RENDER_SUCCESS for the latest renderId', async () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      const secondPayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'surf-2', catalogId: 'cat-1'}},
+      ];
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}),
+        supportsRenderId: true,
+      } as MessageEnvelope);
+      fixture.detectChanges();
+
+      fixture.componentRef.setInput('payload', secondPayload);
+      fixture.detectChanges();
+
+      const sendCalls = vi.mocked(hostCommunicationServiceMock.sendRenderA2UI!).mock.calls;
+      expect(sendCalls).toHaveLength(2);
+      const secondRenderId = sendCalls[1][2] as string;
+      expect(typeof secondRenderId).toBe('string');
+
+      // PreviewBridge coalesced P1 away and sent one RENDER_SUCCESS for P2's renderId
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}),
+        renderId: secondRenderId,
+      } as MessageEnvelope);
+      emitFromGuest(surfaceResizeEnvelope(380));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].payload).toEqual(secondPayload);
+      expect(await harness.getAppliedHeightPx()).toBe(380);
+    });
+
+    it('ignores an untagged RPC RENDER_SUCCESS arriving while a payload is in flight on a renderId-capable bridge', async () => {
+      const emitted: Array<{payload: unknown[]; sourceWindow: Window}> = [];
+      fixture.componentInstance.payloadRendered.subscribe(ev => emitted.push(ev));
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}),
+        supportsRenderId: true,
+      } as MessageEnvelope);
+      fixture.detectChanges();
+
+      const sendCalls = vi.mocked(hostCommunicationServiceMock.sendRenderA2UI!).mock.calls;
+      const firstRenderId = sendCalls[0][2] as string;
+      expect(typeof firstRenderId).toBe('string');
+
+      // Untagged RPC ack arrives before P1 finishes rendering -> must NOT settle P1 or unblock SURFACE_RESIZE
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}));
+      emitFromGuest(surfaceResizeEnvelope(220));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(0);
+      expect(await harness.getAppliedHeightPx()).toBeNull();
+
+      // Now P1's tagged RENDER_SUCCESS arrives -> emits P1 and unblocks SURFACE_RESIZE
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS, {}),
+        renderId: firstRenderId,
+      } as MessageEnvelope);
+      emitFromGuest(surfaceResizeEnvelope(410));
+      fixture.detectChanges();
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].payload).toEqual(samplePayload);
+      expect(await harness.getAppliedHeightPx()).toBe(410);
+    });
+
+    it('emits renderStateReset with the last known window on initial dispatch, URL change, same-URL reload, empty payload, session reset, and destroy', async () => {
+      const resets: Window[] = [];
+      fixture.componentInstance.renderStateReset.subscribe(win => resets.push(win));
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      const iframe = await harness.getIframe();
+      await iframe!.dispatchEvent('load');
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+      expect(resets.includes(guestWindow)).toBe(true);
+
+      resets.length = 0;
+      // Same-URL reload
+      await iframe!.dispatchEvent('load');
+      fixture.detectChanges();
+      expect(resets.includes(guestWindow)).toBe(true);
+
+      resets.length = 0;
+      // Empty payload
+      fixture.componentRef.setInput('payload', []);
+      fixture.detectChanges();
+      expect(resets.includes(guestWindow)).toBe(true);
+
+      resets.length = 0;
+      // Session reset
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      expect(resets.includes(guestWindow)).toBe(true);
+
+      resets.length = 0;
+      // Renderer URL replacement
+      resolvedUrlSignal.set('http://localhost:4200/other-renderer');
+      fixture.detectChanges();
+      expect(resets.includes(guestWindow)).toBe(true);
+
+      const currentGuestWindow = await guestWindowOf(harness);
+      resets.length = 0;
+      fixture.destroy();
+      expect(resets).toHaveLength(1);
+      expect(resets.includes(currentGuestWindow)).toBe(true);
+    });
+
+    it('emits documentReset only on URL replacement, same-URL reload, and destroy — not on same-document resets', async () => {
+      const renderResets: Window[] = [];
+      const docResets: Window[] = [];
+      fixture.componentInstance.renderStateReset.subscribe(win => renderResets.push(win));
+      fixture.componentInstance.documentReset.subscribe(win => docResets.push(win));
+
+      // Initial dispatch emits renderStateReset but not documentReset
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      const iframe = await harness.getIframe();
+      await iframe!.dispatchEvent('load');
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}));
+      fixture.detectChanges();
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets).toHaveLength(0);
+
+      // Same-document RENDER_ERROR -> renderStateReset only
+      renderResets.length = 0;
+      emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_ERROR, {message: 'boom'}));
+      fixture.detectChanges();
+      expect(renderResets).toHaveLength(1);
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets).toHaveLength(0);
+
+      // Same-document rejected dispatch (sendRenderA2UI returns false) -> renderStateReset only
+      renderResets.length = 0;
+      vi.mocked(hostCommunicationServiceMock.sendRenderA2UI!).mockReturnValueOnce(false);
+      fixture.componentRef.setInput('payload', [
+        {version: 'v0.9', createSurface: {surfaceId: 's-retry', catalogId: 'cat-1'}},
+      ]);
+      fixture.detectChanges();
+      expect(renderResets).toHaveLength(1);
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets).toHaveLength(0);
+
+      // Empty payload -> renderStateReset only
+      renderResets.length = 0;
+      fixture.componentRef.setInput('payload', []);
+      fixture.detectChanges();
+      expect(renderResets).toHaveLength(1);
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets).toHaveLength(0);
+
+      // Session reset -> renderStateReset only
+      renderResets.length = 0;
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      expect(renderResets).toHaveLength(1);
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets).toHaveLength(0);
+
+      // Same-URL reload -> emits both renderStateReset and documentReset
+      renderResets.length = 0;
+      docResets.length = 0;
+      await iframe!.dispatchEvent('load');
+      fixture.detectChanges();
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets.includes(guestWindow)).toBe(true);
+
+      // URL replacement -> emits both renderStateReset and documentReset
+      renderResets.length = 0;
+      docResets.length = 0;
+      resolvedUrlSignal.set('http://localhost:4200/other-renderer');
+      fixture.detectChanges();
+      expect(renderResets.includes(guestWindow)).toBe(true);
+      expect(docResets.includes(guestWindow)).toBe(true);
+
+      // Destroy -> emits both renderStateReset and documentReset
+      const currentGuestWindow = await guestWindowOf(harness);
+      renderResets.length = 0;
+      docResets.length = 0;
+      fixture.destroy();
+      expect(renderResets).toHaveLength(1);
+      expect(renderResets.includes(currentGuestWindow)).toBe(true);
+      expect(docResets).toHaveLength(1);
+      expect(docResets.includes(currentGuestWindow)).toBe(true);
+    });
+
+    it('ignores stale RENDER_ERROR renderId without latching error or emitting reset, and latches on matching coalesced RENDER_ERROR', async () => {
+      const resets: Window[] = [];
+      fixture.componentInstance.renderStateReset.subscribe(win => resets.push(win));
+
+      const secondPayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'surf-2', catalogId: 'cat-1'}},
+      ];
+
+      fixture.componentRef.setInput('payload', samplePayload);
+      fixture.detectChanges();
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}),
+        supportsRenderId: true,
+      } as MessageEnvelope);
+      fixture.detectChanges();
+
+      fixture.componentRef.setInput('payload', secondPayload);
+      fixture.detectChanges();
+
+      const sendCalls = vi.mocked(hostCommunicationServiceMock.sendRenderA2UI!).mock.calls;
+      const secondRenderId = sendCalls[1][2] as string;
+      resets.length = 0;
+
+      // Unrecognized/stale renderId on RENDER_ERROR must not latch error, drop queue, or emit reset
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDER_ERROR, {message: 'stale error'}),
+        renderId: 'render-unknown-999',
+      } as MessageEnvelope);
+      fixture.detectChanges();
+      expect(resets).toHaveLength(0);
+
+      // Matching coalesced renderId (P2) settles P1+P2, latches hasRenderError, and emits renderStateReset
+      emitFromGuest({
+        ...bridgeEnvelope(PreviewBridgeMessageType.RENDER_ERROR, {message: 'p2 failed'}),
+        renderId: secondRenderId,
+      } as MessageEnvelope);
+      emitFromGuest(surfaceResizeEnvelope(320));
+      fixture.detectChanges();
+
+      expect(resets.includes(guestWindow)).toBe(true);
+      expect(await harness.getAppliedHeightPx()).toBeNull();
+    });
+  });
 });

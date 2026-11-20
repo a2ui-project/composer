@@ -859,6 +859,10 @@ describe('Demos Component', () => {
     await vi.waitFor(() => expect(catalogManagement.activeProtocolVersion()).toBe('v1.0'));
     fixture.detectChanges();
 
-    expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(v1Demos[0].a2ui, nativeIframe);
+    expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(
+      v1Demos[0].a2ui,
+      nativeIframe,
+      expect.any(String),
+    );
   });
 });

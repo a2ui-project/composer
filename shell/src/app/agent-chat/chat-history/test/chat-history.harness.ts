@@ -31,6 +31,11 @@ export class A2aChatHistoryHarness extends ComponentHarness {
     return msgs.length;
   }
 
+  async getMessage(index: number): Promise<A2aChatMessageHarness | null> {
+    const msgs = await this.getMessages();
+    return msgs[index] ?? null;
+  }
+
   async hasWelcomeShowcase(): Promise<boolean> {
     const title = await this.getWelcomeTitle();
     return title !== null;

@@ -35,7 +35,13 @@ import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {DefaultTarget} from '../../shell/host-communication/host-communication';
 import {renderMarkdown} from '../../utils/markdown';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
-import {CanvasArtifact, UiAttachedImage, UiMessage} from './types';
+import {
+  CanvasArtifact,
+  InlineSurfaceDispatch,
+  resolveInlinePayload,
+  UiAttachedImage,
+  UiMessage,
+} from './types';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
 /**
@@ -148,6 +154,12 @@ export class A2aChatMessage {
   readonly closeCanvas = output<void>();
   /** Emitted with the message ID when the user clicks to open the protocol message inspector. */
   readonly openInspector = output<string>();
+  /** Emitted after this message's inline RenderedFrame finishes rendering its payload. */
+  readonly inlinePayloadRendered = output<InlineSurfaceDispatch>();
+  /** Emitted when this message's inline RenderedFrame clears its rendered state. */
+  readonly inlineRenderStateReset = output<Window>();
+  /** Emitted when this message's inline RenderedFrame replaces, reloads, or destroys its document. */
+  readonly inlineDocumentReset = output<Window>();
 
   /**
    * Records the user's last manual expand/collapse action along with the content state
@@ -195,17 +207,13 @@ export class A2aChatMessage {
    *   whereas `hasCanvas: false` (or falsy) meant the payload rendered inline in the chat bubble.
    *   Therefore, we only treat `a2uiPayload` as inline when `!m.hasCanvas`.
    */
-  protected readonly hasInlineSurface = computed<boolean>(() => {
-    const m = this.message();
-    const hasExplicitInline = Boolean(m.inlineA2uiPayload?.length);
-    const hasLegacyInline = !m.hasCanvas && Boolean(m.a2uiPayload?.length);
-    return hasExplicitInline || hasLegacyInline;
-  });
+  protected readonly hasInlineSurface = computed<boolean>(() =>
+    Boolean(this.inlinePayload()?.length),
+  );
 
-  protected readonly inlinePayload = computed<RenderA2uiItem[] | undefined>(() => {
-    const m = this.message();
-    return m.inlineA2uiPayload || (!m.hasCanvas ? m.a2uiPayload : undefined);
-  });
+  protected readonly inlinePayload = computed<RenderA2uiItem[] | undefined>(() =>
+    resolveInlinePayload(this.message()),
+  );
 
   /**
    * Attachments of this message, prepared for rendering.

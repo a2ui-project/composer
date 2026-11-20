@@ -14,10 +14,21 @@
  * limitations under the License.
  */
 
-import {A2UI_UPDATE_KEYS, RenderA2uiItem} from 'a2ui-bridge';
+import {isV10RpcEnvelopeItem, RenderA2uiItem} from 'a2ui-bridge';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {normalizeV10RpcEnvelopeItem} from '../../shared/a2ui-rpc-envelope';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {CanvasArtifact} from '../chat-message/types';
+import {
+  deduplicateSurfaceLifecycleItems,
+  sanitizeA2uiPayload,
+} from '../protocol/a2a-protocol-strategy';
+import {detectPayloadVersion} from '../../preview/protocol-version-mismatch';
+import {V09A2aStrategy} from '../protocol/v0-9-a2a-strategy';
+import {V10A2aStrategy} from '../protocol/v1-0-a2a-strategy';
+
+const defaultV09A2aStrategy = new V09A2aStrategy();
+const defaultV10A2aStrategy = new V10A2aStrategy();
 
 interface ExtractedCanvasInfo {
   isCanvas: boolean;
@@ -33,6 +44,7 @@ function extractStringProp(val: unknown): string | undefined {
   if (typeof val === 'object' && val !== null) {
     const obj = val as Record<string, unknown>;
     if (typeof obj['literalString'] === 'string') return obj['literalString'];
+    if (typeof obj['@path'] === 'string') return obj['@path'];
     if (typeof obj['path'] === 'string') return obj['path'];
   }
   return undefined;
@@ -185,6 +197,9 @@ function extractChildReferences(comp: Record<string, unknown>): string[] {
       }
     } else if (typeof val === 'object') {
       const obj = val as Record<string, unknown>;
+      if (typeof obj['componentId'] === 'string') {
+        refs.push(obj['componentId']);
+      }
       if ('child' in obj) collectFrom(obj['child']);
       if ('children' in obj) collectFrom(obj['children']);
       if ('items' in obj) collectFrom(obj['items']);
@@ -225,12 +240,26 @@ function removeReferences(
         const id = typeof item === 'string' ? item : (item as Record<string, unknown>)?.['id'];
         return !idsToRemove.has(String(id));
       });
+    } else if (
+      obj['children'] &&
+      typeof obj['children'] === 'object' &&
+      typeof (obj['children'] as Record<string, unknown>)['componentId'] === 'string' &&
+      idsToRemove.has((obj['children'] as Record<string, unknown>)['componentId'] as string)
+    ) {
+      delete obj['children'];
     }
     if (Array.isArray(obj['items'])) {
       obj['items'] = obj['items'].filter((item: unknown) => {
         const id = typeof item === 'string' ? item : (item as Record<string, unknown>)?.['id'];
         return !idsToRemove.has(String(id));
       });
+    } else if (
+      obj['items'] &&
+      typeof obj['items'] === 'object' &&
+      typeof (obj['items'] as Record<string, unknown>)['componentId'] === 'string' &&
+      idsToRemove.has((obj['items'] as Record<string, unknown>)['componentId'] as string)
+    ) {
+      delete obj['items'];
     }
     if (typeof obj['child'] === 'string' && idsToRemove.has(obj['child'])) {
       delete obj['child'];
@@ -260,6 +289,9 @@ export function hasA2uiCanvasComponent(items: RenderA2uiItem[]): boolean {
     if (item.updateComponents?.components && Array.isArray(item.updateComponents.components)) {
       return item.updateComponents.components.some(c => getCanvasInfo(c).isCanvas);
     }
+    if (item.createSurface?.components && Array.isArray(item.createSurface.components)) {
+      return item.createSurface.components.some(c => getCanvasInfo(c).isCanvas);
+    }
     if (item.createSurface) {
       if (getCanvasInfo(item.createSurface).isCanvas) return true;
     }
@@ -268,15 +300,16 @@ export function hasA2uiCanvasComponent(items: RenderA2uiItem[]): boolean {
 }
 
 /**
- * The only A2UI protocol version Composer speaks.
- *
- * Stamped onto outgoing client events and used as the default for inbound items that omit it.
+ * Default A2UI protocol version stamped onto outbound events when unspecified.
  */
 export const A2UI_PROTOCOL_VERSION = 'v0.9';
 
+/** Re-export canonical A2UI v1.0 RPC envelope keys. */
+export {A2UI_V10_RPC_KEYS} from '../protocol/a2a-protocol-strategy';
+
 /**
- * Canonical MIME types for A2UI data parts across Google3 and A2A specs.
- * 'application/a2ui+json' is the primary standard (see SharedWeb A2UI pipeline).
+ * Canonical MIME types for A2UI data parts across A2UI and A2A specs.
+ * 'application/a2ui+json' is the primary standard MIME type.
  * 'application/json+a2ui' is supported as a backward-compatible alias.
  */
 export const A2UI_MIME_TYPE = 'application/a2ui+json';
@@ -291,7 +324,7 @@ export function isA2uiMimeType(mimeType?: string | null): boolean {
  * Checks if a candidate object is a valid A2UI server-to-client update specification item.
  *
  * An object is recognized as an A2UI item if it contains at least one of the canonical
- * update operation keys ({@link A2UI_UPDATE_KEYS}) with a defined non-null value.
+ * update operation keys ({@link A2UI_UPDATE_KEYS} or {@link A2UI_V10_RPC_KEYS}) with a defined non-null value.
  * Used during streaming ingestion to partition genuine A2UI UI payloads from
  * non-A2UI messages (such as agent tool/function calls or echoed client actions) so they are preserved
  * without causing canvas dispatch errors.
@@ -300,9 +333,7 @@ export function isA2uiMimeType(mimeType?: string | null): boolean {
  * @returns `true` if the item contains a valid A2UI update operation, `false` otherwise.
  */
 export function isA2uiItem(item: unknown): boolean {
-  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
-  const obj = item as Record<string, unknown>;
-  return A2UI_UPDATE_KEYS.some(key => key in obj && obj[key] !== undefined && obj[key] !== null);
+  return defaultV09A2aStrategy.isA2uiItem(item) || defaultV10A2aStrategy.isA2uiItem(item);
 }
 
 /** Legacy operation keys from A2UI v0.8 that are superseded in v0.9. */
@@ -323,6 +354,12 @@ function isLegacyA2uiItem(item: unknown): boolean {
  * Normalizes an array of raw layout updates into valid `RenderA2uiItem` specifications,
  * filtering out any non-A2UI objects and deduplicating redundant createSurface commands.
  *
+ * Enforces canonical wire versions:
+ * - v1.0 wire: strictly '1.0' (without leading 'v')
+ * - v0.9 wire: 'v0.9'
+ *
+ * Strips prototype pollution keys ('__proto__', 'constructor', 'prototype') recursively.
+ *
  * @param items Raw layout updates as received from the agent.
  * @param errorLogger Reports payloads dropped for using superseded v0.8 operations. Optional
  *     because `mergeA2uiItems`, `partitionA2uiSurfacePayload`, and `unwrapCanvasForRenderer`
@@ -335,15 +372,14 @@ export function normalizeA2uiItems(
 ): RenderA2uiItem[] {
   if (!items || !Array.isArray(items)) return [];
 
-  const seenSurfaces = new Set<string>();
-  const normalized: RenderA2uiItem[] = [];
+  const mapped: RenderA2uiItem[] = [];
 
   for (const raw of items) {
     if (!isA2uiItem(raw)) {
       if (isLegacyA2uiItem(raw)) {
         errorLogger?.warn(
           {
-            message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9.',
+            message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9 or 1.0.',
             sourceTag: '[A2UI]',
           },
           raw,
@@ -351,38 +387,86 @@ export function normalizeA2uiItems(
       }
       continue;
     }
-    const itemObj = raw as Record<string, unknown>;
-    const item = {
-      version:
-        typeof itemObj['version'] === 'string' && itemObj['version']
-          ? itemObj['version']
-          : A2UI_PROTOCOL_VERSION,
-      ...itemObj,
-    } as RenderA2uiItem;
-
-    if (item.createSurface?.surfaceId) {
-      const surfaceId = item.createSurface.surfaceId;
-      if (seenSurfaces.has(surfaceId)) {
-        continue;
+    const sanitized = normalizeV10RpcEnvelopeItem(
+      sanitizeA2uiPayload(raw) as Record<string, unknown>,
+    );
+    const rawVersion = typeof sanitized['version'] === 'string' ? sanitized['version'].trim() : '';
+    let version = A2UI_PROTOCOL_VERSION;
+    if (rawVersion === '1.0' || rawVersion === 'v1.0') {
+      version = defaultV10A2aStrategy.normalizeWireVersion(rawVersion);
+    } else if (rawVersion === '0.9' || rawVersion === 'v0.9') {
+      version = defaultV09A2aStrategy.normalizeWireVersion(rawVersion);
+    } else if (isV10RpcEnvelopeItem(sanitized)) {
+      version = defaultV10A2aStrategy.canonicalWireVersion;
+    } else if (rawVersion) {
+      version = rawVersion;
+    } else {
+      const detected = detectPayloadVersion([sanitized]);
+      if (detected === 'v1.0') {
+        version = defaultV10A2aStrategy.canonicalWireVersion;
+      } else if (detected === 'v0.9') {
+        version = defaultV09A2aStrategy.canonicalWireVersion;
       }
-      seenSurfaces.add(surfaceId);
-    } else if (item.deleteSurface?.surfaceId) {
-      seenSurfaces.delete(item.deleteSurface.surfaceId);
     }
 
-    normalized.push(item);
+    mapped.push({
+      ...sanitized,
+      version,
+    } as RenderA2uiItem);
   }
 
-  return normalized;
+  return deduplicateSurfaceLifecycleItems(mapped);
 }
 
-function getItemSurfaceId(item: RenderA2uiItem): string | undefined {
-  return (
-    item.createSurface?.surfaceId ??
-    item.updateComponents?.surfaceId ??
-    item.updateDataModel?.surfaceId ??
-    item.deleteSurface?.surfaceId
-  );
+/**
+ * Extracts the target `surfaceId` from an A2UI surface lifecycle or update item.
+ */
+export function getA2uiItemSurfaceId(item: unknown): string | undefined {
+  if (!item || typeof item !== 'object') {
+    return undefined;
+  }
+  const candidate = item as RenderA2uiItem;
+  const surfaceId =
+    candidate.createSurface?.surfaceId ??
+    candidate.updateComponents?.surfaceId ??
+    candidate.updateDataModel?.surfaceId ??
+    candidate.deleteSurface?.surfaceId;
+  return typeof surfaceId === 'string' && surfaceId ? surfaceId : undefined;
+}
+
+/**
+ * Resolves the set of active surface IDs across a sequence of A2UI items in order,
+ * tracking surface creations/updates and removing surfaces on `deleteSurface`.
+ */
+export function resolveActiveSurfaceIds(
+  items: readonly unknown[],
+  options?: {requireCreateSurface?: boolean},
+): Set<string> {
+  const activeSurfaces = new Set<string>();
+  const requireCreateSurface = options?.requireCreateSurface === true;
+  for (const raw of items) {
+    if (!raw || typeof raw !== 'object') {
+      continue;
+    }
+    const item = raw as RenderA2uiItem;
+    const deletedId = item.deleteSurface?.surfaceId;
+    if (typeof deletedId === 'string' && deletedId) {
+      activeSurfaces.delete(deletedId);
+      continue;
+    }
+    const createdId = item.createSurface?.surfaceId;
+    if (typeof createdId === 'string' && createdId) {
+      activeSurfaces.add(createdId);
+      continue;
+    }
+    if (!requireCreateSurface) {
+      const updatedId = item.updateComponents?.surfaceId ?? item.updateDataModel?.surfaceId;
+      if (typeof updatedId === 'string' && updatedId) {
+        activeSurfaces.add(updatedId);
+      }
+    }
+  }
+  return activeSurfaces;
 }
 
 function extractPriorSurfaceItems(
@@ -392,7 +476,8 @@ function extractPriorSurfaceItems(
   const itemsBySurface = new Map<string, RenderA2uiItem[]>();
 
   for (const item of priorItems) {
-    const surfaceId = getItemSurfaceId(item);
+    if (isV10RpcEnvelopeItem(item)) continue;
+    const surfaceId = getA2uiItemSurfaceId(item);
     if (!surfaceId || !targetSurfaceIds.has(surfaceId)) continue;
 
     if (item.deleteSurface) {
@@ -420,8 +505,9 @@ export function mergeA2uiItems(
   newItems: readonly RenderA2uiItem[],
   priorSessionItems?: readonly RenderA2uiItem[],
 ): RenderA2uiItem[] {
-  const normalizedNew = normalizeA2uiItems(newItems);
-  if (normalizedNew.length === 0) return [...existingItems];
+  const normalizedNew = normalizeA2uiItems(newItems).filter(item => !isV10RpcEnvelopeItem(item));
+  const sanitizedExisting = existingItems.filter(item => !isV10RpcEnvelopeItem(item));
+  if (normalizedNew.length === 0) return [...sanitizedExisting];
 
   const newCreateSurfaces = new Set<string>();
   for (const item of normalizedNew) {
@@ -430,10 +516,10 @@ export function mergeA2uiItems(
     }
   }
 
-  let priorAndExistingItems = existingItems;
+  let priorAndExistingItems = sanitizedExisting;
   if (priorSessionItems && priorSessionItems.length > 0) {
     const knownSurfaces = new Set([
-      ...priorAndExistingItems.map(getItemSurfaceId),
+      ...priorAndExistingItems.map(getA2uiItemSurfaceId),
       ...newCreateSurfaces,
     ]);
     const missingSurfaces = new Set<string>();
@@ -456,7 +542,7 @@ export function mergeA2uiItems(
   const filteredExisting =
     newCreateSurfaces.size > 0
       ? priorAndExistingItems.filter(item => {
-          const surfaceId = getItemSurfaceId(item);
+          const surfaceId = getA2uiItemSurfaceId(item);
           return surfaceId == null || !newCreateSurfaces.has(surfaceId);
         })
       : priorAndExistingItems;
@@ -493,6 +579,19 @@ function categorizeSurfaceItems(items: RenderA2uiItem[]): CategorizedSurfaceItem
   for (const item of items) {
     if (item.createSurface) {
       createSurfaceItems.push(item);
+      const cs = item.createSurface as Record<string, unknown>;
+      if (Array.isArray(cs['components'])) {
+        for (const comp of cs['components']) {
+          if (typeof comp === 'object' && comp !== null) {
+            const componentObject = comp as Record<string, unknown>;
+            for (const reference of extractChildReferences(componentObject)) {
+              childIds.add(reference);
+            }
+            const id = String(componentObject['id']);
+            componentMap.set(id, {...componentMap.get(id), ...componentObject});
+          }
+        }
+      }
     }
     if (item.updateDataModel) {
       updateDataModelItems.push(item);
@@ -716,18 +815,45 @@ function extractCanvasArtifacts(
         : formatCanvasComponents(canvasComponents, childRootIds);
 
       const surfaceId = createSurfaceItems[0]?.createSurface?.surfaceId || 'default';
-      const individualPayload: RenderA2uiItem[] = [
-        ...createSurfaceItems,
-        ...updateDataModelItems,
-        {
-          version: 'v0.9',
-          updateComponents: {
-            surfaceId,
-            components: canvasComponents,
-          },
-        } as RenderA2uiItem,
-        ...otherItems,
-      ];
+      const isV10SingleMessage =
+        (createSurfaceItems[0]?.version === '1.0' || createSurfaceItems[0]?.version === 'v1.0') &&
+        Array.isArray(
+          (createSurfaceItems[0]?.createSurface as Record<string, unknown>)?.['components'],
+        );
+
+      let individualPayload: RenderA2uiItem[];
+      if (isV10SingleMessage) {
+        const cs = createSurfaceItems[0].createSurface as Record<string, unknown>;
+        individualPayload = [
+          {
+            version: '1.0',
+            createSurface: {
+              ...cs,
+              surfaceId,
+              components: canvasComponents,
+            },
+          } as RenderA2uiItem,
+          ...updateDataModelItems,
+          ...otherItems,
+        ];
+      } else {
+        const surfaceVersion =
+          createSurfaceItems[0]?.version === '1.0' || createSurfaceItems[0]?.version === 'v1.0'
+            ? '1.0'
+            : 'v0.9';
+        individualPayload = [
+          ...createSurfaceItems,
+          ...updateDataModelItems,
+          {
+            version: surfaceVersion,
+            updateComponents: {
+              surfaceId,
+              components: canvasComponents,
+            },
+          } as RenderA2uiItem,
+          ...otherItems,
+        ];
+      }
 
       const cardTitle = info.cardTitle || 'Interactive content';
       const cardDescription = info.cardDescription;
@@ -771,11 +897,37 @@ function buildInlineSurfacePayload(
   }
 
   const surfaceId = createSurfaceItems[0]?.createSurface?.surfaceId || 'default';
+  const surfaceVersion =
+    createSurfaceItems[0]?.version === '1.0' || createSurfaceItems[0]?.version === 'v1.0'
+      ? '1.0'
+      : 'v0.9';
+  const isV10SingleMessage =
+    surfaceVersion === '1.0' &&
+    Array.isArray(
+      (createSurfaceItems[0]?.createSurface as Record<string, unknown>)?.['components'],
+    );
+
+  if (isV10SingleMessage) {
+    const cs = createSurfaceItems[0].createSurface as Record<string, unknown>;
+    return [
+      {
+        version: '1.0',
+        createSurface: {
+          ...cs,
+          surfaceId,
+          components: inlineComponents,
+        },
+      } as RenderA2uiItem,
+      ...updateDataModelItems,
+      ...otherItems,
+    ];
+  }
+
   return [
     ...createSurfaceItems,
     ...updateDataModelItems,
     {
-      version: 'v0.9',
+      version: surfaceVersion,
       updateComponents: {
         surfaceId,
         components: inlineComponents,
@@ -802,7 +954,7 @@ export function partitionA2uiSurfacePayload(
   items: RenderA2uiItem[],
   catalog?: Catalog | null,
 ): PartitionedA2uiSurface {
-  const normalized = normalizeA2uiItems(items);
+  const normalized = normalizeA2uiItems(items).filter(item => !isV10RpcEnvelopeItem(item));
   if (normalized.length === 0) {
     return {inlinePayload: null, canvasArtifacts: [], hasCanvas: false};
   }
@@ -864,5 +1016,8 @@ export function unwrapCanvasForRenderer(
   catalog?: Catalog | null,
 ): RenderA2uiItem[] {
   const partitioned = partitionA2uiSurfacePayload(items, catalog);
-  return partitioned.canvasArtifacts[0]?.payload || normalizeA2uiItems(items);
+  return (
+    partitioned.canvasArtifacts[0]?.payload ||
+    normalizeA2uiItems(items).filter(item => !isV10RpcEnvelopeItem(item))
+  );
 }

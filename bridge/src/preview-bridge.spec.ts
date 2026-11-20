@@ -148,7 +148,7 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(bridge['activeRenderer']).toBeNull();
   });
 
-  it('emits RENDERER_READY signal only when attachRenderer is called', async () => {
+  it('emits RENDERER_READY signal with supportsRenderId capability when attachRenderer is called', async () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
 
     // Handshake should NOT be sent upon simple document load events anymore
@@ -165,7 +165,10 @@ describe('PreviewBridge Core API Runtime', () => {
     });
 
     expect(spy).toHaveBeenCalledWith(
-      expect.objectContaining({type: PreviewBridgeMessageType.RENDERER_READY}),
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        supportsRenderId: true,
+      }),
       window.location.origin,
     );
   });
@@ -2986,6 +2989,420 @@ describe('PreviewBridge Core API Runtime', () => {
         expect.objectContaining({type: PreviewBridgeMessageType.RENDER_SUCCESS}),
         expect.anything(),
       );
+    });
+
+    it('echoes renderId on RENDER_SUCCESS and RENDER_ERROR when provided, and omits it when untagged', async () => {
+      const postSpy = vi.mocked(window.parent.postMessage);
+      postSpy.mockClear();
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            renderId: 'render-tagged-1',
+            payload: [{version: 'v0.9', updateComponents: {surfaceId: 's1', components: []}}],
+          },
+          source: window.parent,
+          origin: window.location.origin,
+        }),
+      );
+
+      expect(postSpy).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.RENDER_SUCCESS,
+          renderId: 'render-tagged-1',
+        },
+        expect.anything(),
+      );
+
+      postSpy.mockClear();
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [{version: 'v0.9', updateComponents: {surfaceId: 's1', components: []}}],
+          },
+          source: window.parent,
+          origin: window.location.origin,
+        }),
+      );
+
+      const untaggedCall = postSpy.mock.calls.find(
+        c => (c[0] as {type?: string})?.type === PreviewBridgeMessageType.RENDER_SUCCESS,
+      );
+      expect(untaggedCall?.[0]).toEqual({type: PreviewBridgeMessageType.RENDER_SUCCESS});
+
+      postSpy.mockClear();
+      processMessagesMock.mockImplementation(() => {
+        throw new Error('Render failed');
+      });
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            renderId: 'render-err-1',
+            payload: [{version: 'v0.9', updateComponents: {surfaceId: 's1', components: []}}],
+          },
+          source: window.parent,
+          origin: window.location.origin,
+        }),
+      );
+
+      expect(postSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: PreviewBridgeMessageType.RENDER_ERROR,
+          renderId: 'render-err-1',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('coalesces overlapping createSurface dispatches and echoes only the latest renderId without clobbering synchronous sends', async () => {
+      vi.useFakeTimers();
+      try {
+        const postSpy = vi.mocked(window.parent.postMessage);
+        postSpy.mockClear();
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              renderId: 'render-coalesced-1',
+              payload: [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              renderId: 'render-coalesced-2',
+              payload: [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        // Non-createSurface message while a createSurface timer is pending queues behind it
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              payload: [
+                {
+                  version: '1.0',
+                  callRendererFunction: {
+                    surfaceId: 's1',
+                    functionCallId: 'fn-1',
+                    callFunction: {'@call': 'ping'},
+                  },
+                },
+              ],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        expect(
+          postSpy.mock.calls.filter(
+            c => (c[0] as {type?: string})?.type === PreviewBridgeMessageType.RENDER_SUCCESS,
+          ),
+        ).toHaveLength(0);
+
+        vi.runAllTimers();
+
+        const deferredSuccess = postSpy.mock.calls
+          .filter(c => (c[0] as {type?: string})?.type === PreviewBridgeMessageType.RENDER_SUCCESS)
+          .map(c => c[0]);
+        expect(deferredSuccess).toEqual([
+          {type: PreviewBridgeMessageType.RENDER_SUCCESS, renderId: 'render-coalesced-2'},
+          {type: PreviewBridgeMessageType.RENDER_SUCCESS},
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('executes deferred follow-up updates after a pending createSurface in FIFO order and discards them if superseded by a newer createSurface', () => {
+      vi.useFakeTimers();
+      try {
+        const postSpy = vi.mocked(window.parent.postMessage);
+        postSpy.mockClear();
+        processMessagesMock.mockClear();
+
+        // P1: createSurface (render-1) schedules deferred timer
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              renderId: 'render-1',
+              payload: [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        // P2: incremental update (render-2) arrives before P1's timer fires -> must run AFTER P1
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              renderId: 'render-2',
+              payload: [{version: 'v0.9', updateDataModel: {surfaceId: 's1', value: {step: 2}}}],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        // Neither P1 nor P2 should have emitted RENDER_SUCCESS before timer flush
+        expect(
+          postSpy.mock.calls.filter(
+            c => (c[0] as {type?: string})?.type === PreviewBridgeMessageType.RENDER_SUCCESS,
+          ),
+        ).toHaveLength(0);
+
+        vi.runAllTimers();
+
+        const successMsgs = postSpy.mock.calls
+          .filter(c => (c[0] as {type?: string})?.type === PreviewBridgeMessageType.RENDER_SUCCESS)
+          .map(c => c[0]);
+        expect(successMsgs).toEqual([
+          {type: PreviewBridgeMessageType.RENDER_SUCCESS, renderId: 'render-1'},
+          {type: PreviewBridgeMessageType.RENDER_SUCCESS, renderId: 'render-2'},
+        ]);
+
+        // Verify execution order in processMessages: P1 createSurface ran before P2 updateDataModel
+        const createIdx = processMessagesMock.mock.calls.findIndex(
+          call =>
+            Array.isArray(call[0]) &&
+            call[0].some((item: Record<string, unknown>) => 'createSurface' in item),
+        );
+        const updateIdx = processMessagesMock.mock.calls.findIndex(
+          call =>
+            Array.isArray(call[0]) &&
+            call[0].some((item: Record<string, unknown>) => 'updateDataModel' in item),
+        );
+        expect(createIdx).toBeGreaterThanOrEqual(0);
+        expect(updateIdx).toBeGreaterThan(createIdx);
+
+        // Now verify a newer createSurface discards a pending createSurface and its queued follow-ups
+        postSpy.mockClear();
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              renderId: 'render-old-1',
+              payload: [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              renderId: 'render-old-2',
+              payload: [{version: 'v0.9', updateDataModel: {surfaceId: 's1', value: {step: 99}}}],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              renderId: 'render-new-3',
+              payload: [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        vi.runAllTimers();
+
+        const supersedingSuccess = postSpy.mock.calls
+          .filter(c => (c[0] as {type?: string})?.type === PreviewBridgeMessageType.RENDER_SUCCESS)
+          .map(c => c[0]);
+        expect(supersedingSuccess).toEqual([
+          {type: PreviewBridgeMessageType.RENDER_SUCCESS, renderId: 'render-new-3'},
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('preserves queued RPC envelopes and pendingRenderId across a superseding createSurface', () => {
+      vi.useFakeTimers();
+      try {
+        const postSpy = vi.mocked(window.parent.postMessage);
+        postSpy.mockClear();
+        processMessagesMock.mockClear();
+
+        // 1. Tagged createSurface schedules deferred render
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              renderId: 'render-tagged-1',
+              payload: [{version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'c1'}}],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        // 2. Queued mixed payload with superseded surface update + RPC envelopes
+        const queuedRpcCall = {
+          version: '1.0',
+          callRendererFunction: {
+            surfaceId: 's1',
+            functionCallId: 'fn-queued-1',
+            callFunction: {['@call']: 'focusInput'},
+          },
+        };
+        const queuedAgentResp = {
+          version: '1.0',
+          agentFunctionResponse: {
+            functionCallId: 'agent-fn-1',
+            value: {ok: true},
+          },
+        };
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              renderId: 'render-rpc-2',
+              payload: [
+                {version: '1.0', updateDataModel: {surfaceId: 's1', value: {stale: true}}},
+                queuedRpcCall,
+                queuedAgentResp,
+              ],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        // 3. Superseding untagged createSurface coalesces in the same tick
+        const newSurfacePayload = [
+          {version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
+        ];
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              payload: newSurfacePayload,
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        vi.runAllTimers();
+
+        // Superseded updateDataModel was dropped, while new createSurface (with pre-delete) + queued RPC envelopes ran in order
+        const processedBatches = processMessagesMock.mock.calls.map(c => c[0]);
+        expect(processedBatches).toEqual([
+          [{version: '1.0', deleteSurface: {surfaceId: 's1'}}],
+          newSurfacePayload,
+          [queuedRpcCall, queuedAgentResp],
+        ]);
+
+        // Preserved renderId ('render-tagged-1' from superseded createSurface, and 'render-rpc-2' from RPC follow-up)
+        const successMsgs = postSpy.mock.calls
+          .filter(c => (c[0] as {type?: string})?.type === PreviewBridgeMessageType.RENDER_SUCCESS)
+          .map(c => c[0]);
+        expect(successMsgs).toEqual([
+          {type: PreviewBridgeMessageType.RENDER_SUCCESS, renderId: 'render-tagged-1'},
+          {type: PreviewBridgeMessageType.RENDER_SUCCESS, renderId: 'render-rpc-2'},
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('drops queued items whose RPC key is explicitly undefined when a superseding createSurface arrives', () => {
+      vi.useFakeTimers();
+      let unsubscribeHandle: {unsubscribe(): void} | undefined;
+      try {
+        const processMessagesMock = vi.fn();
+        const surfaceGroupMock = {onSurfaceCreated: {subscribe: vi.fn()}};
+        unsubscribeHandle = bridge.attachRenderer(
+          {processMessages: processMessagesMock} as unknown as Parameters<
+            typeof bridge.attachRenderer
+          >[0],
+          {
+            surfaceGroup: surfaceGroupMock as unknown as Parameters<
+              typeof bridge.attachRenderer
+            >[1]['surfaceGroup'],
+            onSurfaceReady: vi.fn(),
+          },
+        );
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              payload: [{version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'c1'}}],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        // Payload has an explicit `undefined` RPC key alongside a surface update
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              payload: [
+                {
+                  version: '1.0',
+                  updateDataModel: {surfaceId: 's1', value: {stale: true}},
+                  callRendererFunction: undefined,
+                },
+              ],
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        const newSurfacePayload = [
+          {version: '1.0', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
+        ];
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              payload: newSurfacePayload,
+            },
+            source: window.parent,
+            origin: window.location.origin,
+          }),
+        );
+
+        vi.runAllTimers();
+
+        const processedBatches = processMessagesMock.mock.calls.map(c => c[0]);
+        expect(processedBatches).toEqual([
+          [{version: '1.0', deleteSurface: {surfaceId: 's1'}}],
+          newSurfacePayload,
+        ]);
+      } finally {
+        unsubscribeHandle?.unsubscribe();
+        vi.useRealTimers();
+      }
     });
   });
 
