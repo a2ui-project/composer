@@ -201,6 +201,46 @@ describe('ComponentTree', () => {
     expect(expandedRows[1].expanded).toBe(true);
   });
 
+  it('isolates collapsed state per surface when surfaces share component ids', async () => {
+    activeCatalog.set(PRIMARY_CATALOG);
+    activeDraft.set(
+      formatJson([
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 'first',
+            catalogId: 'primary-catalog',
+            components: [
+              {id: 'root', component: 'Column', children: ['childA']},
+              {id: 'childA', component: 'Text', text: 'A'},
+            ],
+          },
+        },
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 'second',
+            catalogId: 'primary-catalog',
+            components: [
+              {id: 'root', component: 'Column', children: ['childB']},
+              {id: 'childB', component: 'Text', text: 'B'},
+            ],
+          },
+        },
+      ]),
+    );
+    fixture.detectChanges();
+
+    await harness.toggleRow('#root', 0);
+
+    const rows = await harness.getRows();
+    expect(rows.map(row => ({id: row.id, expanded: row.expanded}))).toEqual([
+      {id: '#root', expanded: false},
+      {id: '#root', expanded: true},
+      {id: '#childB', expanded: null},
+    ]);
+  });
+
   it('renders badges and tooltips for missing, cyclic, template, and shared nodes', async () => {
     activeCatalog.set(PRIMARY_CATALOG);
     activeDraft.set(

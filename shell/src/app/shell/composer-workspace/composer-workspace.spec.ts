@@ -953,6 +953,10 @@ describe('ComposerWorkspace Dashboard', () => {
         )!.instance as PropertyEditor;
       });
 
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
       it('activates the Property Editor panel and binds the selected component when a tree node is selected', () => {
         componentTree.selectNode('s', TITLE_NODE);
         fixture.detectChanges();
@@ -1099,6 +1103,19 @@ describe('ComposerWorkspace Dashboard', () => {
         fixture.detectChanges();
 
         expect(propertyEditor.disabled()).toBe(false);
+      });
+
+      it('logs non-empty Property Editor statusMessage events as warnings and ignores empty ones', () => {
+        const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
+
+        propertyEditor.statusMessage.emit('');
+        propertyEditor.statusMessage.emit('Required property cannot be empty.');
+
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        expect(warnSpy).toHaveBeenCalledWith({
+          message: 'Required property cannot be empty.',
+          sourceTag: '[Shell]',
+        });
       });
     });
   });

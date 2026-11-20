@@ -17,7 +17,7 @@
 import {expect, test} from './fixtures';
 import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
-import {resetStorageOnce} from './helpers';
+import {getMonacoContent, resetStorageOnce} from './helpers';
 
 test.beforeEach(async ({page}) => {
   await resetStorageOnce(page, {
@@ -75,6 +75,53 @@ test.describe('Component Tree Panel', () => {
       '#book_button',
       '#book_button_text',
     ]);
+    expect(pageErrors).toEqual([]);
+  });
+
+  test('selects a component from the tree, edits its property, and updates the preview and draft', async ({
+    page,
+  }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+    await page.goto(`/?renderer=${RENDERER_URLS.angular}`);
+    await expect(previewFrame(page).getByRole('button', {name: 'Search Cars'})).toBeVisible();
+
+    await page.getByRole('tab', {name: 'Component Tree'}).click();
+    await page.getByRole('treeitem', {name: /#book_button_text/}).click();
+
+    await expect(page.getByRole('tab', {name: 'Property Editor', selected: true})).toBeVisible();
+    const propertyEditor = page.locator('a2ui-composer-property-editor');
+    await expect(propertyEditor.locator('[data-property-header]')).toContainText(
+      'Text #book_button_text',
+    );
+    const textInput = propertyEditor.getByRole('textbox', {name: 'text', exact: true});
+    await expect(textInput).toHaveValue('Search Cars');
+
+    await textInput.fill('Book Now');
+
+    await page.getByRole('tab', {name: 'Rendered A2UI Preview'}).click();
+    await expect(previewFrame(page).getByRole('button', {name: 'Book Now'})).toBeVisible();
+    await expect
+      .poll(async () => {
+        const draft: unknown = JSON.parse(await getMonacoContent(page));
+        return draft;
+      })
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            updateComponents: expect.objectContaining({
+              components: expect.arrayContaining([
+                {
+                  id: 'book_button_text',
+                  component: 'Text',
+                  text: 'Book Now',
+                  variant: 'body',
+                },
+              ]),
+            }),
+          }),
+        ]),
+      );
     expect(pageErrors).toEqual([]);
   });
 });
