@@ -318,7 +318,7 @@ export class A2aChatView implements OnInit {
     } finally {
       this.isConnecting.set(false);
       if (this.configDialogRef) {
-        this.configDialogRef.disableClose = !this.agentCard();
+        this.configDialogRef.disableClose = false;
       }
     }
   }
@@ -332,10 +332,8 @@ export class A2aChatView implements OnInit {
     this.configProvider.setA2aAgentUrl('');
     this.configProvider.setA2aTenantId('');
     this.agentCard.set(null);
-    if (this.configDialogRef) {
-      this.configDialogRef.disableClose = true;
-    }
     this.agentInfo.set(null);
+    this.connectionError.set(null);
     this.messages.set([]);
     this.inspectorEvents.set([]);
     this.inspectorSearchQuery.set('');
@@ -906,7 +904,7 @@ export class A2aChatView implements OnInit {
       ariaLabel: 'A2A Agent Configuration',
       maxWidth: '480px',
       width: '100%',
-      disableClose: !this.agentCard() || this.isConnecting(),
+      disableClose: this.isConnecting(),
     });
     this.configDialogRef = ref;
     ref
