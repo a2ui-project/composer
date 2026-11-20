@@ -1851,8 +1851,8 @@ describe('Gallery Component', () => {
       expect(await harness.getPropertyLabelFor('label')).toBeNull();
       expect(await harness.getPropertyNote('options.0.label')).toContain('Bound to /optionLabel');
       expect(await harness.getPropertyLabelFor('options.0.label')).toBeNull();
-      expect(await harness.getPropertyLabelFor('options.0.value')).toBe(
-        'gallery-property-options.0.value',
+      expect(await harness.getPropertyLabelFor('options.0.value')).toMatch(
+        /^property-editor-\d+-options\.0\.value$/,
       );
       await harness.selectPropertyOption('displayStyle', 1);
       expect((await target()).label).toEqual({path: '/sizeLabel'});
@@ -2080,8 +2080,8 @@ describe('Gallery Component', () => {
       expect(await harness.getPropertyControlKind('options.0.label')).toBeNull();
       expect(await harness.getPropertyLabelFor('options.0.label')).toBeNull();
       expect(await harness.getPropertyControlKind('options.0.value')).toBe('text');
-      expect(await harness.getPropertyLabelFor('options.0.value')).toBe(
-        'gallery-property-options.0.value',
+      expect(await harness.getPropertyLabelFor('options.0.value')).toMatch(
+        /^property-editor-\d+-options\.0\.value$/,
       );
 
       expect(await harness.getPropertyNote('value.0')).toBe(

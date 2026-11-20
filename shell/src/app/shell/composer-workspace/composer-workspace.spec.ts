@@ -50,6 +50,9 @@ import {ChatPanel} from '../../chat/chat-panel/chat-panel';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {DataModel} from '../../debug/data-model/data-model';
+import {ComponentTree} from '../../debug/component-tree/component-tree';
+import {ComponentTreeNode} from '../../debug/component-tree/component-tree-builder';
+import {PropertyEditor} from '../../shared/property-editor/property-editor';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -155,12 +158,14 @@ describe('ComposerWorkspace Dashboard', () => {
     // so we verify they were instantiated by the Angular view container.
     const manager = fixture.debugElement.injector.get(ComposerDockview);
     const refs = manager.dynamicComponentRefs;
-    expect(refs.length).toBe(7);
+    expect(refs.length).toBe(9);
     const types = refs.map(r => r.componentType);
     expect(types).toContain(ChatPanel);
     expect(types).toContain(RenderedFrame);
     expect(types).toContain(RawFrame);
+    expect(types).toContain(ComponentTree);
     expect(types).toContain(DataModel);
+    expect(types).toContain(PropertyEditor);
   });
 
   it('sizes the docked Rendered panel frame to fill its panel and replace the default target', () => {
@@ -389,6 +394,45 @@ describe('ComposerWorkspace Dashboard', () => {
         const restored = await returnToWorkspace();
         expect(restored.api.getGroupPanel(ComposerPanelId.Rendered)?.title).toBe('My preview');
         expect(restored.api.getGroupPanel(ComposerPanelId.Events)?.api.isActive).toBe(true);
+        expect(restored.api.panels.map(panel => panel.id).sort()).toEqual(
+          Object.values(ComposerPanelId).sort(),
+        );
+        expect(errorSpy).not.toHaveBeenCalled();
+      });
+
+      it('adds missing panels as inactive tabs at their default positions when restoring an older layout', async () => {
+        const manager = fixture.debugElement.injector.get(ComposerDockview);
+        const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
+        manager.setPanelTitle(ComposerPanelId.Rendered, 'My preview');
+        manager.openPanel(ComposerPanelId.Events);
+        const componentTreePanel = manager.api.getGroupPanel(ComposerPanelId.ComponentTree);
+        const propertyEditorPanel = manager.api.getGroupPanel(ComposerPanelId.PropertyEditor);
+        expect(componentTreePanel).toBeDefined();
+        expect(propertyEditorPanel).toBeDefined();
+        manager.api.removePanel(componentTreePanel!);
+        manager.api.removePanel(propertyEditorPanel!);
+
+        const legacyLayout = manager.api.toJSON();
+        expect(legacyLayout.panels[ComposerPanelId.ComponentTree]).toBeUndefined();
+        expect(legacyLayout.panels[ComposerPanelId.PropertyEditor]).toBeUndefined();
+        fixture.destroy();
+        storage.setItem(LocalStorageKey.DOCKVIEW_LAYOUT, JSON.stringify(legacyLayout));
+
+        const restored = await returnToWorkspace();
+        const restoredRendered = restored.api.getGroupPanel(ComposerPanelId.Rendered);
+        const restoredDataModel = restored.api.getGroupPanel(ComposerPanelId.DataModel);
+        const restoredComponentTree = restored.api.getGroupPanel(ComposerPanelId.ComponentTree);
+        const restoredPropertyEditor = restored.api.getGroupPanel(ComposerPanelId.PropertyEditor);
+
+        expect(restoredRendered?.title).toBe('My preview');
+        expect(restoredRendered?.group.activePanel?.id).toBe(ComposerPanelId.Rendered);
+        expect(restored.api.getGroupPanel(ComposerPanelId.Events)?.api.isActive).toBe(true);
+        expect(restoredComponentTree).toBeDefined();
+        expect(restoredComponentTree?.group).toBe(restoredRendered?.group);
+        expect(restored.isPanelVisible(ComposerPanelId.ComponentTree)).toBe(false);
+        expect(restoredPropertyEditor).toBeDefined();
+        expect(restoredPropertyEditor?.group).toBe(restoredDataModel?.group);
+        expect(restored.isPanelVisible(ComposerPanelId.PropertyEditor)).toBe(false);
         expect(restored.api.panels.map(panel => panel.id).sort()).toEqual(
           Object.values(ComposerPanelId).sort(),
         );
@@ -734,6 +778,7 @@ describe('ComposerWorkspace Dashboard', () => {
           ComposerPanelId.Events,
           ComposerPanelId.Errors,
           ComposerPanelId.RawMessages,
+          ComposerPanelId.PropertyEditor,
         ]);
         expect(debugGroup.activePanel?.id).toBe(ComposerPanelId.DataModel);
       });
@@ -852,7 +897,7 @@ describe('ComposerWorkspace Dashboard', () => {
         expect(dataModelPanel!.group.activePanel?.id).toBe(ComposerPanelId.DataModel);
         expect(chatPanel!.group.activePanel?.id).toBe(ComposerPanelId.Chat);
 
-        // Check all 7 panels exist
+        // Check all 9 default panels exist
         expect(manager.api.panels.map(p => p.id).sort()).toEqual(
           Object.values(ComposerPanelId).sort(),
         );
@@ -860,6 +905,217 @@ describe('ComposerWorkspace Dashboard', () => {
         // Check proportions
         expect(chatPanel!.group.width).toBeLessThanOrEqual(Math.ceil(DEFAULT_CONTAINER_WIDTH / 3));
         expect(dataModelPanel!.group.height).toBeLessThan(renderedPanel!.group.height);
+      });
+    });
+
+    describe('Property Editor Panel', () => {
+      const TITLE_NODE: ComponentTreeNode = {
+        key: 's/root/0:title',
+        id: 'title',
+        type: 'Text',
+        via: 'children',
+        status: 'ok',
+        shared: false,
+        template: null,
+        children: [],
+      };
+
+      let stateSync: MockStateSync;
+      let manager: ComposerDockview;
+      let componentTree: ComponentTree;
+      let propertyEditor: PropertyEditor;
+
+      beforeEach(() => {
+        stateSync = TestBed.inject(StateSync) as unknown as MockStateSync;
+        stateSync.activeDraftSignal.set(
+          JSON.stringify([
+            {version: 'v0.9', createSurface: {surfaceId: 's', catalogId: 'basic'}},
+            {
+              version: 'v0.9',
+              updateComponents: {
+                surfaceId: 's',
+                components: [
+                  {id: 'root', component: 'Column', children: ['title']},
+                  {id: 'title', component: 'Text', text: 'Hello'},
+                ],
+              },
+            },
+          ]),
+        );
+        fixture.detectChanges();
+
+        manager = fixture.debugElement.injector.get(ComposerDockview);
+        componentTree = manager.dynamicComponentRefs.find(
+          ref => ref.componentType === ComponentTree,
+        )!.instance as ComponentTree;
+        propertyEditor = manager.dynamicComponentRefs.find(
+          ref => ref.componentType === PropertyEditor,
+        )!.instance as PropertyEditor;
+      });
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it('activates the Property Editor panel and binds the selected component when a tree node is selected', () => {
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+
+        const propertyEditorPanel = manager.api.getGroupPanel(ComposerPanelId.PropertyEditor);
+        expect(propertyEditorPanel?.group.activePanel?.id).toBe(ComposerPanelId.PropertyEditor);
+        expect(propertyEditor.resetKey()).toBe('s:s/root/0:title:0');
+        expect(propertyEditor.showHeader()).toBe(true);
+        expect(propertyEditor.showStatus()).toBe(true);
+        expect(propertyEditor.component()).toEqual({
+          id: 'title',
+          component: 'Text',
+          text: 'Hello',
+        });
+      });
+
+      it('updates the active draft when Property Editor emits componentChange', () => {
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+
+        propertyEditor.componentChange.emit({
+          id: 'title',
+          component: 'Text',
+          text: 'Updated',
+        });
+        fixture.detectChanges();
+
+        const updatedDraft = JSON.parse(stateSync.activeDraft());
+        expect(updatedDraft[1].updateComponents.components[1]).toEqual({
+          id: 'title',
+          component: 'Text',
+          text: 'Updated',
+        });
+      });
+
+      it('changes resetKey when switching between occurrences of a shared component', () => {
+        stateSync.activeDraftSignal.set(
+          JSON.stringify([
+            {version: 'v0.9', createSurface: {surfaceId: 's', catalogId: 'basic'}},
+            {
+              version: 'v0.9',
+              updateComponents: {
+                surfaceId: 's',
+                components: [
+                  {id: 'root', component: 'Column', children: ['title', 'title']},
+                  {id: 'title', component: 'Text', text: 'Hello'},
+                ],
+              },
+            },
+          ]),
+        );
+        fixture.detectChanges();
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+        const firstResetKey = propertyEditor.resetKey();
+
+        componentTree.selectNode('s', {...TITLE_NODE, key: 's/root/1:title'});
+        fixture.detectChanges();
+
+        expect(propertyEditor.resetKey()).not.toBe(firstResetKey);
+      });
+
+      it('changes resetKey when the active draft is modified externally', () => {
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+        const initialResetKey = propertyEditor.resetKey();
+
+        stateSync.activeDraftSignal.set(
+          JSON.stringify([
+            {version: 'v0.9', createSurface: {surfaceId: 's', catalogId: 'basic'}},
+            {
+              version: 'v0.9',
+              updateComponents: {
+                surfaceId: 's',
+                components: [
+                  {id: 'root', component: 'Column', children: ['title']},
+                  {id: 'title', component: 'Text', text: 'External edit'},
+                ],
+              },
+            },
+          ]),
+        );
+        fixture.detectChanges();
+
+        expect(propertyEditor.resetKey()).not.toBe(initialResetKey);
+      });
+
+      it('changes resetKey when the session resets even if the draft text is unchanged', () => {
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+        const initialResetKey = propertyEditor.resetKey();
+
+        stateSync.sessionResetNonce.update(count => count + 1);
+        fixture.detectChanges();
+
+        expect(propertyEditor.resetKey()).not.toBe(initialResetKey);
+        expect(propertyEditor.emptyMessage()).toBe('Select a component to inspect its properties.');
+      });
+
+      it('shows a missing-component emptyMessage when a selected node is not defined in the surface', () => {
+        componentTree.selectNode('s', {
+          ...TITLE_NODE,
+          key: 's/root/0:ghost',
+          id: 'ghost',
+          type: null,
+          status: 'missing',
+        });
+        fixture.detectChanges();
+
+        expect(propertyEditor.component()).toBeNull();
+        expect(propertyEditor.emptyMessage()).toBe(
+          'Component #ghost is not defined in surface "s".',
+        );
+      });
+
+      it('shows an invalid-JSON emptyMessage when the active draft fails to parse', () => {
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+
+        stateSync.activeDraftSignal.set('{invalid');
+        fixture.detectChanges();
+
+        expect(propertyEditor.component()).toBeNull();
+        expect(propertyEditor.emptyMessage()).toBe(
+          'Fix the A2UI JSON to inspect component properties.',
+        );
+      });
+
+      it('disables the Property Editor when a programmatic stream starts', () => {
+        const chatState = TestBed.inject(ChatState) as unknown as MockChatState;
+
+        chatState.setProgrammaticStreamActive(true);
+        fixture.detectChanges();
+
+        expect(propertyEditor.disabled()).toBe(true);
+      });
+
+      it('re-enables the Property Editor when a programmatic stream ends', () => {
+        const chatState = TestBed.inject(ChatState) as unknown as MockChatState;
+        chatState.setProgrammaticStreamActive(true);
+        fixture.detectChanges();
+
+        chatState.setProgrammaticStreamActive(false);
+        fixture.detectChanges();
+
+        expect(propertyEditor.disabled()).toBe(false);
+      });
+
+      it('logs non-empty Property Editor statusMessage events as warnings and ignores empty ones', () => {
+        const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
+
+        propertyEditor.statusMessage.emit('');
+        propertyEditor.statusMessage.emit('Required property cannot be empty.');
+
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        expect(warnSpy).toHaveBeenCalledWith({
+          message: 'Required property cannot be empty.',
+          sourceTag: '[Shell]',
+        });
       });
     });
   });
