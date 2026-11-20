@@ -3,17 +3,11 @@
   "description": "An editable checklist that carries selected steps into a workflow action.",
   "messages": [
     {
-      "version": "v0.9",
+      "version": "1.0",
       "createSurface": {
         "surfaceId": "showcase-04-workflow",
-        "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
-        "sendDataModel": true
-      }
-    },
-    {
-      "version": "v0.9",
-      "updateComponents": {
-        "surfaceId": "showcase-04-workflow",
+        "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
+        "sendDataModel": true,
         "components": [
           {
             "id": "root",
@@ -32,7 +26,7 @@
               "creative",
               "localize",
               "review",
-              "divider-two",
+              "divider_two",
               "actions"
             ]
           },
@@ -45,8 +39,7 @@
           {
             "id": "title",
             "component": "Text",
-            "text": "Summer product launch",
-            "variant": "h3"
+            "text": "### Summer product launch"
           },
           {
             "id": "divider",
@@ -57,7 +50,7 @@
             "component": "CheckBox",
             "label": "Identify creative opportunities",
             "value": {
-              "path": "/research"
+              "@path": "/research"
             }
           },
           {
@@ -65,7 +58,7 @@
             "component": "CheckBox",
             "label": "Develop the creative brief",
             "value": {
-              "path": "/brief"
+              "@path": "/brief"
             }
           },
           {
@@ -73,7 +66,7 @@
             "component": "CheckBox",
             "label": "Generate campaign assets",
             "value": {
-              "path": "/creative"
+              "@path": "/creative"
             }
           },
           {
@@ -81,7 +74,7 @@
             "component": "CheckBox",
             "label": "Localize for each market",
             "value": {
-              "path": "/localize"
+              "@path": "/localize"
             }
           },
           {
@@ -89,11 +82,11 @@
             "component": "CheckBox",
             "label": "Review and publish",
             "value": {
-              "path": "/review"
+              "@path": "/review"
             }
           },
           {
-            "id": "divider-two",
+            "id": "divider_two",
             "component": "Divider"
           },
           {
@@ -105,33 +98,33 @@
           {
             "id": "start",
             "component": "Button",
-            "child": "start-label",
+            "child": "start_label",
             "variant": "primary",
             "action": {
               "event": {
                 "name": "startPlan",
                 "context": {
                   "research": {
-                    "path": "/research"
+                    "@path": "/research"
                   },
                   "brief": {
-                    "path": "/brief"
+                    "@path": "/brief"
                   },
                   "creative": {
-                    "path": "/creative"
+                    "@path": "/creative"
                   },
                   "localize": {
-                    "path": "/localize"
+                    "@path": "/localize"
                   },
                   "review": {
-                    "path": "/review"
+                    "@path": "/review"
                   }
                 }
               }
             }
           },
           {
-            "id": "start-label",
+            "id": "start_label",
             "component": "Text",
             "text": "Start plan",
             "variant": "body"
@@ -139,17 +132,11 @@
           {
             "id": "details",
             "component": "Text",
-            "text": "5 steps · Ready when you are",
+            "text": "5 steps \u00b7 Ready when you are",
             "variant": "caption"
           }
-        ]
-      }
-    },
-    {
-      "version": "v0.9",
-      "updateDataModel": {
-        "surfaceId": "showcase-04-workflow",
-        "value": {
+        ],
+        "dataModel": {
           "research": true,
           "brief": true,
           "creative": false,

@@ -15,26 +15,20 @@
  */
 
 /**
- * Compressed A2UI corresponding to the EV_CHARGE_CONTROL_A2UI.
+ * Compressed A2UI corresponding to the v1.0 EV_CHARGE_CONTROL_A2UI.
  */
 export const ELECTRIC_CAR_CHARGING_UI =
-  'a2ui=d1.pVZdr9s2DP0rArG9Bflwk63125oO6H0YBvQO7cPFhaHYTKzWlgyJTpoF-e-DZDmRY998YE9x6KND8pCm-HKALWojlIQYttPxBxhBqpETPtd6zVOE-ACmeXzKIAbcJmnO9UbIjYVy4oXauDc5UWXiyYRHtRgrvZmYClOxFiknoeRkO00-TFbciDTxp8bfjZJwPI4GYqirjBMuVVkpiZLMjTAC3MsBhEVopSh8BTEsVVGX0hpzUWQaJcQvkCPPUMMIiK9MkipJXEjU8GrjckwnRMj1Re1gBN9rQ2K9hxhMxVP8iLRDtB54ITY2nRQlNWd7LhMSVCCM2r8iVbLn9QQKff-DP21qZH9i-PMrW1opkC2VJK0KGMGWa8EdNo_gktI56jI-NSbJS4QYhFyr86kLXS5C4SvjtXPSN-HGsKy1RknsmTjVps3f6uQMCfGV89DiPwtDSu8DYN5YGuRZluD8HcX16JTrzBYltZ2YaLWDHqGHdBi9qRu5BTo5LGiI5fTyjvhWnAj1Pilwi0VCTV3bxk40J2yNmdgKW7wZjJwzc5HGMNNbTXOAilMOMUzSplCTznk4dlpods5zMLYH3HidSrPp-lipbH_2EiYbkn9q7LaUP4WxoSkt_rWtWXRL0ahzxxf7h1a1zAa6JiFRotc6qdSuMxFCwAPJ2xOJxpILaedWR4CUV7Y5u2l4xw85aY5c5w4-hOsaDY6vFcnEkKoSjaZ2GliLxrVGk4ct2cOFrj7WREoG39cJ7rvqHH-lRcndcGgCt2nj1tEc2plFarMpcNneCcdjP4zHu9XrVPCV_SY6jG26dyTlof28MlzzuqCrefnDfo4eB4O4mRl88dGer4Jgut5zSXp4IQyFd1RovklzOAOewtN-9Lbie3Og9wXwyoxukYKw7A_pwbcPZK_Vzo2k8H80IEeLe2BfGHJnN6DAW6oGtfeo213tgFeGbsfPPYQOeAdhI9P_lgMl6s0-ECSrtVstB0Q5YW9n4aHXB2bP5V2Ct-Bh7tdrm-8nTvwvlWFxffHd8qJ2K7qfWPaxe5PH8H7xq18QM3-f-Qs4hnZcMk7ssyqRPdcVasffrMTdCyuG-YKVQhpGiq3rwm6azXUTw-_jOfvxjU1YNJ9-Pe9azeiM4ZlUxc7T-VREtzS6zozh75RYNB-xaBr95gQ2Vq9fZtF4PoVRWygbxDhiP77ljGeZy-kkdAzvcjZblK5wIeu0x_p-vOiQvovGs7dIo5zNpj3S2aIf6mI867AuFuPpW6zznE1tqK_H4_H1Pw';
+  'a2ui=d1.pVbBjts2EP0VYtLeDNlW7DbQqY1bIHsoCmSL5LBYCLQ0tphIpECOvNka-veAFGVTlnZjtydb5OObeY_DIR-OcEBthJKQwDJawAwyjZzwvtE7niEkRzDd37scEsBDmhVc74XcWygnXqq9mymIapPM5zxuRKT0fm5qzMROZJyEkvPDMl3MPd7Mt9yIrP-MvhglLZuqaiVRkoHk4QjCsmqlKJyCBDaqbCqHL0SZa5SQPECBPEcNMyC-NWmmJHEhUcNjO_NMJ0TI9VE9wQy-NIbE7hkSMDXP8D3SE6KNwEuxt8ZkKKlbOwqZkqASYdZ_ikzJUdQTKIz9D36z0sj-JPDmDfvzE9tYb5FtlCStSrikceRDlrtuSPIKIQEhd-q86sKLi_B8a7xfzu4uxQQ2jdYoid0Tp8b0mq03biAlvnURevwHYUjp5wBYdCMd8mxFsP6KDfXojOvcbkRmiyjV6glGhB4yYPRDw8wt0NlhQVMsp8kr8ttyItTPaYkHLFPq9rI_GqnmhP1gLg7Cbt4SZi6YuZAxzfRSoRzht5pTAQnMs26n5gMCaE_Ek9ncQuytqcw-YA3lhGR_dON2s74JY8tAafGvLb5yaHan_4pz-LtWjcwn6iIlUaF3M63V0-Cch4BbxNolqcaKC2mbWzsk7KLcxtitORMFRfy6-sl2syWZGlJ1qtE0Tp0d0bjTaIqwnEa4MNT7hkjJ4Gyc4L4-DlwL7qC1FhV3B7tL3GrEg6M59v2G1H5f4qa_Edp2nMZ_qDtvVMm3g3oO9V6hykPHwnLc8aakV4X5xb4JtpNJ_FAafPTZnvt40BqvudU8vBSGwkslHP4hzfEMuAtX-77Zm--HA78vgK802B4pCKtxh52cvUG9Vk-u24Tf8YQdPe6GC34qXM4Jg2iZmvTeo64oa4eccFWNNu8FAoccE3Q2_G-5KFHvnwPBeaPdk21C9Al7RdYeO877xH-dez26bR9n1kv-l8qxdGXdtQv7d3gFJvBu_bN_S-X-nvD3WAJ9s2Kc2AdVIbtvatTuruwekMN7IIHVmlVCGkaK7ZqytEfGNfYEfo1W7OtnNmfxavHp_Erp-lYC96Rqdu6NJ4fdc8tVRQJ_Z8Ti1YzFi_gXZ4ixXvy0jKOVfYt7E20SUcy-fi4Yz3On6eRLAm8LtlxX7ryFrIsR67toPSB9G0fLl0jjgi0XI9LlepzqOloOWNfraPES66pgC5vqY9u2j98B';
 
 /**
- * A2UI interface to display the charting status and history for an EV.
+ * A2UI v1.0 interface to display the charging status and history for an EV.
  */
 export const EV_CHARGE_CONTROL_A2UI = `[
   {
-    "version": "v0.9",
+    "version": "1.0",
     "createSurface": {
       "surfaceId": "ev_charging",
-      "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"
-    }
-  },
-  {
-    "version": "v0.9",
-    "updateComponents": {
-      "surfaceId": "ev_charging",
+      "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
       "components": [
         {
           "id": "root",
@@ -57,8 +51,7 @@ export const EV_CHARGE_CONTROL_A2UI = `[
         {
           "id": "header_title",
           "component": "Text",
-          "text": "EV Charge Control",
-          "variant": "h2"
+          "text": "## EV Charge Control"
         },
         {
           "id": "header_icon",
@@ -106,17 +99,15 @@ export const EV_CHARGE_CONTROL_A2UI = `[
           "id": "battery_level_text",
           "component": "Text",
           "text": {
-            "path": "/current/battery_level"
-          },
-          "variant": "h1"
+            "@path": "/current/battery_level"
+          }
         },
         {
           "id": "charging_rate_text",
           "component": "Text",
           "text": {
-            "path": "/current/status_msg"
-          },
-          "variant": "body"
+            "@path": "/current/status_msg"
+          }
         },
         {
           "id": "divider_1",
@@ -136,17 +127,15 @@ export const EV_CHARGE_CONTROL_A2UI = `[
           "id": "stat_time",
           "component": "Text",
           "text": {
-            "path": "/current/time_remaining"
-          },
-          "variant": "caption"
+            "@path": "/current/time_remaining"
+          }
         },
         {
           "id": "stat_power",
           "component": "Text",
           "text": {
-            "path": "/current/power"
-          },
-          "variant": "caption"
+            "@path": "/current/power"
+          }
         },
         {
           "id": "action_row",
@@ -172,7 +161,7 @@ export const EV_CHARGE_CONTROL_A2UI = `[
           "id": "btn_stop_text",
           "component": "Text",
           "text": {
-            "path": "/current/action_label"
+            "@path": "/current/action_label"
           }
         },
         {
@@ -232,17 +221,15 @@ export const EV_CHARGE_CONTROL_A2UI = `[
           "id": "history_date",
           "component": "Text",
           "text": {
-            "path": "date"
-          },
-          "variant": "body"
+            "@path": "date"
+          }
         },
         {
           "id": "history_cost",
           "component": "Text",
           "text": {
-            "path": "cost"
-          },
-          "variant": "body"
+            "@path": "cost"
+          }
         },
         {
           "id": "history_row_2",
@@ -257,26 +244,18 @@ export const EV_CHARGE_CONTROL_A2UI = `[
           "id": "history_energy",
           "component": "Text",
           "text": {
-            "path": "energy"
-          },
-          "variant": "caption"
+            "@path": "energy"
+          }
         },
         {
           "id": "history_duration",
           "component": "Text",
           "text": {
-            "path": "duration"
-          },
-          "variant": "caption"
+            "@path": "duration"
+          }
         }
-      ]
-    }
-  },
-  {
-    "version": "v0.9",
-    "updateDataModel": {
-      "surfaceId": "ev_charging",
-      "value": {
+      ],
+      "dataModel": {
         "current": {
           "battery_level": "85% Charged",
           "status_msg": "Charging at Home Supercharger",

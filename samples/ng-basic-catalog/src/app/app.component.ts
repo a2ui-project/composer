@@ -15,7 +15,7 @@
  */
 
 import {Component, inject} from '@angular/core';
-import {SurfaceComponent} from '@a2ui/angular/v0_9';
+import {SurfaceComponent} from '@a2ui/angular';
 import {toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {map, switchMap} from 'rxjs/operators';
 import {of, timer} from 'rxjs';

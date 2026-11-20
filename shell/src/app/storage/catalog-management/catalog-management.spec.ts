@@ -1268,4 +1268,247 @@ describe('CatalogManagement', () => {
       expect(multiV2Hash).not.toBe(multiV1Hash);
     });
   });
+
+  describe('stale async catalog continuation guards', () => {
+    function createDeferred<T>(): {
+      promise: Promise<T>;
+      resolve: (value: T) => void;
+      reject: (reason?: unknown) => void;
+    } {
+      let resolve!: (value: T) => void;
+      let reject!: (reason?: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return {promise, resolve, reject};
+    }
+
+    function switchRendererUrl(url: string | null): void {
+      resolvedUrlSignal.set(url);
+      startupResolutionMock.getResolvedRendererUrl.mockReturnValue(url);
+      TestBed.tick();
+    }
+
+    async function flushMicrotasks(count = 15): Promise<void> {
+      for (let i = 0; i < count; i++) {
+        await Promise.resolve();
+      }
+    }
+
+    const catalogA: Catalog = {
+      catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
+      title: 'Slack Catalog A',
+      components: {SlackMsg: {type: 'object'}},
+    };
+
+    const catalogB: Catalog = {
+      catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+      protocolVersion: '1.0',
+      title: 'Angular Basic B',
+      components: {Text: {type: 'object'}},
+    };
+
+    it('drops stale A2UI_CATALOG continuation if renderer switches while awaiting checksum', async () => {
+      const digestDeferred = createDeferred<ArrayBuffer>();
+      vi.spyOn(crypto.subtle, 'digest')
+        .mockReturnValueOnce(digestDeferred.promise)
+        .mockResolvedValue(new Uint8Array(32).fill(7).buffer);
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5001,
+      });
+      TestBed.tick();
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: catalogA,
+        timestamp: 5002,
+      });
+      TestBed.tick();
+
+      switchRendererUrl('http://localhost/renderer-b');
+      await flushMicrotasks();
+
+      expect(service.handshakeState()).toBe('idle');
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.activeCatalog()).toBeNull();
+      expect(service.hasReceivedCatalogResponse()).toBe(false);
+
+      digestDeferred.resolve(new Uint8Array(32).fill(1).buffer);
+      await flushMicrotasks();
+
+      expect(indexedDbStorageMock.saveCatalogRecord).not.toHaveBeenCalled();
+      expect(service.activeCatalog()).toBeNull();
+      expect(service.activeCatalogs()).toEqual([]);
+      expect(service.hasReceivedCatalogResponse()).toBe(false);
+      expect(service.handshakeState()).toBe('idle');
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.lastCatalogString()).toBe('');
+      expect(service.lastChecksumHash()).toBe('');
+
+      // Renderer B's own later handshake proceeds and settles cleanly without getting stuck.
+      hostCommunicationMock.sendMessage.mockClear();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5003,
+      });
+      TestBed.tick();
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith({
+        type: PreviewBridgeMessageType.GET_CATALOG,
+      });
+      expect(service.isHandshakeInProgress()).toBe(true);
+      expect(service.handshakeState()).toBe('in-progress');
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: catalogB,
+        timestamp: 5004,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledTimes(1);
+      expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rendererUrl: 'http://localhost/renderer-b',
+          catalogJson: catalogB,
+        }),
+      );
+      expect(service.activeCatalog()).toEqual(catalogB);
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.handshakeState()).toBe('settled');
+      expect(service.isHandshakeInProgress()).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(service.watchdogFired()).toBe(false);
+      expect(service.catalogError()).toBeNull();
+    });
+
+    it('drops stale A2UI_CATALOG continuation if renderer switches while awaiting IndexedDB getCatalogRecord', async () => {
+      const getRecordDeferred = createDeferred<null>();
+      indexedDbStorageMock.getCatalogRecord.mockImplementation(async (url: string) => {
+        if (url === 'http://localhost/renderer') {
+          return getRecordDeferred.promise;
+        }
+        return null;
+      });
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: catalogA,
+        timestamp: 5010,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(indexedDbStorageMock.getCatalogRecord).toHaveBeenCalledWith(
+        'http://localhost/renderer',
+      );
+
+      switchRendererUrl('http://localhost/renderer-b');
+      await flushMicrotasks();
+
+      getRecordDeferred.resolve(null);
+      await flushMicrotasks();
+
+      expect(indexedDbStorageMock.saveCatalogRecord).not.toHaveBeenCalled();
+      expect(service.activeCatalog()).toBeNull();
+      expect(service.activeCatalogs()).toEqual([]);
+      expect(service.hasReceivedCatalogResponse()).toBe(false);
+      expect(service.handshakeState()).toBe('idle');
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.lastCatalogString()).toBe('');
+      expect(service.lastChecksumHash()).toBe('');
+    });
+
+    it('drops stale A2UI_CATALOG continuation if renderer switches while awaiting IndexedDB saveCatalogRecord', async () => {
+      const saveRecordDeferred = createDeferred<void>();
+      indexedDbStorageMock.saveCatalogRecord.mockImplementationOnce(async () => {
+        return saveRecordDeferred.promise;
+      });
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: catalogA,
+        timestamp: 5020,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledTimes(1);
+
+      switchRendererUrl('http://localhost/renderer-b');
+      await flushMicrotasks();
+
+      saveRecordDeferred.resolve();
+      await flushMicrotasks();
+
+      expect(service.activeCatalog()).toBeNull();
+      expect(service.activeCatalogs()).toEqual([]);
+      expect(service.hasReceivedCatalogResponse()).toBe(false);
+      expect(service.handshakeState()).toBe('idle');
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.lastCatalogString()).toBe('');
+      expect(service.lastChecksumHash()).toBe('');
+    });
+
+    it('drops stale A2UI_CATALOG continuation on A -> B -> A generation bounce', async () => {
+      const digestDeferred = createDeferred<ArrayBuffer>();
+      vi.spyOn(crypto.subtle, 'digest')
+        .mockReturnValueOnce(digestDeferred.promise)
+        .mockResolvedValue(new Uint8Array(32).fill(9).buffer);
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: catalogA,
+        timestamp: 5030,
+      });
+      TestBed.tick();
+
+      switchRendererUrl('http://localhost/renderer-b');
+      switchRendererUrl('http://localhost/renderer');
+
+      digestDeferred.resolve(new Uint8Array(32).fill(2).buffer);
+      await flushMicrotasks();
+
+      expect(indexedDbStorageMock.saveCatalogRecord).not.toHaveBeenCalled();
+      expect(service.activeCatalog()).toBeNull();
+      expect(service.hasReceivedCatalogResponse()).toBe(false);
+      expect(service.handshakeState()).toBe('idle');
+    });
+
+    it('ignores async errors from stale A2UI_CATALOG continuations after switching renderers', async () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const digestDeferred = createDeferred<ArrayBuffer>();
+      vi.spyOn(crypto.subtle, 'digest').mockReturnValueOnce(digestDeferred.promise);
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: catalogA,
+        timestamp: 5040,
+      });
+      TestBed.tick();
+
+      switchRendererUrl('http://localhost/renderer-b');
+
+      digestDeferred.reject(new Error('digest failed after switch'));
+      await flushMicrotasks();
+
+      expect(service.catalogError()).toBeNull();
+      expect(service.hasReceivedCatalogResponse()).toBe(false);
+      expect(service.handshakeState()).toBe('idle');
+      expect(service.isHandshakeInProgress()).toBe(false);
+      errorSpy.mockRestore();
+    });
+  });
 });

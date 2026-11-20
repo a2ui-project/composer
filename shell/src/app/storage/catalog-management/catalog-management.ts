@@ -23,6 +23,7 @@ import {
   computed,
   linkedSignal,
   resource,
+  effect,
 } from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {
@@ -68,6 +69,18 @@ export class CatalogManagement {
 
   private watchdogTimerId: ReturnType<typeof setTimeout> | null = null;
   private previousUrl: string | null | undefined = this.startupResolution.resolvedUrl();
+  private isDestroyed = false;
+  private resolutionGeneration = 0;
+  private lastObservedSignalUrl: string | null = this.startupResolution.resolvedUrl();
+
+  private syncResolutionGeneration(): number {
+    const currentSignalUrl = this.startupResolution.resolvedUrl();
+    if (currentSignalUrl !== this.lastObservedSignalUrl) {
+      this.lastObservedSignalUrl = currentSignalUrl;
+      this.resolutionGeneration++;
+    }
+    return this.resolutionGeneration;
+  }
 
   /**
    * Declarative Angular `resource` that asynchronously loads and sanitizes a cached catalog
@@ -447,10 +460,15 @@ export class CatalogManagement {
   constructor() {
     const destroyRef = inject(DestroyRef);
     destroyRef.onDestroy(() => {
+      this.isDestroyed = true;
       if (this.watchdogTimerId !== null) {
         clearTimeout(this.watchdogTimerId);
         this.watchdogTimerId = null;
       }
+    });
+
+    effect(() => {
+      this.syncResolutionGeneration();
     });
 
     this.hostCommunication.messageStream$
@@ -634,20 +652,36 @@ export class CatalogManagement {
                 });
             }
 
+            const expectedGeneration = this.syncResolutionGeneration();
+            const expectedSignalUrl = this.startupResolution.resolvedUrl();
+            const expectedRendererUrl = this.startupResolution.getResolvedRendererUrl();
+            const isStaleContinuation = (): boolean => {
+              const currentGeneration = this.syncResolutionGeneration();
+              return (
+                this.isDestroyed ||
+                currentGeneration !== expectedGeneration ||
+                this.startupResolution.resolvedUrl() !== expectedSignalUrl ||
+                this.startupResolution.getResolvedRendererUrl() !== expectedRendererUrl
+              );
+            };
+
             return from(
               hashHexPromise
                 .then(async hashHex => {
-                  this._lastCatalogString.set(catalogString);
-                  this._lastChecksumHash.set(hashHex);
+                  if (isStaleContinuation()) {
+                    return null;
+                  }
 
-                  const rendererUrl = this.startupResolution.getResolvedRendererUrl();
-                  if (rendererUrl) {
+                  if (expectedRendererUrl) {
                     const existingRecord =
-                      await this.indexedDbStorage.getCatalogRecord(rendererUrl);
+                      await this.indexedDbStorage.getCatalogRecord(expectedRendererUrl);
+                    if (isStaleContinuation()) {
+                      return null;
+                    }
                     if (!existingRecord || existingRecord.checksumHash !== hashHex) {
                       this._catalogHashDelta.set(true);
                       await this.indexedDbStorage.saveCatalogRecord({
-                        rendererUrl,
+                        rendererUrl: expectedRendererUrl,
                         catalogString,
                         checksumHash: hashHex,
                         lastAccessed: Date.now(),
@@ -661,8 +695,13 @@ export class CatalogManagement {
                       existingRecord.catalogsJson = catalogsArr;
                       await this.indexedDbStorage.saveCatalogRecord(existingRecord);
                     }
+                    if (isStaleContinuation()) {
+                      return null;
+                    }
                   }
 
+                  this._lastCatalogString.set(catalogString);
+                  this._lastChecksumHash.set(hashHex);
                   this._activeCatalog.set(catalogObj);
                   this._activeCatalogs.set(catalogsArr);
                   this._hasReceivedCatalogResponse.set(true);
@@ -673,6 +712,9 @@ export class CatalogManagement {
                   return null;
                 })
                 .catch((err: unknown) => {
+                  if (isStaleContinuation()) {
+                    return null;
+                  }
                   const errorMsg = 'Failed to compute catalog hash or access storage.';
                   this.logger.error(errorMsg, err);
                   this.settleHandshakeError(errorMsg);

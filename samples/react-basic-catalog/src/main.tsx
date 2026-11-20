@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {injectBasicCatalogStyles} from '@a2ui/web_core/v0_9/basic_catalog';
+import {injectBasicCatalogStyles} from '@a2ui/web_core/catalogs/basic/v1';
 import '../../shared/basic-catalog.css';
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
