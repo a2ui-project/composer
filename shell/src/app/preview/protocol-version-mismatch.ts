@@ -47,7 +47,7 @@ export function validatePayloadProtocolVersion(
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       continue;
     }
-    const detected = detectItemVersion(item as Record<string, unknown>);
+    const detected = detectMessageVersion(item as Record<string, unknown>);
     if (detected && detected !== activeProtocolVersion) {
       return {
         valid: false,
@@ -76,7 +76,7 @@ export function detectPayloadVersion(
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       continue;
     }
-    const detected = detectItemVersion(item as Record<string, unknown>);
+    const detected = detectMessageVersion(item as Record<string, unknown>);
     if (detected) {
       return detected;
     }
@@ -84,7 +84,11 @@ export function detectPayloadVersion(
   return null;
 }
 
-function detectItemVersion(obj: Record<string, unknown>): A2uiProtocolVersion | null {
+/**
+ * Detects the protocol version of a single A2UI message object by inspecting explicit
+ * `version` fields or unambiguous structural markers, or null if indeterminate.
+ */
+export function detectMessageVersion(obj: Record<string, unknown>): A2uiProtocolVersion | null {
   // Explicit version field check
   if (typeof obj['version'] === 'string') {
     const v = obj['version'].trim();
