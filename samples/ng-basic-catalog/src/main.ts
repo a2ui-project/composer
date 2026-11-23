@@ -21,6 +21,7 @@ import {renderMarkdown} from '@a2ui/markdown-it';
 import {createMcpFunctionsCatalog} from 'a2ui-bridge';
 import {provideA2uiSandbox} from 'a2ui-bridge/angular';
 import {AppComponent} from './app/app.component';
+import {BasicWithMcpCatalog, BasicWithMcpNpmIdCatalog} from './app/basic-with-mcp.catalog';
 import {SampleBasicCatalog} from './app/sample-basic.catalog';
 import {COMPONENT_USAGES} from '../../shared/usages.js';
 import {DEMOS} from '../../shared/demos';
@@ -30,10 +31,18 @@ injectBasicCatalogStyles();
 bootstrapApplication(AppComponent, {
   providers: [
     provideZonelessChangeDetection(),
-    provideA2uiSandbox([SampleBasicCatalog, createMcpFunctionsCatalog()], {
-      markdownRendererFn: renderMarkdown,
-      getComponentUsages: async () => COMPONENT_USAGES,
-      getDemos: async () => DEMOS,
-    }),
+    provideA2uiSandbox(
+      [
+        SampleBasicCatalog,
+        createMcpFunctionsCatalog(),
+        BasicWithMcpCatalog,
+        BasicWithMcpNpmIdCatalog,
+      ],
+      {
+        markdownRendererFn: renderMarkdown,
+        getComponentUsages: async () => COMPONENT_USAGES,
+        getDemos: async () => DEMOS,
+      },
+    ),
   ],
 }).catch(err => console.error('A2UI Sandbox Bootstrap Failed:', err));

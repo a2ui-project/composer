@@ -46,4 +46,31 @@ export class AppComponentHarness extends ComponentHarness {
     const el = await this.getSurfaceEl();
     return el !== null;
   }
+
+  private getNativeV09TextEl = this.locatorForOptional('a2ui-v09-text');
+  private getUniversalV10TextEl = this.locatorForOptional('a2ui-basic-text');
+  private getNativeV09ButtonEl = this.locatorForOptional('a2ui-v09-button');
+  private getNativeV09ButtonInner = this.locatorFor('a2ui-v09-button button');
+
+  async hasNativeV09Text(): Promise<boolean> {
+    return (await this.getNativeV09TextEl()) !== null;
+  }
+
+  async getNativeV09Text(): Promise<string | null> {
+    const el = await this.getNativeV09TextEl();
+    return el ? el.text() : null;
+  }
+
+  async hasUniversalV10Text(): Promise<boolean> {
+    return (await this.getUniversalV10TextEl()) !== null;
+  }
+
+  async hasNativeV09Button(): Promise<boolean> {
+    return (await this.getNativeV09ButtonEl()) !== null;
+  }
+
+  async clickNativeV09Button(): Promise<void> {
+    const el = await this.getNativeV09ButtonInner();
+    await el.click();
+  }
 }

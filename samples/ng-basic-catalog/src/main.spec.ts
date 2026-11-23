@@ -37,6 +37,7 @@ vi.mock('a2ui-bridge', () => ({
     sendMessage: vi.fn(),
     sendAction: vi.fn(),
     getMcpClient: vi.fn(),
+    getActiveProcessor: vi.fn(),
   },
   ERROR_OVERLAY_DEBOUNCE_MS: 350,
   MCP_FUNCTIONS_CATALOG_ID: 'https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json',
@@ -48,6 +49,7 @@ vi.mock('a2ui-bridge', () => ({
     components: new Map(),
     functions: [],
   }),
+  createMcpCatalogFunctions: () => [],
 }));
 
 describe('A2uiSandbox', () => {
@@ -210,6 +212,12 @@ describe('A2uiSandbox', () => {
 
     const rendererConfig = attachRenderer.mock.calls[callsBefore][1];
     expect(rendererConfig.getDemos).toBeTypeOf('function');
+    const bootstrappedCatalogs = rendererConfig.catalogs as Array<{
+      id?: string;
+      protocolVersion?: string;
+    }>;
+    expect(bootstrappedCatalogs).toHaveLength(4);
+    expect(bootstrappedCatalogs.map(c => c.protocolVersion)).toEqual(['1.0', '1.0', '0.9', '0.9']);
 
     const {DEMOS} = await import('../../shared/demos');
     const served = await rendererConfig.getDemos!();
