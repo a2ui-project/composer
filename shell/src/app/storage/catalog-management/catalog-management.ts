@@ -49,11 +49,21 @@ import {
   isEmptyCatalogPayload,
   mergeCatalogs,
   orderCatalogs,
+  type ProtocolSupport,
+  resolveProtocolSupport,
+  sanitizeCatalog,
+  selectDefaultCatalogs,
+  selectDefaultPrimaryCatalog,
+} from './catalog-domain';
+
+export {
+  catalogProtocolVersion,
+  mergeCatalogs,
+  type ProtocolSupport,
+  resolveProtocolSupport,
   resolveProtocolVersion,
   sanitizeCatalog,
 } from './catalog-domain';
-
-export {mergeCatalogs, resolveProtocolVersion, sanitizeCatalog} from './catalog-domain';
 
 interface HydratedCatalog {
   catalog: Catalog;
@@ -87,6 +97,7 @@ export class CatalogManagement {
     if (currentSignalUrl !== this.lastObservedSignalUrl) {
       this.lastObservedSignalUrl = currentSignalUrl;
       this.resolutionGeneration++;
+      this._hasEstablishedLiveCatalog.set(false);
     }
     return this.resolutionGeneration;
   }
@@ -95,6 +106,15 @@ export class CatalogManagement {
     if (this.watchdogTimerId !== null) {
       clearTimeout(this.watchdogTimerId);
       this.watchdogTimerId = null;
+    }
+  }
+
+  private resetHandshakeWatchdog(options?: {settle?: boolean}): void {
+    this.clearWatchdogTimer();
+    this.handshakeWindow = null;
+    if (options?.settle) {
+      this._isHandshakeInProgress.set(false);
+      this._handshakeState.set('settled');
     }
   }
 
@@ -110,8 +130,7 @@ export class CatalogManagement {
         return undefined;
       }
       this.previousUrl = rendererUrl;
-      this.clearWatchdogTimer();
-      this.handshakeWindow = null;
+      this.resetHandshakeWatchdog();
       return rendererUrl ?? undefined;
     },
     loader: async ({params: targetUrl}): Promise<HydratedCatalog | null> => {
@@ -309,7 +328,6 @@ export class CatalogManagement {
       return previous?.value ?? null;
     },
   });
-  readonly activeCatalog = this._activeCatalog.asReadonly();
 
   private readonly _catalogHashDelta = signal<boolean>(false);
   /**
@@ -318,18 +336,6 @@ export class CatalogManagement {
    * Resolves to true if the fresh payload has a different fingerprint.
    */
   readonly catalogHashDelta = this._catalogHashDelta.asReadonly();
-
-  /**
-   * Conceptual descriptive name resolved for the actively established catalog
-   * model.
-   */
-  readonly activeCatalogTitle = computed(() => this._activeCatalog()?.title || '');
-
-  /**
-   * Conceptual narrative description details clarifying the purpose, bounds,
-   * and scope of the actively established catalog model.
-   */
-  readonly activeCatalogDescription = computed(() => this._activeCatalog()?.description || '');
 
   /**
    * Conceptual state indicating whether the catalog response from the preview
@@ -359,6 +365,17 @@ export class CatalogManagement {
     this._hasReceivedCatalogResponse.asReadonly();
 
   /**
+   * Tracks whether a live `A2UI_CATALOG` handshake succeeded for the current renderer URL
+   * since the last URL change. Deliberately separate from `_hasReceivedCatalogResponse`:
+   * neither `settleHandshakeError()` nor IndexedDB cache hydration marks a catalog
+   * established here, and `syncResolutionGeneration()` resets it eagerly to `false` on every
+   * resolved-URL change (so A -> B -> A switches cannot preserve a stale `true`). Only after
+   * a live `A2UI_CATALOG` response succeeds for the current URL may an unregistered secondary
+   * frame's watchdog expire silently.
+   */
+  private readonly _hasEstablishedLiveCatalog = signal<boolean>(false);
+
+  /**
    * Conceptual structured schemas of all actively loaded preview catalogs.
    * Resolves to the array of negotiated catalog models, or an empty array if none.
    *
@@ -382,22 +399,17 @@ export class CatalogManagement {
       return previous?.value ?? [];
     },
   });
-  readonly activeCatalogs: Signal<CatalogJson[]> = this._activeCatalogs.asReadonly();
 
   /**
-   * Merged catalog combining components and functions across all negotiated
-   * catalogs in `activeCatalogs()`, giving precedence to the primary `activeCatalog()`.
+   * All catalogs announced by the active renderer across all protocol versions.
    */
-  readonly mergedActiveCatalog: Signal<Catalog | null> = computed<Catalog | null>(() =>
-    mergeCatalogs(this._activeCatalog(), this._activeCatalogs()),
-  );
+  readonly announcedCatalogs: Signal<Catalog[]> = this._activeCatalogs.asReadonly();
 
   /**
-   * Active protocol version mapped from the active catalog's `protocolVersion`
-   * attribute or handshake settlement state.
+   * Protocol versions supported by the active renderer and their grouped catalogs.
    */
-  readonly activeProtocolVersion: Signal<A2uiProtocolVersion> = computed<A2uiProtocolVersion>(() =>
-    resolveProtocolVersion(
+  readonly protocolSupport: Signal<ProtocolSupport> = computed<ProtocolSupport>(() =>
+    resolveProtocolSupport(
       this._hasReceivedCatalogResponse(),
       this._activeCatalogs(),
       this._catalogError() !== null,
@@ -405,7 +417,53 @@ export class CatalogManagement {
     ),
   );
 
+  /**
+   * Default protocol version targeted by starters, gallery, telemetry, and fresh generation.
+   */
+  readonly activeProtocolVersion: Signal<A2uiProtocolVersion> = computed<A2uiProtocolVersion>(
+    () => this.protocolSupport().defaultVersion,
+  );
+
+  /**
+   * Active catalogs belonging to the renderer's default protocol version.
+   */
+  readonly activeCatalogs: Signal<CatalogJson[]> = computed<CatalogJson[]>(() =>
+    selectDefaultCatalogs(this._activeCatalogs(), this.protocolSupport()),
+  );
+
+  /**
+   * Primary catalog for the renderer's default protocol version.
+   */
+  readonly activeCatalog: Signal<Catalog | null> = computed<Catalog | null>(() =>
+    selectDefaultPrimaryCatalog(
+      this._activeCatalog(),
+      this.activeCatalogs(),
+      this.protocolSupport().defaultVersion,
+    ),
+  );
+
+  /**
+   * Conceptual descriptive name resolved for the actively established catalog
+   * model.
+   */
+  readonly activeCatalogTitle = computed(() => this.activeCatalog()?.title || '');
+
+  /**
+   * Conceptual narrative description details clarifying the purpose, bounds,
+   * and scope of the actively established catalog model.
+   */
+  readonly activeCatalogDescription = computed(() => this.activeCatalog()?.description || '');
+
+  /**
+   * Merged catalog combining components and functions across all negotiated
+   * catalogs in `activeCatalogs()`, giving precedence to the primary `activeCatalog()`.
+   */
+  readonly mergedActiveCatalog: Signal<Catalog | null> = computed<Catalog | null>(() =>
+    mergeCatalogs(this.activeCatalog(), this.activeCatalogs()),
+  );
+
   private settleHandshakeError(errorMsg: string): void {
+    this._hasEstablishedLiveCatalog.set(false);
     this._catalogError.set(errorMsg);
     this._hasReceivedCatalogResponse.set(true);
     this._handshakeState.set('settled');
@@ -416,8 +474,7 @@ export class CatalogManagement {
     const destroyRef = inject(DestroyRef);
     destroyRef.onDestroy(() => {
       this.isDestroyed = true;
-      this.clearWatchdogTimer();
-      this.handshakeWindow = null;
+      this.resetHandshakeWatchdog();
     });
 
     effect(() => {
@@ -450,7 +507,7 @@ export class CatalogManagement {
         this.logger.warn('Handshake already in progress. Ignoring RENDERER_READY.');
         return of(null);
       }
-      this.clearWatchdogTimer();
+      this.resetHandshakeWatchdog();
     }
 
     this._isHandshakeInProgress.set(true);
@@ -478,11 +535,22 @@ export class CatalogManagement {
       if (this.watchdogTimerId === null) {
         return;
       }
+      // TODO(follow-up): Root-cause fix is cancelling the handshake on
+      // HostCommunication.unregisterIframe rather than checking registration when the
+      // 5s timer fires. Keep error reporting intact if no live catalog was established
+      // (including cache-only or prior failed handshakes) or the window is registered.
+      if (
+        this._hasEstablishedLiveCatalog() &&
+        this.handshakeWindow !== null &&
+        !this.hostCommunication.isRegisteredWindow(this.handshakeWindow)
+      ) {
+        this.resetHandshakeWatchdog({settle: true});
+        return;
+      }
       this._watchdogFired.set(true);
       this.logger.error(CATALOG_WATCHDOG_MESSAGE);
       this.settleHandshakeError(CATALOG_WATCHDOG_MESSAGE);
-      this.watchdogTimerId = null;
-      this.handshakeWindow = null;
+      this.resetHandshakeWatchdog();
     }, CATALOG_WATCHDOG_TIMEOUT_MS);
 
     return of(null);
@@ -497,8 +565,7 @@ export class CatalogManagement {
       this.logger.warn('Ignoring A2UI_CATALOG from stale renderer window.');
       return of(null);
     }
-    this.clearWatchdogTimer();
-    this.handshakeWindow = null;
+    this.resetHandshakeWatchdog();
     this._watchdogFired.set(false);
 
     const rawPayload = envelope.payload;
@@ -518,6 +585,7 @@ export class CatalogManagement {
     }
 
     if (isEmptyCatalogPayload(rawPayload)) {
+      this._hasEstablishedLiveCatalog.set(true);
       this._hasReceivedCatalogResponse.set(true);
       this._handshakeState.set('settled');
       this._isHandshakeInProgress.set(false);
@@ -537,7 +605,16 @@ export class CatalogManagement {
     }
     const {catalogObj, catalogsArr, catalogString} = parsed;
 
-    this.warnOnMultiCatalogCollisions(catalogObj, catalogsArr);
+    const support = resolveProtocolSupport(true, catalogsArr, false, catalogObj);
+    const defaultCatalogs = selectDefaultCatalogs(catalogsArr, support);
+    const defaultPrimary = selectDefaultPrimaryCatalog(
+      catalogObj,
+      defaultCatalogs,
+      support.defaultVersion,
+    );
+    if (defaultPrimary) {
+      this.warnOnMultiCatalogCollisions(defaultPrimary, defaultCatalogs);
+    }
 
     const hashHexPromise = computeCatalogChecksum(catalogString, this.logger);
     const expectedGeneration = this.syncResolutionGeneration();
@@ -592,6 +669,7 @@ export class CatalogManagement {
           this._lastChecksumHash.set(hashHex);
           this._activeCatalog.set(catalogObj);
           this._activeCatalogs.set(catalogsArr);
+          this._hasEstablishedLiveCatalog.set(true);
           this._hasReceivedCatalogResponse.set(true);
 
           this._catalogError.set(null);

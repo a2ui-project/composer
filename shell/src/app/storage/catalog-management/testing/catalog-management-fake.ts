@@ -16,7 +16,13 @@
 
 import {computed, Signal, signal, WritableSignal} from '@angular/core';
 import type {A2uiProtocolVersion} from 'a2ui-bridge';
-import {mergeCatalogs, resolveProtocolVersion} from '../catalog-domain';
+import {
+  mergeCatalogs,
+  type ProtocolSupport,
+  resolveProtocolSupport,
+  selectDefaultCatalogs,
+  selectDefaultPrimaryCatalog,
+} from '../catalog-domain';
 import type {CatalogManagement} from '../catalog-management';
 import type {Catalog, CatalogJson} from '../../models/catalog-storage.model';
 
@@ -30,7 +36,9 @@ export type FakeCatalogManagementState = Pick<
   | 'activeCatalogDescription'
   | 'activeCatalog'
   | 'activeCatalogs'
+  | 'announcedCatalogs'
   | 'activeProtocolVersion'
+  | 'protocolSupport'
   | 'mergedActiveCatalog'
   | 'catalogError'
   | 'isHandshakeInProgress'
@@ -61,7 +69,9 @@ export class FakeCatalogManagement implements FakeCatalogManagementState {
   readonly activeCatalogDescription: Signal<string>;
   readonly activeCatalog: Signal<Catalog | null>;
   readonly activeCatalogs: Signal<CatalogJson[]>;
+  readonly announcedCatalogs: Signal<Catalog[]>;
   readonly activeProtocolVersion: Signal<A2uiProtocolVersion>;
+  readonly protocolSupport: Signal<ProtocolSupport>;
   readonly mergedActiveCatalog: Signal<Catalog | null>;
   readonly catalogError: Signal<string | null>;
   readonly isHandshakeInProgress: Signal<boolean>;
@@ -73,8 +83,69 @@ export class FakeCatalogManagement implements FakeCatalogManagementState {
   readonly handshakeState: Signal<'idle' | 'in-progress' | 'settled'>;
 
   constructor(overrides?: FakeCatalogManagementOverrides) {
-    this.activeCatalog = overrides?.activeCatalog ?? signal<Catalog | null>(null);
-    this.activeCatalogs = overrides?.activeCatalogs ?? signal<CatalogJson[]>([]);
+    const rawPrimary = overrides?.activeCatalog ?? signal<Catalog | null>(null);
+    const rawCatalogs =
+      overrides?.announcedCatalogs ?? overrides?.activeCatalogs ?? signal<CatalogJson[]>([]);
+    this.announcedCatalogs = overrides?.announcedCatalogs ?? rawCatalogs;
+    this.catalogError = overrides?.catalogError ?? signal<string | null>(null);
+    this.isHandshakeInProgress = overrides?.isHandshakeInProgress ?? signal(false);
+    this.watchdogFired = overrides?.watchdogFired ?? signal(false);
+    this.lastCatalogString = overrides?.lastCatalogString ?? signal('');
+    this.lastChecksumHash = overrides?.lastChecksumHash ?? signal('');
+    this.catalogHashDelta = overrides?.catalogHashDelta ?? signal(false);
+    this.hasReceivedCatalogResponse = overrides?.hasReceivedCatalogResponse ?? signal(true);
+    this.protocolSupport =
+      overrides?.protocolSupport ??
+      computed<ProtocolSupport>(() => {
+        const base = resolveProtocolSupport(
+          this.hasReceivedCatalogResponse(),
+          this.announcedCatalogs(),
+          this.catalogError() !== null,
+          rawPrimary(),
+        );
+        if (!overrides?.activeProtocolVersion) {
+          return base;
+        }
+        const forcedDefault = overrides.activeProtocolVersion();
+        if (forcedDefault === base.defaultVersion) {
+          return base;
+        }
+        const unversionedOnly = this.announcedCatalogs().every(c => !c.protocolVersion);
+        if (unversionedOnly && this.announcedCatalogs().length > 0) {
+          return {
+            ...base,
+            defaultVersion: forcedDefault,
+            versions: [forcedDefault],
+            catalogsByVersion: {[forcedDefault]: [...this.announcedCatalogs()]},
+          };
+        }
+        const otherVersion = base.versions.find(
+          v => v !== forcedDefault && (base.catalogsByVersion[v]?.length ?? 0) > 0,
+        );
+        const versions: A2uiProtocolVersion[] = otherVersion
+          ? [forcedDefault, otherVersion]
+          : [forcedDefault];
+        return {
+          ...base,
+          defaultVersion: forcedDefault,
+          versions,
+        };
+      });
+    this.activeProtocolVersion =
+      overrides?.activeProtocolVersion ?? computed(() => this.protocolSupport().defaultVersion);
+    this.activeCatalogs = computed(() =>
+      selectDefaultCatalogs(this.announcedCatalogs(), this.protocolSupport()),
+    );
+    this.activeCatalog = computed(() => {
+      if (overrides?.activeCatalog && this.announcedCatalogs().length === 0) {
+        return rawPrimary();
+      }
+      return selectDefaultPrimaryCatalog(
+        rawPrimary(),
+        this.activeCatalogs(),
+        this.protocolSupport().defaultVersion,
+      );
+    });
     this.activeCatalogTitle =
       overrides?.activeCatalogTitle ?? computed(() => this.activeCatalog()?.title || '');
     this.activeCatalogDescription =
@@ -83,23 +154,6 @@ export class FakeCatalogManagement implements FakeCatalogManagementState {
     this.mergedActiveCatalog =
       overrides?.mergedActiveCatalog ??
       computed(() => mergeCatalogs(this.activeCatalog(), this.activeCatalogs()));
-    this.catalogError = overrides?.catalogError ?? signal<string | null>(null);
-    this.isHandshakeInProgress = overrides?.isHandshakeInProgress ?? signal(false);
-    this.watchdogFired = overrides?.watchdogFired ?? signal(false);
-    this.lastCatalogString = overrides?.lastCatalogString ?? signal('');
-    this.lastChecksumHash = overrides?.lastChecksumHash ?? signal('');
-    this.catalogHashDelta = overrides?.catalogHashDelta ?? signal(false);
-    this.hasReceivedCatalogResponse = overrides?.hasReceivedCatalogResponse ?? signal(true);
-    this.activeProtocolVersion =
-      overrides?.activeProtocolVersion ??
-      computed<A2uiProtocolVersion>(() =>
-        resolveProtocolVersion(
-          this.hasReceivedCatalogResponse(),
-          this.activeCatalogs(),
-          this.catalogError() !== null,
-          this.activeCatalog(),
-        ),
-      );
     this.handshakeState =
       overrides?.handshakeState ?? signal<'idle' | 'in-progress' | 'settled'>('settled');
   }

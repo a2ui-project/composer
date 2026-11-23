@@ -117,6 +117,51 @@ export function mergeCatalogs(
 }
 
 /**
+ * Protocol support summary derived from the catalogs announced by a renderer.
+ */
+export interface ProtocolSupport {
+  /** Default protocol version targeted by starters, gallery, telemetry, and fresh generation. */
+  readonly defaultVersion: A2uiProtocolVersion;
+  /** Supported protocol versions with `defaultVersion` first. */
+  readonly versions: readonly A2uiProtocolVersion[];
+  /** Announced catalogs grouped by the protocol version they belong to. */
+  readonly catalogsByVersion: Readonly<Partial<Record<A2uiProtocolVersion, readonly Catalog[]>>>;
+  /** Total number of non-empty catalogs announced by the renderer across all versions. */
+  readonly announcedCatalogCount: number;
+}
+
+/**
+ * Returns the explicit A2UI protocol version declared by `catalog`, or `null` when
+ * omitted or unrecognized.
+ */
+export function catalogProtocolVersion(
+  catalog: Catalog | null | undefined,
+): A2uiProtocolVersion | null {
+  if (!catalog || typeof catalog.protocolVersion !== 'string') {
+    return null;
+  }
+  const v = catalog.protocolVersion.trim();
+  if (!v) {
+    return null;
+  }
+  if (isV1ProtocolVersion(v)) {
+    return 'v1.0';
+  }
+  if (v === '0.9' || v === 'v0.9') {
+    return 'v0.9';
+  }
+  return null;
+}
+
+function collectNonEmptyCatalogs(
+  catalogs: readonly Catalog[],
+  primaryCatalog: Catalog | null,
+): Catalog[] {
+  const allCatalogs = catalogs.length > 0 ? catalogs : primaryCatalog ? [primaryCatalog] : [];
+  return allCatalogs.filter(c => !isCatalogEmpty(c));
+}
+
+/**
  * Resolves the active protocol version based on handshake state, active catalogs, and error state.
  *
  * @param hasReceived Whether a catalog handshake response has settled.
@@ -134,15 +179,146 @@ export function resolveProtocolVersion(
   if (!hasReceived) {
     return 'v0.9';
   }
-  const allCatalogs = catalogs.length > 0 ? catalogs : primaryCatalog ? [primaryCatalog] : [];
-  const nonEmptyCatalogs = allCatalogs.filter(c => !isCatalogEmpty(c));
+  const nonEmptyCatalogs = collectNonEmptyCatalogs(catalogs, primaryCatalog);
   if (nonEmptyCatalogs.length === 0) {
     return hasCatalogError ? 'v0.9' : 'v1.0';
   }
-  if (nonEmptyCatalogs.some(c => isV1ProtocolVersion(c.protocolVersion))) {
+  if (nonEmptyCatalogs.some(c => catalogProtocolVersion(c) === 'v1.0')) {
     return 'v1.0';
   }
   return 'v0.9';
+}
+
+/**
+ * Resolves all protocol versions supported by a renderer from its announced catalogs.
+ * Catalogs without an explicit `protocolVersion` are assigned to `defaultVersion`.
+ */
+export function resolveProtocolSupport(
+  hasReceived: boolean,
+  catalogs: readonly Catalog[],
+  hasCatalogError: boolean,
+  primaryCatalog: Catalog | null = null,
+): ProtocolSupport {
+  const defaultVersion = resolveProtocolVersion(
+    hasReceived,
+    catalogs,
+    hasCatalogError,
+    primaryCatalog,
+  );
+  if (!hasReceived) {
+    return {
+      defaultVersion,
+      versions: [defaultVersion],
+      catalogsByVersion: {},
+      announcedCatalogCount: 0,
+    };
+  }
+
+  const nonEmptyCatalogs = collectNonEmptyCatalogs(catalogs, primaryCatalog);
+  if (nonEmptyCatalogs.length === 0) {
+    return {
+      defaultVersion,
+      versions: [defaultVersion],
+      catalogsByVersion: {},
+      announcedCatalogCount: 0,
+    };
+  }
+
+  const catalogsByVersion: Partial<Record<A2uiProtocolVersion, Catalog[]>> = {};
+  for (const cat of nonEmptyCatalogs) {
+    const version = catalogProtocolVersion(cat) ?? defaultVersion;
+    const bucket = catalogsByVersion[version];
+    if (bucket) {
+      bucket.push(cat);
+    } else {
+      catalogsByVersion[version] = [cat];
+    }
+  }
+
+  const otherVersion: A2uiProtocolVersion = defaultVersion === 'v1.0' ? 'v0.9' : 'v1.0';
+  const versions: A2uiProtocolVersion[] = catalogsByVersion[otherVersion]?.length
+    ? [defaultVersion, otherVersion]
+    : [defaultVersion];
+
+  return {
+    defaultVersion,
+    versions,
+    catalogsByVersion,
+    announcedCatalogCount: nonEmptyCatalogs.length,
+  };
+}
+
+/**
+ * Returns the subset of `announcedCatalogs` belonging to `support.defaultVersion`,
+ * preserving an empty array when no list was announced.
+ */
+export function selectDefaultCatalogs(
+  announcedCatalogs: readonly Catalog[],
+  support: ProtocolSupport,
+): Catalog[] {
+  if (announcedCatalogs.length === 0) {
+    return [];
+  }
+  return [...(support.catalogsByVersion[support.defaultVersion] ?? [])];
+}
+
+/**
+ * Selects the primary catalog for `defaultVersion`, falling back to the first
+ * catalog of `defaultVersion` when `primary` targets another version.
+ */
+export function selectDefaultPrimaryCatalog(
+  primary: Catalog | null,
+  defaultCatalogs: readonly Catalog[],
+  defaultVersion: A2uiProtocolVersion,
+): Catalog | null {
+  if (!primary) {
+    return defaultCatalogs[0] ?? null;
+  }
+  if ((catalogProtocolVersion(primary) ?? defaultVersion) === defaultVersion) {
+    return primary;
+  }
+  return defaultCatalogs[0] ?? null;
+}
+
+/**
+ * Catalog selection for a specific A2UI protocol version.
+ */
+export interface VersionedCatalogSelection {
+  readonly primary: Catalog | null;
+  readonly catalogs: readonly Catalog[];
+}
+
+/**
+ * Resolves the primary and ordered catalogs for `version` from `support`, falling
+ * back to `fallbackPrimary` / `fallbackCatalogs` only when `version` matches
+ * `support.defaultVersion` and `catalogsByVersion[version]` is empty.
+ */
+export function selectCatalogsForVersion(
+  support: ProtocolSupport,
+  version: A2uiProtocolVersion,
+  fallbackPrimary: Catalog | null,
+  fallbackCatalogs: readonly Catalog[],
+): VersionedCatalogSelection {
+  const versionCatalogs = support.catalogsByVersion[version];
+  let catalogs: Catalog[];
+  if (versionCatalogs && versionCatalogs.length > 0) {
+    catalogs = [...versionCatalogs];
+  } else if (version === support.defaultVersion) {
+    catalogs =
+      fallbackCatalogs.length > 0
+        ? [...fallbackCatalogs]
+        : fallbackPrimary
+          ? [fallbackPrimary]
+          : [];
+  } else {
+    catalogs = [];
+  }
+
+  const primary =
+    fallbackPrimary && catalogs.includes(fallbackPrimary)
+      ? fallbackPrimary
+      : (catalogs[0] ?? (version === support.defaultVersion ? fallbackPrimary : null));
+  return {primary, catalogs};
 }
 
 /**
