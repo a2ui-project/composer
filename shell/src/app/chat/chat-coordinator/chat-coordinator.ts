@@ -16,8 +16,17 @@
 
 import {computed, inject, Injectable, signal} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
+import type {A2uiProtocolVersion} from 'a2ui-bridge';
 import {skip} from 'rxjs/operators';
+import {
+  formatUnsupportedGenerationMessage,
+  selectGenerationVersion,
+} from '../generation-protocol/generation-protocol-selector';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {
+  mergeCatalogs,
+  selectCatalogsForVersion,
+} from '../../storage/catalog-management/catalog-domain';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {PromptTurnType, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {formatJson, tryParseJsonArray} from '../../utils/json';
@@ -91,6 +100,10 @@ interface PromptRun {
   rendererUrl: string;
   /** The ID of the catalog the response is being written for. */
   catalogId: string;
+  /** The protocol version decided for this run's prompt and payload parsing. */
+  protocolVersion: A2uiProtocolVersion;
+  /** Whether this run replaces the existing draft rather than patching it. */
+  replacesDraft: boolean;
   /** The stream of the latest model request, once it has been sent. */
   responseStream?: LlmStreamResponse;
 }
@@ -151,13 +164,31 @@ export class ChatCoordinator {
    * catalog schema specifications system instructions.
    */
   readonly systemPrompt = computed<string>(() => {
+    const support = this.catalogManagement.protocolSupport();
+    const decision = selectGenerationVersion({
+      draft: this.stateSync.activeDraft(),
+      requestText: '',
+      support,
+    });
+    const protocolVersion =
+      decision.kind === 'selected' ? decision.version : support.defaultVersion;
+    const replacesDraft = decision.kind === 'selected' ? decision.replacesDraft : false;
+    return this.buildSystemPromptFor(protocolVersion, replacesDraft);
+  });
+
+  private buildSystemPromptFor(
+    protocolVersion: A2uiProtocolVersion,
+    replacesDraft: boolean,
+  ): string {
     const hasImageAttachment = this.conversationalMessages().some(m =>
       m.attachments?.some(a => this.isImageAttachment(a)),
     );
     return this.promptFactory.buildSystemPrompt({
+      protocolVersion,
+      replacesDraft,
       includeMultimodalGuidelines: hasImageAttachment,
     });
-  });
+  }
 
   private readonly mergedActiveCatalog = this.catalogManagement.mergedActiveCatalog;
 
@@ -341,11 +372,17 @@ export class ChatCoordinator {
   /**
    * Constructs System instructions prepended message logs context.
    */
-  getFullMessageContext(): LlmMessage[] {
+  getFullMessageContext(options?: {
+    protocolVersion: A2uiProtocolVersion;
+    replacesDraft?: boolean;
+  }): LlmMessage[] {
+    const systemContent = options
+      ? this.buildSystemPromptFor(options.protocolVersion, options.replacesDraft ?? false)
+      : this.systemPrompt();
     return [
       {
         role: MessageRole.SYSTEM,
-        content: this.systemPrompt(),
+        content: systemContent,
       },
       ...this.conversationalMessages(),
     ];
@@ -441,8 +478,39 @@ export class ChatCoordinator {
     // Include the latest canvas even before the debounced editor/history sync fires.
     this.stateSync.syncActiveDraftToHistory();
 
+    const decision = selectGenerationVersion({
+      draft: this.stateSync.activeDraft(),
+      requestText: trimmed,
+      support: this.catalogManagement.protocolSupport(),
+    });
+    if (decision.kind === 'unsupported-request') {
+      const refusal = formatUnsupportedGenerationMessage(decision.requested, decision.supported);
+      this.chatState.updateChatHistory(h => [
+        ...h,
+        {
+          role: MessageRole.USER,
+          content: trimmed,
+          attachments: attachments.length > 0 ? attachments : undefined,
+          isSnapshot: false,
+          promptId: options?.promptId,
+        },
+        {
+          role: MessageRole.MODEL,
+          content: refusal,
+          promptId: options?.promptId,
+        },
+      ]);
+      return;
+    }
+
     const promptId = this.emitPromptTracking(trimmed, attachments, options);
-    const run = this.beginPrompt(trimmed, attachments, promptId);
+    const run = this.beginPrompt(
+      trimmed,
+      attachments,
+      promptId,
+      decision.version,
+      decision.replacesDraft,
+    );
     try {
       await this.requestResponse(run);
     } catch (err: unknown) {
@@ -456,7 +524,13 @@ export class ChatCoordinator {
    * Starts a prompt: makes it the active one, locks the chat controls, and adds the
    * user's turn followed by a placeholder model turn that the response streams into.
    */
-  private beginPrompt(prompt: string, attachments: Attachment[], promptId: string): PromptRun {
+  private beginPrompt(
+    prompt: string,
+    attachments: Attachment[],
+    promptId: string,
+    protocolVersion: A2uiProtocolVersion,
+    replacesDraft: boolean,
+  ): PromptRun {
     this.activePromptId = promptId;
     const requestId = ++this.activeRequestId;
     const rendererUrl = this.configProvider.rendererUrl();
@@ -478,7 +552,7 @@ export class ChatCoordinator {
     ]);
 
     // Construct system-prepended context matching conversational bounds
-    const context = this.getFullMessageContext();
+    const context = this.getFullMessageContext({protocolVersion, replacesDraft});
 
     this.chatState.addRawLlmLog(LlmLogType.REQUEST, context);
 
@@ -504,6 +578,8 @@ export class ChatCoordinator {
       context,
       rendererUrl,
       catalogId,
+      protocolVersion,
+      replacesDraft,
     };
   }
 
@@ -524,7 +600,7 @@ export class ChatCoordinator {
       }
 
       if (!response.toolCalls.length) {
-        await this.applyResponse(response, run.promptId);
+        await this.applyResponse(response, run);
         return;
       }
 
@@ -614,18 +690,21 @@ export class ChatCoordinator {
    * Shows a finished response in the prompt's model turn, without the loading
    * indicator, and applies it to the canvas.
    */
-  private async applyResponse(response: ModelResponse, promptId: string): Promise<void> {
+  private async applyResponse(response: ModelResponse, run: PromptRun): Promise<void> {
     // Log the raw LLM response telemetry
     this.chatState.addRawLlmLog(LlmLogType.RESPONSE, response.text);
-    this.updateTargetModelMessage(promptId, {
+    this.updateTargetModelMessage(run.promptId, {
       role: MessageRole.MODEL,
       content: response.text,
       thinking: response.thinking,
-      promptId,
+      promptId: run.promptId,
     });
 
     this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
-    await this.processRawLlmPayload(response.text, promptId);
+    await this.processRawLlmPayload(response.text, run.promptId, {
+      protocolVersion: run.protocolVersion,
+      replacesDraft: run.replacesDraft,
+    });
   }
 
   /**
@@ -729,6 +808,25 @@ export class ChatCoordinator {
     if (replacesSample) {
       this.stateSync.flushDraft();
     }
+    const decision = selectGenerationVersion({
+      draft: this.stateSync.activeDraft(),
+      requestText: run.prompt,
+      support: this.catalogManagement.protocolSupport(),
+    });
+    if (decision.kind === 'unsupported-request') {
+      this.updateTargetModelMessage(run.promptId, {
+        role: MessageRole.MODEL,
+        content: formatUnsupportedGenerationMessage(decision.requested, decision.supported),
+        thinking: '',
+        promptId: run.promptId,
+      });
+      this.finalizeStream(PipelineStatus.IDLE);
+      return null;
+    }
+    run.protocolVersion = decision.version;
+    run.replacesDraft = decision.replacesDraft;
+    const dropLayoutSnapshots = replacesSample || run.replacesDraft;
+
     // Clear what the first request streamed before it asked to switch, so a next request
     // that fails doesn't leave it showing.
     this.updateTargetModelMessage(run.promptId, {
@@ -744,13 +842,13 @@ export class ChatCoordinator {
       {
         role: MessageRole.SYSTEM,
         content:
-          this.systemPrompt() +
+          this.buildSystemPromptFor(run.protocolVersion, run.replacesDraft) +
           '\nThe renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a complete createSurface/updateComponents/updateDataModel sequence.',
       },
       ...run.context.filter(
         message =>
           message.role !== MessageRole.SYSTEM &&
-          (!replacesSample || !this.chatCleaner.isUserLayoutSnapshot(message)),
+          (!dropLayoutSnapshots || !this.chatCleaner.isUserLayoutSnapshot(message)),
       ),
     ];
     this.chatState.addRawLlmLog(LlmLogType.REQUEST, nextContext);
@@ -766,9 +864,13 @@ export class ChatCoordinator {
   /**
    * Post-processes, extracts, syntax heals, and validates raw JSON lines.
    */
-  private async processRawLlmPayload(rawText: string, promptId?: string): Promise<void> {
+  private async processRawLlmPayload(
+    rawText: string,
+    promptId: string | undefined,
+    options: {protocolVersion: A2uiProtocolVersion; replacesDraft?: boolean},
+  ): Promise<void> {
     if (promptId && this.activePromptId !== promptId) return;
-    const protocolVersion = this.catalogManagement.activeProtocolVersion();
+    const {protocolVersion} = options;
     const strategy = getPayloadStrategy(protocolVersion);
 
     // Stage 1: Parse and Syntax Healing
@@ -812,11 +914,18 @@ export class ChatCoordinator {
     this.chatState.setPipelineStatus(PipelineStatus.VALIDATING);
     try {
       // Step A: Catalog Component Schema Check & Name Typos / catalogId Healing
+      const {primary: versionPrimary, catalogs: versionCatalogs} = selectCatalogsForVersion(
+        this.catalogManagement.protocolSupport(),
+        protocolVersion,
+        this.catalogManagement.activeCatalog(),
+        this.catalogManagement.activeCatalogs(),
+      );
+      const versionMergedCatalog = mergeCatalogs(versionPrimary, versionCatalogs);
       const wasHealed = strategy.runCatalogComponentSchemaCheck(
         parsedBlocks,
-        this.mergedActiveCatalog() ?? undefined,
+        versionMergedCatalog ?? undefined,
         undefined,
-        this.catalogManagement.activeCatalogs(),
+        [...versionCatalogs],
       );
       if (wasHealed) {
         this.chatState.setPipelineStatus(PipelineStatus.HEALING);
@@ -838,7 +947,7 @@ export class ChatCoordinator {
 
       // Validate surface references before replacing the editor. A delta must
       // retain the creation and component messages needed to replay the draft.
-      parsedBlocks = this.resolveLayoutUpdate(parsedBlocks);
+      parsedBlocks = this.resolveLayoutUpdate(parsedBlocks, options?.replacesDraft ?? false);
       this.chatState.setPipelineStatus(PipelineStatus.READY);
 
       // Serialize compact JSON for LLM chat history context while keeping
@@ -906,7 +1015,7 @@ export class ChatCoordinator {
    * prompt's examples, this throws. The caller reports it like any other
    * validation failure, and the draft in the editor is left unchanged.
    */
-  private resolveLayoutUpdate(updates: unknown[]): unknown[] {
+  private resolveLayoutUpdate(updates: unknown[], forceReplace = false): unknown[] {
     // Reads `item[command].surfaceId` when `item` is that kind of A2UI message.
     const surfaceId = (item: unknown, command: string): string | undefined => {
       if (!item || typeof item !== 'object' || !(command in item)) {
@@ -921,9 +1030,10 @@ export class ChatCoordinator {
         : undefined;
     };
 
-    // A response that creates a surface is a full replacement; otherwise it
-    // builds on the current draft, when the draft parses.
-    const replacesDraft = updates.some(item => surfaceId(item, 'createSurface') !== undefined);
+    // A response that creates a surface (or replaces a draft across protocol versions)
+    // is a full replacement; otherwise it builds on the current draft, when the draft parses.
+    const replacesDraft =
+      forceReplace || updates.some(item => surfaceId(item, 'createSurface') !== undefined);
     const current = tryParseJsonArray(this.stateSync.activeDraft());
     const base = !replacesDraft && current.success ? current.data : [];
 

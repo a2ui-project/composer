@@ -32,6 +32,16 @@ export declare interface PromptStrategyOptions {
   customInstructions?: string;
   /** Whether to append multimodal image-to-UI guidelines to the prompt. */
   includeMultimodalGuidelines?: boolean;
+  /** Whether the model should replace the active draft rather than patch it. */
+  replacesDraft?: boolean;
+}
+
+/**
+ * Formats the version-specific instruction telling the model to replace the current UI
+ * instead of patching it (covers user switches, unsupported drafts, and versioned blanks).
+ */
+export function formatDraftReplacementInstruction(version: A2uiProtocolVersion): string {
+  return `IMPORTANT: Replace the current UI with a complete, self-contained A2UI ${version} payload starting with createSurface rather than modifying or patching the existing draft.`;
 }
 
 /**

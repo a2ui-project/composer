@@ -18,7 +18,11 @@ import {Injectable} from '@angular/core';
 import {Catalog, CatalogJson, getCatalogId} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {McpServerConfig} from '../../mcp/mcp-client-manager.service';
-import {PromptProtocolStrategy, PromptStrategyOptions} from './prompt-protocol-strategy';
+import {
+  formatDraftReplacementInstruction,
+  PromptProtocolStrategy,
+  PromptStrategyOptions,
+} from './prompt-protocol-strategy';
 import {
   quoteCatalogValue,
   iconSupport,
@@ -52,9 +56,12 @@ export class V09PromptStrategy implements PromptProtocolStrategy {
       ? `\n\n## Custom User Instructions\n\n${customInstructionsText}`
       : '';
 
-    if (!catalog) {
-      return (
-        `
+    const replacementSuffix = options.replacesDraft
+      ? `\n\n${formatDraftReplacementInstruction(this.protocolVersion)}`
+      : '';
+
+    const promptBody = !catalog
+      ? `
   # A2UI Generation Expert
 
   ## Role
@@ -62,18 +69,13 @@ export class V09PromptStrategy implements PromptProtocolStrategy {
   requests—whether provided as text instructions, UI wireframes, screenshots,
   or mockup images—into valid A2UI v0.9 interactive user interfaces.
   ${mcpInstructions}
-      `.trimEnd() + customPromptSuffix
-      );
-    }
-
-    return (
-      (
-        this.generateSystemPrompt(
+      `
+      : this.generateSystemPrompt(
           catalog as Catalog,
           options.includeMultimodalGuidelines ?? false,
-        ) + mcpInstructions
-      ).trimEnd() + customPromptSuffix
-    );
+        ) + mcpInstructions;
+
+    return `${promptBody.trimEnd()}${customPromptSuffix}${replacementSuffix}`;
   }
 
   buildMcpInstructions(activeServers: readonly McpServerConfig[]): string {

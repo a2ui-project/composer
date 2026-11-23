@@ -19,6 +19,7 @@ import {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/v1-0/common-types-schema';
 import {catalogSupportsMcp, McpServerConfig} from '../../mcp/mcp-client-manager.service';
 import {
+  formatDraftReplacementInstruction,
   PromptProtocolStrategy,
   PromptStrategyOptions,
   stripReturnTypeDeep,
@@ -86,9 +87,13 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
       ? `\n\n## Custom User Instructions\n\n${customInstructionsText}`
       : '';
 
+    const replacementSuffix = options.replacesDraft
+      ? `\n\n${formatDraftReplacementInstruction(this.protocolVersion)}`
+      : '';
+
+    let promptBody: string;
     if (catalogs.length === 0) {
-      return (
-        `
+      promptBody = `
   # A2UI Generation Expert
 
   ## Role
@@ -96,26 +101,23 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
   requests—whether provided as text instructions, UI wireframes, screenshots,
   or mockup images—into valid A2UI 1.0 interactive user interfaces.
   ${mcpInstructions}
-      `.trimEnd() + customPromptSuffix
-      );
-    }
-
-    const serializedCatalogs =
-      catalogs.length === 1
-        ? this.serializeCatalogForPrompt(catalogs[0])
-        : JSON.stringify(catalogs.map(c => pruneCatalogForPrompt(stripReturnTypeDeep(c))));
-
-    return (
-      (
+      `;
+    } else {
+      const serializedCatalogs =
+        catalogs.length === 1
+          ? this.serializeCatalogForPrompt(catalogs[0])
+          : JSON.stringify(catalogs.map(c => pruneCatalogForPrompt(stripReturnTypeDeep(c))));
+      promptBody =
         this.generateSystemPrompt(
           serializedCatalogs,
           primaryCatalogId,
           mcpCatalogId,
           options.includeMultimodalGuidelines ?? false,
           primaryCatalog,
-        ) + mcpInstructions
-      ).trimEnd() + customPromptSuffix
-    );
+        ) + mcpInstructions;
+    }
+
+    return `${promptBody.trimEnd()}${customPromptSuffix}${replacementSuffix}`;
   }
 
   /**

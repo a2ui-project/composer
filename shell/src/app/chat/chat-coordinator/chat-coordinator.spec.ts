@@ -17,19 +17,23 @@
 
 import {ThemePreference, type A2uiProtocolVersion} from 'a2ui-bridge';
 import {TestBed} from '@angular/core/testing';
-import {computed, createEnvironmentInjector, EnvironmentInjector, signal} from '@angular/core';
+import {
+  createEnvironmentInjector,
+  EnvironmentInjector,
+  signal,
+  type WritableSignal,
+} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {RendererSelection} from '../renderer-selection/renderer-selection';
 import {RendererTool} from '../renderer-selection/renderer-tool';
 import {ChatCoordinator} from './chat-coordinator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {
-  Catalog,
-  CatalogComponentSchema,
-  CatalogJson,
-  getCatalogFunctionEntries,
-} from '../../storage/models/catalog-storage.model';
-import {stripPrototypePollutionKeys} from '../../shell/cross-frame-validator/wire-version-validator';
+  createFakeCatalogManagement,
+  type FakeCatalogManagement,
+} from '../../storage/catalog-management/testing/catalog-management-fake';
+import {CAR_BOOKING} from '../chat-service/initial-draft';
+import {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {
   AppConfigProvider,
@@ -50,50 +54,6 @@ import {
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {PromptTurnType, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
-
-class MockCatalogManagement {
-  readonly activeCatalog = signal<Catalog | null>(null);
-  readonly activeCatalogs = signal<CatalogJson[]>([]);
-  readonly activeProtocolVersion = signal<A2uiProtocolVersion>('v0.9');
-  readonly mergedActiveCatalog = computed<Catalog | null>(() => {
-    const primary = this.activeCatalog();
-    const catalogs = this.activeCatalogs();
-    if (!primary && catalogs.length === 0) {
-      return null;
-    }
-    const list: Catalog[] = primary ? [primary, ...catalogs.filter(c => c !== primary)] : catalogs;
-    const mergedComponents: Record<string, CatalogComponentSchema> = {};
-    const mergedFunctions: Record<string, Record<string, unknown>> = {};
-    let firstCatalogId: string | undefined;
-
-    for (const cat of list) {
-      if (!cat) continue;
-      if (!firstCatalogId && cat.catalogId) {
-        firstCatalogId = cat.catalogId;
-      }
-      if (cat.components) {
-        for (const [key, schema] of Object.entries(cat.components)) {
-          if (!Object.hasOwn(mergedComponents, key)) {
-            mergedComponents[key] = schema as CatalogComponentSchema;
-          }
-        }
-      }
-      for (const [key, schema] of getCatalogFunctionEntries(cat)) {
-        if (!Object.hasOwn(mergedFunctions, key)) {
-          mergedFunctions[key] = schema;
-        }
-      }
-    }
-
-    const base = primary ?? list[0] ?? {};
-    return stripPrototypePollutionKeys({
-      ...base,
-      catalogId: primary?.catalogId ?? firstCatalogId,
-      components: mergedComponents,
-      functions: mergedFunctions,
-    });
-  });
-}
 
 class MockAppConfigProvider {
   readonly rendererUrl = signal<string>('http://localhost:4200/preview');
@@ -295,7 +255,10 @@ class MockLlmClient {
 describe('ChatCoordinator Pipeline & State Integration', () => {
   let service: ChatCoordinator;
   let chatStateMock: MockChatState;
-  let catalogManagementMock: MockCatalogManagement;
+  let activeCatalogSignal: WritableSignal<Catalog | null>;
+  let activeCatalogsSignal: WritableSignal<CatalogJson[]>;
+  let activeProtocolVersionSignal: WritableSignal<A2uiProtocolVersion>;
+  let catalogManagementMock: FakeCatalogManagement;
   let configProviderMock: MockAppConfigProvider;
   let stateSyncMock: MockStateSync;
   let llmClientMock: MockLlmClient;
@@ -320,6 +283,14 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       rendererUrl: 'samples/react-slack-catalog/',
       readOnly: true,
     });
+    activeCatalogSignal = signal<Catalog | null>(null);
+    activeCatalogsSignal = signal<CatalogJson[]>([]);
+    activeProtocolVersionSignal = signal<A2uiProtocolVersion>('v0.9');
+    catalogManagementMock = createFakeCatalogManagement({
+      activeCatalog: activeCatalogSignal,
+      activeCatalogs: activeCatalogsSignal,
+      activeProtocolVersion: activeProtocolVersionSignal,
+    });
     TestBed.configureTestingModule({
       providers: [
         ChatCoordinator,
@@ -328,7 +299,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
         {provide: ChatState, useClass: MockChatState},
         {
           provide: CatalogManagement,
-          useClass: MockCatalogManagement,
+          useValue: catalogManagementMock,
         },
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
         {provide: StateSync, useClass: MockStateSync},
@@ -339,7 +310,6 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
     service = TestBed.inject(ChatCoordinator);
     chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
-    catalogManagementMock = TestBed.inject(CatalogManagement) as unknown as MockCatalogManagement;
     configProviderMock = TestBed.inject(AppConfigProvider) as unknown as MockAppConfigProvider;
     stateSyncMock = TestBed.inject(StateSync) as unknown as MockStateSync;
     llmClientMock = TestBed.inject(LlmClient) as unknown as MockLlmClient;
@@ -358,7 +328,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
   }
 
   it('switches renderers for a tool call and regenerates the same request with the new catalog', async () => {
-    catalogManagementMock.activeCatalog.set({
+    activeCatalogSignal.set({
       catalogId: 'basic',
       components: {Text: {type: 'object'}},
     });
@@ -369,7 +339,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       TestBed.tick();
       changed.resolve();
       await ready.promise;
-      catalogManagementMock.activeCatalog.set({
+      activeCatalogSignal.set({
         catalogId: 'slack-catalog',
         components: {Text: {type: 'object'}},
       });
@@ -575,7 +545,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
   });
 
   it('returns default instructions fallback prompt on empty catalog', () => {
-    catalogManagementMock.activeCatalog.set(null);
+    activeCatalogSignal.set(null);
     const prompt = service.systemPrompt();
 
     expect(prompt).toContain(
@@ -597,7 +567,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       },
     };
 
-    catalogManagementMock.activeCatalog.set(customCatalog);
+    activeCatalogSignal.set(customCatalog);
     const prompt = service.systemPrompt();
 
     expect(prompt).toContain('A2UI Generation Expert');
@@ -616,7 +586,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       components: {},
     };
 
-    catalogManagementMock.activeCatalog.set(emptyCatalog);
+    activeCatalogSignal.set(emptyCatalog);
     const prompt = service.systemPrompt();
 
     expect(prompt).toContain('"Empty Catalog"');
@@ -625,7 +595,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
   describe('Multimodal Guidelines Conditional Injection', () => {
     beforeEach(() => {
-      catalogManagementMock.activeCatalog.set({
+      activeCatalogSignal.set({
         catalogId: 'basic',
         components: {Text: {}},
       });
@@ -976,7 +946,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     });
 
     // We also mock dynamic components so that 'Text' passes catalog validation
-    catalogManagementMock.activeCatalog.set({
+    activeCatalogSignal.set({
       catalogId: 'basic',
       components: {
         Text: {name: 'Text'},
@@ -1009,7 +979,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       return {contentStream, complete: Promise.resolve(legacyRawOutput)};
     });
 
-    catalogManagementMock.activeCatalog.set({
+    activeCatalogSignal.set({
       catalogId: 'test',
       components: {
         TextField: {},
@@ -1047,7 +1017,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     });
 
     // Active catalog registers standard element mapping targets
-    catalogManagementMock.activeCatalog.set({
+    activeCatalogSignal.set({
       catalogId: 'test',
       components: {
         TextField: {},
@@ -1401,7 +1371,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       return {contentStream, complete: Promise.resolve(invalidEnvelopeJsonl)};
     });
 
-    catalogManagementMock.activeCatalog.set({
+    activeCatalogSignal.set({
       catalogId: 'test',
       components: {},
     });
@@ -1423,7 +1393,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
   describe('Parsing and Cleanup', () => {
     it('cleans raw LLM text (markdown fences, thought tags) and sets HEALING status', async () => {
-      catalogManagementMock.activeCatalog.set({catalogId: 'test', components: {TextField: {}}});
+      activeCatalogSignal.set({catalogId: 'test', components: {TextField: {}}});
 
       const rawText = `
 <thinking>
@@ -1469,7 +1439,7 @@ I should generate a text field.
     });
 
     it('handles empty LLM response as conversational and aborts layout commit', async () => {
-      catalogManagementMock.activeCatalog.set({catalogId: 'test', components: {}});
+      activeCatalogSignal.set({catalogId: 'test', components: {}});
       const rawText = `
 <thinking>
 I have no idea what to do, I'll output nothing.
@@ -1493,7 +1463,7 @@ I have no idea what to do, I'll output nothing.
     });
 
     it('detects unparseable layout outputs, sets IDLE status, and records diagnostic error', async () => {
-      catalogManagementMock.activeCatalog.set({catalogId: 'test', components: {}});
+      activeCatalogSignal.set({catalogId: 'test', components: {}});
       const rawText = `
 <thinking>
 I'll output bad JSON.
@@ -1951,7 +1921,7 @@ I'll output bad JSON.
     });
 
     it('excludes cancelled turns (*You stopped this response.*) and their preceding user messages/attachments from subsequent LLM requests', async () => {
-      catalogManagementMock.activeCatalog.set({
+      activeCatalogSignal.set({
         catalogId: 'basic',
         components: {Text: {}},
       });
@@ -2033,7 +2003,7 @@ I'll output bad JSON.
     });
 
     it('excludes MODEL turns with parseError and their preceding USER prompt and image attachments from context and systemPrompt()', async () => {
-      catalogManagementMock.activeCatalog.set({
+      activeCatalogSignal.set({
         catalogId: 'basic',
         components: {Text: {}},
       });
@@ -2267,13 +2237,13 @@ I'll output bad JSON.
       (service as unknown as {mergedActiveCatalog: () => Catalog | null}).mergedActiveCatalog();
 
     it('merges component schemas and function schemas across activeCatalogs falling back to activeCatalog', () => {
-      catalogManagementMock.activeCatalog.set({
+      activeCatalogSignal.set({
         catalogId: 'primary-cat',
         components: {PrimaryWidget: {type: 'object'}},
         functions: {primaryFn: {description: 'primary'}},
       });
 
-      catalogManagementMock.activeCatalogs.set([
+      activeCatalogsSignal.set([
         {
           catalogId: 'primary-cat',
           components: {PrimaryWidget: {type: 'object'}},
@@ -2296,8 +2266,8 @@ I'll output bad JSON.
     });
 
     it('falls back cleanly to activeCatalog when activeCatalogs is empty', () => {
-      catalogManagementMock.activeCatalogs.set([]);
-      catalogManagementMock.activeCatalog.set({
+      activeCatalogsSignal.set([]);
+      activeCatalogSignal.set({
         catalogId: 'fallback-cat',
         components: {FallbackWidget: {}},
         functions: {},
@@ -2310,8 +2280,8 @@ I'll output bad JSON.
     });
 
     it('heals and validates components registered only in secondary catalog', async () => {
-      catalogManagementMock.activeProtocolVersion.set('v1.0');
-      catalogManagementMock.activeCatalogs.set([
+      activeProtocolVersionSignal.set('v1.0');
+      activeCatalogsSignal.set([
         {catalogId: 'main-cat', components: {Text: {}}, functions: {}},
         {catalogId: 'mcp-cat', components: {ToolResultViewer: {}}, functions: {search: {}}},
       ]);
@@ -2335,8 +2305,8 @@ I'll output bad JSON.
     });
 
     it('recognizes single-message createSurface with inline components as creating and populating surfaceId in v1.0', async () => {
-      catalogManagementMock.activeProtocolVersion.set('v1.0');
-      catalogManagementMock.activeCatalog.set({
+      activeProtocolVersionSignal.set('v1.0');
+      activeCatalogSignal.set({
         catalogId: 'test-cat',
         components: {Text: {}, Button: {}},
       });
@@ -2360,8 +2330,8 @@ I'll output bad JSON.
     });
 
     it('validates callRendererFunction surfaceId and rejects unknown surfaceId', async () => {
-      catalogManagementMock.activeProtocolVersion.set('v1.0');
-      catalogManagementMock.activeCatalog.set({catalogId: 'test-cat', components: {}});
+      activeProtocolVersionSignal.set('v1.0');
+      activeCatalogSignal.set({catalogId: 'test-cat', components: {}});
 
       stateSyncMock.activeDraftSignal.set(
         JSON.stringify([{version: '1.0', createSurface: {surfaceId: 'known-surface'}}]),
@@ -2386,8 +2356,8 @@ I'll output bad JSON.
     });
 
     it('accepts callRendererFunction targeting an active surface or with omitted surfaceId', async () => {
-      catalogManagementMock.activeProtocolVersion.set('v1.0');
-      catalogManagementMock.activeCatalog.set({catalogId: 'test-cat', components: {}});
+      activeProtocolVersionSignal.set('v1.0');
+      activeCatalogSignal.set({catalogId: 'test-cat', components: {}});
 
       stateSyncMock.activeDraftSignal.set(
         JSON.stringify([{version: '1.0', createSurface: {surfaceId: 'known-surface'}}]),
@@ -2411,8 +2381,8 @@ I'll output bad JSON.
     });
 
     it('heals missing createSurface.catalogId from mergedActiveCatalog() in v1.0', async () => {
-      catalogManagementMock.activeProtocolVersion.set('v1.0');
-      catalogManagementMock.activeCatalog.set({
+      activeProtocolVersionSignal.set('v1.0');
+      activeCatalogSignal.set({
         catalogId: 'auto.healed.catalog',
         components: {Card: {}},
       });
@@ -2434,9 +2404,9 @@ I'll output bad JSON.
     });
 
     it('fails outgoing validation when createSurface has invalid empty catalogId', async () => {
-      catalogManagementMock.activeProtocolVersion.set('v1.0');
-      catalogManagementMock.activeCatalog.set(null);
-      catalogManagementMock.activeCatalogs.set([]);
+      activeProtocolVersionSignal.set('v1.0');
+      activeCatalogSignal.set(null);
+      activeCatalogsSignal.set([]);
 
       const payload =
         '{"version": "1.0", "createSurface": {"surfaceId": "orphan-surf", "catalogId": "", "components": [{"component": "Card", "id": "c1"}]}}';
@@ -2456,8 +2426,8 @@ I'll output bad JSON.
     });
 
     it('normalizes shorthand callRendererFunction with { call, args } into canonical callFunction', async () => {
-      catalogManagementMock.activeProtocolVersion.set('v1.0');
-      catalogManagementMock.activeCatalog.set({
+      activeProtocolVersionSignal.set('v1.0');
+      activeCatalogSignal.set({
         catalogId: 'tools.catalog',
         components: {},
       });
@@ -2489,40 +2459,9 @@ I'll output bad JSON.
       expect(committedText).not.toContain('"call": "exportReport"');
     });
 
-    it('strips prototype pollution keys from mergedActiveCatalog()', () => {
-      const pollutedCatalog = JSON.parse(
-        JSON.stringify({
-          catalogId: 'polluted-cat',
-          __proto__: {polluted: true},
-          components: {
-            Widget: {
-              __proto__: {evil: true},
-              constructor: {polluted: true},
-              properties: {},
-            },
-          },
-          functions: {
-            doAction: {
-              __proto__: {hack: true},
-            },
-          },
-        }),
-      );
-
-      catalogManagementMock.activeCatalogs.set([pollutedCatalog]);
-      const merged = getMerged();
-
-      expect(merged).not.toBeNull();
-      expect(Object.keys(merged!)).not.toContain('__proto__');
-      expect(Object.keys(merged!.components!['Widget'])).not.toContain('__proto__');
-      expect(Object.keys(merged!.components!['Widget'])).not.toContain('constructor');
-      const functionsMap = merged!.functions as Record<string, Record<string, unknown>>;
-      expect(Object.keys(functionsMap['doAction'])).not.toContain('__proto__');
-    });
-
     it('rejects callRendererFunction targeting a surface that was deleted in the same payload batch', async () => {
-      catalogManagementMock.activeProtocolVersion.set('v1.0');
-      catalogManagementMock.activeCatalog.set({catalogId: 'test-cat', components: {}});
+      activeProtocolVersionSignal.set('v1.0');
+      activeCatalogSignal.set({catalogId: 'test-cat', components: {}});
 
       stateSyncMock.activeDraftSignal.set(
         JSON.stringify([
@@ -2550,6 +2489,255 @@ I'll output bad JSON.
       expect(errorMsg.role).toBe(MessageRole.ERROR);
       expect(errorMsg.errorDetails).toContain('Surface validation failed');
       expect(errorMsg.errorDetails).toContain('surf-to-delete');
+    });
+  });
+
+  describe('per-turn protocol version decision', () => {
+    const v10Catalog: CatalogJson = {
+      $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+      protocolVersion: '1.0',
+      components: {Text: {type: 'object'}},
+    };
+    const v09Catalog: CatalogJson = {
+      catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      protocolVersion: '0.9',
+      components: {Text: {type: 'object'}},
+    };
+
+    function configureDualRenderer() {
+      activeCatalogSignal.set(v10Catalog);
+      activeCatalogsSignal.set([v10Catalog, v09Catalog]);
+      activeProtocolVersionSignal.set('v1.0');
+    }
+
+    function configureV10OnlyRenderer() {
+      activeCatalogSignal.set(v10Catalog);
+      activeCatalogsSignal.set([v10Catalog]);
+      activeProtocolVersionSignal.set('v1.0');
+    }
+
+    it('defaults from-scratch prompts on a dual renderer to v1.0', async () => {
+      configureDualRenderer();
+      stateSyncMock.activeDraftSignal.set(
+        JSON.stringify([{createSurface: {surfaceId: 'main', catalogId: v09Catalog.catalogId}}]),
+      );
+      const v10Response =
+        '{"version":"1.0","createSurface":{"surfaceId":"main","catalogId":"https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json","components":[{"id":"root","component":"Text","text":"Hi"}]}}';
+      llmClientMock.chatStream = vi.fn(async () => ({
+        contentStream: createMockStream([v10Response]),
+        complete: Promise.resolve(v10Response),
+      }));
+
+      await service.submitPrompt('Build a login form');
+
+      const [messages] = llmClientMock.chatStream.mock.calls[0];
+      expect(messages[0].content).toContain(v10Catalog['$id']);
+      expect(messages[0].content).not.toContain(v09Catalog.catalogId);
+      expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
+    });
+
+    it('honors an explicit v0.9 ask from scratch on a dual renderer', async () => {
+      configureDualRenderer();
+      stateSyncMock.activeDraftSignal.set(
+        JSON.stringify([{createSurface: {surfaceId: 'main', catalogId: v09Catalog.catalogId}}]),
+      );
+      const v09Response =
+        '{"createSurface":{"surfaceId":"main","catalogId":"https://a2ui.org/specification/v0_9/basic_catalog.json"}}\n' +
+        '{"updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Text","text":"v0.9"}]}}';
+      llmClientMock.chatStream = vi.fn(async () => ({
+        contentStream: createMockStream([v09Response]),
+        complete: Promise.resolve(v09Response),
+      }));
+
+      await service.submitPrompt('Build a v0.9 login form');
+
+      const [messages] = llmClientMock.chatStream.mock.calls[0];
+      expect(messages[0].content).toContain(v09Catalog.catalogId);
+      expect(messages[0].content).not.toContain(v10Catalog['$id']);
+      expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalledOnce();
+      expect(stateSyncMock.activeDraft()).toContain('"v0.9"');
+    });
+
+    it('keeps v0.9 when editing an existing v0.9 draft on a dual renderer', async () => {
+      configureDualRenderer();
+      stateSyncMock.activeDraftSignal.set(CAR_BOOKING);
+      const v09Patch =
+        '{"updateComponents":{"surfaceId":"booking-card","components":[{"id":"title","component":"Text","text":"Updated"}]}}';
+      llmClientMock.chatStream = vi.fn(async () => ({
+        contentStream: createMockStream([v09Patch]),
+        complete: Promise.resolve(v09Patch),
+      }));
+
+      await service.submitPrompt('Update the card heading');
+
+      const [messages] = llmClientMock.chatStream.mock.calls[0];
+      expect(messages[0].content).toContain(v09Catalog.catalogId);
+      expect(messages[0].content).not.toContain(v10Catalog['$id']);
+    });
+
+    it('replaces the draft when the user explicitly requests a different supported version (A2)', async () => {
+      configureDualRenderer();
+      stateSyncMock.activeDraftSignal.set(
+        JSON.stringify([
+          {
+            version: '1.0',
+            createSurface: {
+              surfaceId: 'main',
+              catalogId: v10Catalog['$id'],
+              components: [
+                {id: 'old-only', component: 'Text', text: 'Old v1.0'},
+                {id: 'root', component: 'Text', text: 'Keep'},
+              ],
+            },
+          },
+        ]),
+      );
+      const v09Replacement =
+        '{"createSurface":{"surfaceId":"main","catalogId":"https://a2ui.org/specification/v0_9/basic_catalog.json"}}\n' +
+        '{"updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Text","text":"New v0.9"}]}}';
+      llmClientMock.chatStream = vi.fn(async () => ({
+        contentStream: createMockStream([v09Replacement]),
+        complete: Promise.resolve(v09Replacement),
+      }));
+
+      await service.submitPrompt('Rebuild this in v0.9');
+
+      const [messages] = llmClientMock.chatStream.mock.calls[0];
+      expect(messages[0].content).toContain(v09Catalog.catalogId);
+      expect(stateSyncMock.activeDraft()).not.toContain('old-only');
+      expect(stateSyncMock.activeDraft()).toContain('New v0.9');
+    });
+
+    it('silently falls back to renderer default and replaces when draft version is unsupported (A3)', async () => {
+      configureV10OnlyRenderer();
+      stateSyncMock.activeDraftSignal.set(CAR_BOOKING);
+      const v10Replacement =
+        '{"version":"1.0","createSurface":{"surfaceId":"main","catalogId":"https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json","components":[{"id":"root","component":"Text","text":"Replaced in v1.0"}]}}';
+      llmClientMock.chatStream = vi.fn(async () => ({
+        contentStream: createMockStream([v10Replacement]),
+        complete: Promise.resolve(v10Replacement),
+      }));
+
+      await service.submitPrompt('Add a submit button');
+
+      const [messages] = llmClientMock.chatStream.mock.calls[0];
+      expect(messages[0].content).toContain(v10Catalog['$id']);
+      expect(stateSyncMock.activeDraft()).toContain('Replaced in v1.0');
+      expect(stateSyncMock.activeDraft()).not.toContain('Car Rental');
+      const modelMessages = chatStateMock.chatHistory().filter(m => m.role === MessageRole.MODEL);
+      expect(modelMessages.some(m => m.content.includes('supports A2UI'))).toBe(false);
+    });
+
+    it('refuses an explicit unsupported version request without calling the LLM', async () => {
+      configureV10OnlyRenderer();
+      llmClientMock.chatStream.mockClear();
+
+      await service.submitPrompt('Build a v0.9 form');
+
+      expect(llmClientMock.chatStream).not.toHaveBeenCalled();
+      expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+      const history = chatStateMock.chatHistory();
+      expect(history[history.length - 1]).toMatchObject({
+        role: MessageRole.MODEL,
+        content:
+          "The selected renderer supports A2UI v1.0 only, so I can't generate v0.9 for it. Ask again without a version, or select a renderer that supports v0.9.",
+      });
+    });
+
+    it('re-decides generation version after a switchRenderer tool call changes protocol support', async () => {
+      configureDualRenderer();
+      stateSyncMock.activeDraftSignal.set(CAR_BOOKING);
+      const slackV10Catalog: CatalogJson = {
+        $id: 'slack-v10-catalog',
+        protocolVersion: '1.0',
+        components: {SlackSection: {type: 'object'}},
+      };
+      rendererSelection.selectRenderer.mockImplementation(async () => {
+        activeCatalogSignal.set(slackV10Catalog);
+        activeCatalogsSignal.set([slackV10Catalog]);
+        activeProtocolVersionSignal.set('v1.0');
+      });
+      const v10SlackPayload =
+        '{"version":"1.0","createSurface":{"surfaceId":"main","catalogId":"slack-v10-catalog","components":[{"id":"root","component":"SlackSection"}]}}';
+      llmClientMock.chatStream = vi
+        .fn()
+        .mockResolvedValueOnce(toolStream())
+        .mockResolvedValueOnce({
+          contentStream: createMockStream([v10SlackPayload]),
+          complete: Promise.resolve(v10SlackPayload),
+        });
+
+      await service.submitPrompt('Send this to Slack');
+
+      expect(llmClientMock.chatStream).toHaveBeenCalledTimes(2);
+      const [secondCallMessages] = llmClientMock.chatStream.mock.calls[1];
+      expect(secondCallMessages[0].content).toContain('slack-v10-catalog');
+      expect(stateSyncMock.activeDraft()).toContain('SlackSection');
+      expect(stateSyncMock.activeDraft()).not.toContain('Car Rental');
+    });
+
+    it('validates and heals non-default v0.9 LLM output against v0.9 catalogs instead of default v1.0 catalogs (I3)', async () => {
+      const v10TextOnly: CatalogJson = {
+        $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        protocolVersion: '1.0',
+        components: {Text: {type: 'object', properties: {text: {type: 'string'}}}},
+      };
+      const v09WithLegacyCard: CatalogJson = {
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        protocolVersion: '0.9',
+        components: {
+          LegacyCard: {type: 'object', properties: {title: {type: 'string'}}},
+        },
+      };
+      activeCatalogSignal.set(v10TextOnly);
+      activeCatalogsSignal.set([v10TextOnly, v09WithLegacyCard]);
+      activeProtocolVersionSignal.set('v1.0');
+      stateSyncMock.activeDraftSignal.set('');
+
+      const v09LegacyPayload =
+        '{"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"https://a2ui.org/specification/v0_9/basic_catalog.json"}}\n' +
+        '{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"legacycard","title":"Hello"}]}}';
+      llmClientMock.chatStream = vi.fn(async () => ({
+        contentStream: createMockStream([v09LegacyPayload]),
+        complete: Promise.resolve(v09LegacyPayload),
+      }));
+
+      await service.submitPrompt('Build a v0.9 legacy card');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
+      expect(stateSyncMock.activeDraft()).toContain('"LegacyCard"');
+    });
+
+    it('validates and heals non-default v1.0 LLM output against v1.0 catalogs on a v0.9-default renderer (I3)', async () => {
+      const v09TextOnly: CatalogJson = {
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        protocolVersion: '0.9',
+        components: {Text: {type: 'object', properties: {text: {type: 'string'}}}},
+      };
+      const v10WithBadge: CatalogJson = {
+        $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        protocolVersion: '1.0',
+        components: {
+          V10Badge: {type: 'object', properties: {label: {type: 'string'}}},
+        },
+      };
+      activeCatalogSignal.set(v09TextOnly);
+      activeCatalogsSignal.set([v09TextOnly, v10WithBadge]);
+      activeProtocolVersionSignal.set('v0.9');
+      stateSyncMock.activeDraftSignal.set('');
+
+      const v10BadgePayload =
+        '{"version":"1.0","createSurface":{"surfaceId":"main","components":[{"id":"root","component":"V10Badge","label":"New"}]}}';
+      llmClientMock.chatStream = vi.fn(async () => ({
+        contentStream: createMockStream([v10BadgePayload]),
+        complete: Promise.resolve(v10BadgePayload),
+      }));
+
+      await service.submitPrompt('Build a v1.0 badge');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
+      expect(stateSyncMock.activeDraft()).toContain('V10Badge');
+      expect(stateSyncMock.activeDraft()).toContain(v10WithBadge['$id']);
     });
   });
 });

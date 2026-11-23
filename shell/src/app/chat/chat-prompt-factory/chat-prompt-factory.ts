@@ -15,8 +15,10 @@
  */
 
 import {Injectable, computed, inject, signal} from '@angular/core';
+import type {A2uiProtocolVersion} from 'a2ui-bridge';
+import type {VersionRegistry} from '../../shared/protocol/version-registry';
+import {selectCatalogsForVersion} from '../../storage/catalog-management/catalog-domain';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
@@ -53,6 +55,10 @@ export class ChatPromptFactory {
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
   private readonly v09Strategy = inject(V09PromptStrategy);
   private readonly v10Strategy = inject(V10PromptStrategy);
+  private readonly strategies: VersionRegistry<PromptProtocolStrategy> = {
+    'v0.9': this.v09Strategy,
+    'v1.0': this.v10Strategy,
+  };
 
   readonly customInstructionsState = signal<CustomInstructionsState>(this.loadInitialState());
   readonly presets = computed(() => this.customInstructionsState().presets);
@@ -64,45 +70,56 @@ export class ChatPromptFactory {
   readonly customInstructions = computed(() => this.activePreset()?.content ?? '');
   readonly hasCustomInstructions = computed(() => this.customInstructions().trim().length > 0);
 
-  private readonly activeStrategy = computed<PromptProtocolStrategy>(() => {
-    const version = this.catalogManagement.activeProtocolVersion();
-    return version === 'v1.0' ? this.v10Strategy : this.v09Strategy;
-  });
-
-  private readonly textOnlySystemPrompt = computed<string>(() => this.composeSystemPrompt(false));
-  private readonly multimodalSystemPrompt = computed<string>(() => this.composeSystemPrompt(true));
+  private readonly textOnlySystemPrompt = computed<string>(() => this.composeSystemPrompt());
+  private readonly multimodalSystemPrompt = computed<string>(() =>
+    this.composeSystemPrompt({includeMultimodalGuidelines: true}),
+  );
 
   readonly systemPrompt = this.textOnlySystemPrompt;
 
   /**
-   * Builds the system prompt with optional multimodal image-to-UI guidelines.
-   *
-   * @param options Flag controlling whether multimodal guidelines are included.
-   * @returns Generated system prompt string.
+   * Builds the system prompt for a specific protocol version and optional
+   * draft-replacement / multimodal guidelines.
    */
-  buildSystemPrompt(options?: {includeMultimodalGuidelines?: boolean}): string {
+  buildSystemPrompt(options?: {
+    protocolVersion?: A2uiProtocolVersion;
+    replacesDraft?: boolean;
+    includeMultimodalGuidelines?: boolean;
+  }): string {
+    if (options?.protocolVersion || options?.replacesDraft) {
+      return this.composeSystemPrompt(options);
+    }
     return options?.includeMultimodalGuidelines
       ? this.multimodalSystemPrompt()
       : this.textOnlySystemPrompt();
   }
 
-  private composeSystemPrompt(includeMultimodalGuidelines: boolean): string {
-    const catalog = this.catalogManagement.activeCatalog();
-    const catalogs = this.catalogManagement.activeCatalogs();
-    const effectiveCatalogs: (Catalog | CatalogJson)[] =
-      catalogs && catalogs.length > 0 ? [...catalogs] : catalog ? [catalog] : [];
+  private composeSystemPrompt(options?: {
+    protocolVersion?: A2uiProtocolVersion;
+    replacesDraft?: boolean;
+    includeMultimodalGuidelines?: boolean;
+  }): string {
+    const support = this.catalogManagement.protocolSupport();
+    const version = options?.protocolVersion ?? support.defaultVersion;
+    const {primary: effectivePrimary, catalogs: effectiveCatalogs} = selectCatalogsForVersion(
+      support,
+      version,
+      this.catalogManagement.activeCatalog(),
+      this.catalogManagement.activeCatalogs(),
+    );
 
     const mcpSupported = this.mcpManager.doesCatalogSupportMcp(
-      effectiveCatalogs.length > 0 ? effectiveCatalogs : catalog,
+      effectiveCatalogs.length > 0 ? effectiveCatalogs : effectivePrimary,
     );
     const activeServers = mcpSupported ? this.mcpManager.getActiveServersWithTools() : [];
 
-    return this.activeStrategy().buildSystemPrompt({
-      activeCatalog: catalog,
+    return this.strategies[version].buildSystemPrompt({
+      activeCatalog: effectivePrimary,
       activeCatalogs: effectiveCatalogs,
       activeServers,
       customInstructions: this.customInstructions(),
-      includeMultimodalGuidelines,
+      includeMultimodalGuidelines: Boolean(options?.includeMultimodalGuidelines),
+      replacesDraft: Boolean(options?.replacesDraft),
     });
   }
 
