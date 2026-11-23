@@ -17,7 +17,7 @@
 import type {A2uiProtocolVersion} from 'a2ui-bridge';
 import type {ProtocolSupport} from '../storage/catalog-management/catalog-domain';
 import {getCatalogId, type Catalog} from '../storage/models/catalog-storage.model';
-import {detectMessageVersion} from './protocol-version-mismatch';
+import {inspectPayloadVersion} from './protocol-version-mismatch';
 
 /** Error codes emitted when a payload cannot be dispatched to the active renderer. */
 export type PayloadResolutionErrorCode = 'PROTOCOL_VERSION_MISMATCH' | 'UNSUPPORTED_CATALOG';
@@ -79,31 +79,18 @@ export function resolvePayloadProtocol(
     return supportedResult(support.defaultVersion, support, null);
   }
 
-  let detectedVersion: A2uiProtocolVersion | null = null;
-  let versionAnchor: string | null = null;
-
-  for (const item of messages) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      continue;
-    }
-    const obj = item as Record<string, unknown>;
-    const itemVersion = detectMessageVersion(obj);
-    if (!itemVersion) {
-      continue;
-    }
-    const explicitAnchor = extractExplicitVersionString(obj);
-    if (detectedVersion === null) {
-      detectedVersion = itemVersion;
-      versionAnchor = explicitAnchor;
-    } else if (itemVersion !== detectedVersion) {
-      return {
-        status: 'unsupported',
-        code: 'PROTOCOL_VERSION_MISMATCH',
-        message: formatMixedProtocolVersionsMessage(),
-        anchor: explicitAnchor ?? versionAnchor,
-      };
-    }
+  const inspection = inspectPayloadVersion(messages);
+  if (inspection.status === 'mixed') {
+    return {
+      status: 'unsupported',
+      code: 'PROTOCOL_VERSION_MISMATCH',
+      message: formatMixedProtocolVersionsMessage(),
+      anchor: inspection.anchor,
+    };
   }
+
+  const detectedVersion = inspection.status === 'detected' ? inspection.version : null;
+  const versionAnchor = inspection.status === 'detected' ? inspection.anchor : null;
 
   if (detectedVersion !== null && !support.versions.includes(detectedVersion)) {
     return {
@@ -114,8 +101,12 @@ export function resolvePayloadProtocol(
     };
   }
 
-  const version = detectedVersion ?? support.defaultVersion;
   const requestedCatalogId = findRequestedCatalogId(messages);
+  const versionFromCatalog =
+    detectedVersion === null && requestedCatalogId !== null
+      ? findVersionForCatalogId(support, requestedCatalogId)
+      : null;
+  const version = detectedVersion ?? versionFromCatalog ?? support.defaultVersion;
   const versionCatalogs = support.catalogsByVersion[version] ?? [];
 
   if (support.announcedCatalogCount > 1 && requestedCatalogId !== null) {
@@ -184,12 +175,16 @@ function supportedResult(
   };
 }
 
-function extractExplicitVersionString(obj: Record<string, unknown>): string | null {
-  if (typeof obj['version'] !== 'string') {
-    return null;
+function findVersionForCatalogId(
+  support: ProtocolSupport,
+  catalogId: string,
+): A2uiProtocolVersion | null {
+  for (const version of support.versions) {
+    if (support.catalogsByVersion[version]?.some(c => getCatalogId(c) === catalogId)) {
+      return version;
+    }
   }
-  const trimmed = obj['version'].trim();
-  return trimmed.length > 0 ? trimmed : null;
+  return null;
 }
 
 function findRequestedCatalogId(messages: readonly unknown[]): string | null {

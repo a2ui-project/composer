@@ -117,3 +117,21 @@ export function isUntouchedBlankDraft(content: string): boolean {
   }
   return true;
 }
+
+const RAW_JSON_V10_VERSION_PATTERN = /"version"\s*:\s*"v?1\.0"/i;
+const RAW_JSON_V09_VERSION_PATTERN = /"version"\s*:\s*"v?0\.9"/i;
+
+/**
+ * Fallback version detector for unparseable layout JSON text matching an explicit
+ * `"version": "v0.9" | "0.9" | "v1.0" | "1.0"` property. Checks for `v1.0` across
+ * the whole text before `v0.9`, matching pre-branch `StateSync.sanitizeLayout`.
+ */
+export function detectRawJsonDraftVersion(raw: string): A2uiProtocolVersion | null {
+  if (RAW_JSON_V10_VERSION_PATTERN.test(raw)) {
+    return 'v1.0';
+  }
+  if (RAW_JSON_V09_VERSION_PATTERN.test(raw)) {
+    return 'v0.9';
+  }
+  return null;
+}

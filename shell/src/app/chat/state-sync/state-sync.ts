@@ -23,6 +23,7 @@ import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
 import {MessageRole} from '../llm-client/llm-client';
 import {BASIC_CATALOG_ID_V0_9, BASIC_CATALOG_ID_V1_0} from '../chat-service/initial-draft';
 import {
+  detectRawJsonDraftVersion,
   DraftProtocolStrategy,
   isUntouchedStarterDraft,
   isUntouchedBlankDraft,
@@ -437,7 +438,7 @@ export class StateSync {
     const parsed = tryParseJsonArray(trimmed);
     const isV10 = parsed.success
       ? detectProtocolVersion(parsed.data) === 'v1.0'
-      : /"version"\s*:\s*"v?1\.0"/i.test(trimmed);
+      : detectRawJsonDraftVersion(trimmed) === 'v1.0';
 
     if (isV10) {
       const sanitized = this.v10Strategy.sanitizeLayout(trimmed);

@@ -53,6 +53,42 @@ describe('SurfacePartitioner', () => {
       expect(normalized[0].createSurface).toBeDefined();
     });
 
+    it('stamps versionless createSurface messages consistently without v0.9 catalogId substring heuristics (R2)', () => {
+      // (a) v0.9 basic catalogId -> partitioner defaults to v0.9 (no ProtocolSupport lookup)
+      const announcedV09 = normalizeA2uiItems([
+        {
+          createSurface: {
+            surfaceId: 's-v09',
+            catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+          },
+        },
+      ]);
+      expect(announcedV09[0].version).toBe('v0.9');
+
+      // (b) unknown catalogId -> defaults to v0.9
+      const unknownCatalog = normalizeA2uiItems([
+        {createSurface: {surfaceId: 's-unknown', catalogId: 'https://example.com/custom.json'}},
+      ]);
+      expect(unknownCatalog[0].version).toBe('v0.9');
+
+      // (c) catalogId merely containing v0_9 / v0.90 but unannounced -> defaults to v0.9
+      const substringV09 = normalizeA2uiItems([
+        {createSurface: {surfaceId: 's-sub', catalogId: 'https://example.com/v0_9/custom.json'}},
+      ]);
+      expect(substringV09[0].version).toBe('v0.9');
+
+      // Pre-branch 549d16f1 parity: versionless v1_0 catalogId still stamps canonical 1.0
+      const preExistingV10 = normalizeA2uiItems([
+        {
+          createSurface: {
+            surfaceId: 's-v10',
+            catalogId: 'https://a2ui.org/specification/v1_0/basic_catalog.json',
+          },
+        },
+      ]);
+      expect(preExistingV10[0].version).toBe('1.0');
+    });
+
     it('returns empty array for invalid inputs', () => {
       expect(normalizeA2uiItems(null as unknown as unknown[])).toEqual([]);
       expect(normalizeA2uiItems([null, 'invalid', 123])).toEqual([]);

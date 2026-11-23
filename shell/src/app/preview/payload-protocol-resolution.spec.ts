@@ -302,6 +302,65 @@ describe('resolvePayloadProtocol', () => {
     });
   });
 
+  it('resolves indeterminate payloads via announced catalogs in ProtocolSupport without substring heuristics (R2)', () => {
+    const customV09Catalog: Catalog = {
+      catalogId: 'https://example.com/custom-opaque/catalog.json',
+      protocolVersion: '0.9',
+      components: {Text: {type: 'object'}},
+    };
+    const customDualSupport: ProtocolSupport = {
+      defaultVersion: 'v1.0',
+      versions: ['v1.0', 'v0.9'],
+      catalogsByVersion: {
+        'v1.0': [V10_BASIC],
+        'v0.9': [V09_COMPOSER, customV09Catalog],
+      },
+      announcedCatalogCount: 3,
+    };
+
+    const customV09Payload = [
+      {
+        createSurface: {
+          surfaceId: 's1',
+          catalogId: 'https://example.com/custom-opaque/catalog.json',
+        },
+      },
+    ];
+    expect(resolvePayloadProtocol(customV09Payload, customDualSupport)).toEqual({
+      status: 'supported',
+      version: 'v0.9',
+      catalogs: [V09_COMPOSER, customV09Catalog],
+      catalog: customV09Catalog,
+    });
+
+    const v090Unannounced = [
+      {createSurface: {surfaceId: 's1', catalogId: 'https://example.com/v0.90/catalog.json'}},
+    ];
+    expect(resolvePayloadProtocol(v090Unannounced, customDualSupport)).toEqual({
+      status: 'unsupported',
+      code: 'UNSUPPORTED_CATALOG',
+      message: formatUnsupportedCatalogMessage('https://example.com/v0.90/catalog.json', 'v1.0', [
+        V10_BASIC_ID,
+      ]),
+      anchor: 'https://example.com/v0.90/catalog.json',
+    });
+
+    const migratedUnannounced = [
+      {
+        createSurface: {
+          surfaceId: 's1',
+          catalogId: 'https://example.com/migrated-from-v0.9/catalog.json',
+        },
+      },
+    ];
+    expect(resolvePayloadProtocol(migratedUnannounced, V10_ONLY_SUPPORT)).toEqual({
+      status: 'supported',
+      version: 'v1.0',
+      catalogs: [V10_BASIC],
+      catalog: V10_BASIC,
+    });
+  });
+
   describe('gatePayloadDispatch', () => {
     it('defers silently while handshake is unsettled', () => {
       const errorLogger = {error: vi.fn()};

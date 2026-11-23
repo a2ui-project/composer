@@ -16,6 +16,88 @@
 
 import type {A2uiProtocolVersion} from 'a2ui-bridge';
 
+/** Result of scanning every message in a payload for protocol version signals. */
+export type PayloadVersionInspection =
+  | {
+      readonly status: 'detected';
+      readonly version: A2uiProtocolVersion;
+      readonly anchor: string | null;
+    }
+  | {
+      readonly status: 'mixed';
+      readonly anchor: string | null;
+    }
+  | {
+      readonly status: 'indeterminate';
+    };
+
+function extractExplicitVersionString(obj: Record<string, unknown>): string | null {
+  if (typeof obj['version'] !== 'string') {
+    return null;
+  }
+  const trimmed = obj['version'].trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function scanPayloadVersion(
+  messages: readonly unknown[] | null | undefined,
+  stopOnFirst: boolean,
+): PayloadVersionInspection {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return {status: 'indeterminate'};
+  }
+
+  let detectedVersion: A2uiProtocolVersion | null = null;
+  let versionAnchor: string | null = null;
+
+  for (const item of messages) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      continue;
+    }
+    const obj = item as Record<string, unknown>;
+    const itemVersion = detectMessageVersion(obj);
+    if (!itemVersion) {
+      continue;
+    }
+    const explicitAnchor = extractExplicitVersionString(obj);
+    if (stopOnFirst) {
+      return {
+        status: 'detected',
+        version: itemVersion,
+        anchor: explicitAnchor,
+      };
+    }
+    if (detectedVersion === null) {
+      detectedVersion = itemVersion;
+      versionAnchor = explicitAnchor;
+    } else if (itemVersion !== detectedVersion) {
+      return {
+        status: 'mixed',
+        anchor: explicitAnchor ?? versionAnchor,
+      };
+    }
+  }
+
+  if (detectedVersion === null) {
+    return {status: 'indeterminate'};
+  }
+  return {
+    status: 'detected',
+    version: detectedVersion,
+    anchor: versionAnchor,
+  };
+}
+
+/**
+ * Inspects all messages in `messages` to determine whether the payload uses a
+ * single protocol version, mixes v0.9 and v1.0, or is indeterminate.
+ */
+export function inspectPayloadVersion(
+  messages: readonly unknown[] | null | undefined,
+): PayloadVersionInspection {
+  return scanPayloadVersion(messages, false);
+}
+
 /**
  * Detects the protocol version from an array of A2UI messages by inspecting explicit
  * version fields or unambiguous structural markers. Returns 'v1.0', 'v0.9', or null if indeterminate.
@@ -23,19 +105,8 @@ import type {A2uiProtocolVersion} from 'a2ui-bridge';
 export function detectPayloadVersion(
   messages: unknown[] | null | undefined,
 ): A2uiProtocolVersion | null {
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return null;
-  }
-  for (const item of messages) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      continue;
-    }
-    const detected = detectMessageVersion(item as Record<string, unknown>);
-    if (detected) {
-      return detected;
-    }
-  }
-  return null;
+  const result = scanPayloadVersion(messages, true);
+  return result.status === 'detected' ? result.version : null;
 }
 
 /**
@@ -69,6 +140,7 @@ export function detectMessageVersion(obj: Record<string, unknown>): A2uiProtocol
     !Array.isArray(obj['createSurface'])
   ) {
     const cs = obj['createSurface'] as Record<string, unknown>;
+    // Pre-branch v1.0 catalog URI check preserved for versionless A2A/chat payloads.
     if (
       typeof cs['catalogId'] === 'string' &&
       (cs['catalogId'].includes('v1_0') || cs['catalogId'].includes('v1.0'))

@@ -15,7 +15,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {detectPayloadVersion} from './protocol-version-mismatch';
+import {detectPayloadVersion, inspectPayloadVersion} from './protocol-version-mismatch';
 
 describe('detectPayloadVersion', () => {
   it('returns null for null, undefined, or empty payload', () => {
@@ -161,6 +161,99 @@ describe('detectPayloadVersion', () => {
         },
       ];
       expect(detectPayloadVersion(payload)).toBeNull();
+    });
+
+    it('does not infer v0.9 from catalogId substrings without version or structural markers (R2)', () => {
+      expect(
+        detectPayloadVersion([
+          {
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+            },
+          },
+        ]),
+      ).toBeNull();
+      expect(
+        detectPayloadVersion([
+          {
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://example.com/v0.90/catalog.json',
+            },
+          },
+        ]),
+      ).toBeNull();
+      expect(
+        detectPayloadVersion([
+          {
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://example.com/migrated-from-v0.9/catalog.json',
+            },
+          },
+        ]),
+      ).toBeNull();
+      expect(
+        detectPayloadVersion([
+          {
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://a2ui.org/specification/v1_0/basic_catalog.json',
+            },
+          },
+        ]),
+      ).toBe('v1.0');
+    });
+  });
+
+  describe('inspectPayloadVersion', () => {
+    it('reports detected, mixed, and indeterminate payloads across all messages', () => {
+      expect(inspectPayloadVersion([{createSurface: {surfaceId: 's1', catalogId: 'c1'}}])).toEqual({
+        status: 'indeterminate',
+      });
+      expect(
+        inspectPayloadVersion([
+          {
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://example.com/migrated-from-v0.9/catalog.json',
+            },
+          },
+        ]),
+      ).toEqual({
+        status: 'indeterminate',
+      });
+      expect(
+        inspectPayloadVersion([
+          {
+            version: 'v0.9',
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+            },
+          },
+          {version: 'v1.0', updateComponents: {surfaceId: 's1', components: []}},
+        ]),
+      ).toEqual({
+        status: 'mixed',
+        anchor: 'v1.0',
+      });
+      expect(
+        inspectPayloadVersion([
+          {
+            version: 'v0.9',
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+            },
+          },
+        ]),
+      ).toEqual({
+        status: 'detected',
+        version: 'v0.9',
+        anchor: 'v0.9',
+      });
     });
   });
 });
