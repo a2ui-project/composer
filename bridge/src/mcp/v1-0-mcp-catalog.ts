@@ -39,15 +39,19 @@ import {v10DynamicValueStrategy} from './v1-0-dynamic-value-strategy.js';
 export const MCP_FUNCTIONS_CATALOG_ID =
   'https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json';
 
-/** Dynamic string parameter schema for v1.0 function schemas using zod/v3. */
-function dynamicStringParam(description: string) {
+/**
+ * Dynamic string parameter schema for v1.0 function schemas using zod/v3.
+ * Allows `null` because v1.0 `requireKeys` maps explicit `undefined` keys to `null` at runtime
+ * (whereas v0.9 delegates strictly to `DynamicStringSchema`, which rejects `null`).
+ */
+function v10DynamicStringParam(description: string) {
   return z
     .union([z.string(), z.null(), z.record(z.any())])
     .describe(`REF:#/$defs/DynamicString|${description}`);
 }
 
 /** Dynamic value parameter schema for v1.0 function schemas using zod/v3. */
-function dynamicValueParam(description: string) {
+function v10DynamicValueParam(description: string) {
   return z
     .union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.any()), z.record(z.any())])
     .describe(`REF:#/$defs/DynamicValue|${description}`);
@@ -143,9 +147,9 @@ export function createMcpFunctionsCatalog(
       allowedCallers: 'rendererOnly',
       schema: requireKeys(
         {
-          ['name']: dynamicStringParam('The name of the MCP tool to execute.'),
+          ['name']: v10DynamicStringParam('The name of the MCP tool to execute.'),
           ['arguments']: z
-            .record(dynamicValueParam('The arguments to pass to the MCP tool.'))
+            .record(v10DynamicValueParam('The arguments to pass to the MCP tool.'))
             .optional()
             .default({})
             .describe('The arguments to pass to the MCP tool.'),
@@ -164,10 +168,10 @@ export function createMcpFunctionsCatalog(
       allowedCallers: 'rendererOrAgent',
       schema: requireKeys(
         {
-          ['expression']: dynamicStringParam(
+          ['expression']: v10DynamicStringParam(
             'A standard JMESPath expression evaluated against `data`.',
           ),
-          ['data']: dynamicValueParam('The input data to evaluate the expression against.'),
+          ['data']: v10DynamicValueParam('The input data to evaluate the expression against.'),
         },
         ['expression', 'data'],
       ) as unknown as FunctionImplementation['schema'],
@@ -182,8 +186,8 @@ export function createMcpFunctionsCatalog(
       allowedCallers: 'rendererOrAgent',
       schema: requireKeys(
         {
-          ['value']: dynamicValueParam('The string or array of strings to match against.'),
-          ['pattern']: dynamicStringParam(
+          ['value']: v10DynamicValueParam('The string or array of strings to match against.'),
+          ['pattern']: v10DynamicStringParam(
             'An RE2 regular expression. Returns an array of capture groups from the first match, or null if there is no match. Unmatched optional groups return empty strings.',
           ),
         },
@@ -200,13 +204,13 @@ export function createMcpFunctionsCatalog(
       allowedCallers: 'rendererOrAgent',
       schema: requireKeys(
         {
-          ['value']: dynamicValueParam(
+          ['value']: v10DynamicValueParam(
             'The string or array of strings to perform replacements on.',
           ),
-          ['pattern']: dynamicStringParam(
+          ['pattern']: v10DynamicStringParam(
             'An RE2 regular expression matching substrings to replace.',
           ),
-          ['replacement']: dynamicStringParam(
+          ['replacement']: v10DynamicStringParam(
             'Literal replacement string. Capture group references like $1 are treated as literal text.',
           ),
         },
@@ -223,8 +227,8 @@ export function createMcpFunctionsCatalog(
       allowedCallers: 'rendererOrAgent',
       schema: requireKeys(
         {
-          ['value']: dynamicValueParam('The string or array of strings to split.'),
-          ['separator']: dynamicStringParam(
+          ['value']: v10DynamicValueParam('The string or array of strings to split.'),
+          ['separator']: v10DynamicStringParam(
             'The delimiter string to split on. An empty string splits into individual characters.',
           ),
         },
@@ -242,7 +246,7 @@ export function createMcpFunctionsCatalog(
       allowedCallers: 'rendererOnly',
       schema: requireKeys(
         {
-          ['updates']: dynamicValueParam(
+          ['updates']: v10DynamicValueParam(
             'An object mapping data model paths to the values to write (e.g., {"/entries": [...], "/title": "Home"}). Paths starting with "/" are absolute; relative paths resolve against the current data context.',
           ),
         },

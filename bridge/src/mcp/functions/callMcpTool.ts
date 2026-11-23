@@ -20,8 +20,6 @@
 
 import {
   A2uiExpressionError,
-  DynamicStringSchema,
-  DynamicValueSchema,
   createFunctionImplementation,
   type A2uiMessage,
   type CreateSurfaceMessage,
@@ -34,7 +32,7 @@ import type {CallToolResult, ReadResourceResult} from '@modelcontextprotocol/sdk
 import {z} from 'zod/v3';
 
 import {type DynamicValueStrategy, resolveDynamicRecord} from '../dynamic-value-strategy.js';
-import type {FunctionApiDefinition} from './common.js';
+import {dynamicStringParam, dynamicValueParam, type FunctionApiDefinition} from './common.js';
 
 /** MIME type identifying an A2UI payload in an MCP resource. */
 export const A2UI_MIME_TYPE = 'application/a2ui+json';
@@ -81,11 +79,9 @@ export const CallMcpToolApi: FunctionApiDefinition = {
   // and `validateFunctionArgs` refer to them by their literal string names) without needing
   // `prettier-ignore` to stop the formatter from unquoting them.
   schema: z.object({
-    ['name']: (DynamicStringSchema as unknown as z.ZodTypeAny).describe(
-      'The name of the MCP tool to execute.',
-    ),
+    ['name']: dynamicStringParam('The name of the MCP tool to execute.'),
     ['arguments']: z
-      .record(DynamicValueSchema as unknown as z.ZodTypeAny)
+      .record(dynamicValueParam('The arguments to pass to the MCP tool.'))
       .optional()
       .default({})
       .describe('The arguments to pass to the MCP tool.'),
