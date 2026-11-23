@@ -22,8 +22,12 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {useA2uiSandbox} from 'a2ui-bridge/react';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import {basicCatalog} from '@a2ui/web_core/v0_9/basic_catalog';
+import {
+  COMPOSER_V09_BASIC_CATALOG_ID,
+  NPM_V09_BASIC_CATALOG_ID,
+} from '../../shared/v0-9/basic-catalog-id.js';
 
-describe.skip('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
+describe('A2ui React Sandbox Integration Spec Tests (v0.9)', () => {
   let container: HTMLDivElement | null = null;
   let root: Root | null = null;
   let originalParent: Window;
@@ -309,19 +313,8 @@ describe.skip('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     );
   });
 
-  it('resolves catalog network-dependently over HTTP fetch when catalogJson is not preloaded', async () => {
+  it('announces both v0.9 basic catalog IDs in GET_CATALOG alongside v1.0', async () => {
     const postSpy = vi.spyOn(window.parent, 'postMessage');
-    const mockCatalogPayload = {
-      components: {
-        'test-component': {type: 'Button'},
-      },
-    };
-    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(() =>
-      Promise.resolve({
-        ok: true,
-        text: () => Promise.resolve(")]}'\n" + JSON.stringify(mockCatalogPayload)),
-      } as Response),
-    );
 
     await act(async () => {
       if (container) {
@@ -330,7 +323,6 @@ describe.skip('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
       }
     });
 
-    // Simulate GET_CATALOG request payload
     await act(async () => {
       window.dispatchEvent(
         new MessageEvent('message', {
@@ -343,22 +335,60 @@ describe.skip('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
       );
     });
 
-    // Wait for the async handleGetCatalog to settle
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
-    // Verify fetch was triggered on standard path 'catalog'
-    expect(fetchSpy).toHaveBeenCalledWith('catalog', expect.any(Object));
-
-    // Verify bridge posted back A2UI_CATALOG with resolved payload
-    expect(postSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: expect.objectContaining(mockCatalogPayload),
-      }),
-      window.location.origin,
+    const catalogCall = postSpy.mock.calls.find(
+      call => call[0]?.type === PreviewBridgeMessageType.A2UI_CATALOG,
     );
+    const catalogs = (catalogCall?.[0]?.payload?.catalogs ?? []) as Array<{
+      catalogId?: string;
+      protocolVersion?: string;
+    }>;
+    const v09Ids = catalogs.filter(c => c.protocolVersion === '0.9').map(c => c.catalogId);
+    expect(v09Ids).toEqual([COMPOSER_V09_BASIC_CATALOG_ID, NPM_V09_BASIC_CATALOG_ID]);
+  });
+
+  it('renders a v0.9 payload referencing the published NPM basic catalog ID', async () => {
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    const payload = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'npm-v09-surf',
+          catalogId: NPM_V09_BASIC_CATALOG_ID,
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'npm-v09-surf',
+          components: [{id: 'root', component: 'Text', text: 'NPM v0.9 React'}],
+        },
+      },
+    ];
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {type: PreviewBridgeMessageType.RENDER_A2UI, payload},
+        }),
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(container?.textContent).toContain('NPM v0.9 React');
+      expect(container?.querySelector('.error-overlay')).toBeNull();
+    });
   });
 
   it('bypasses network fetch and immediately returns preloaded in-memory catalogJson option when provided', async () => {

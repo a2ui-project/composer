@@ -43,13 +43,18 @@ describe('AppRoot Lit Element', () => {
     expect(element).toBeTruthy();
   });
 
-  it('registers multi-catalog handshake with v1.0 basicCatalog and McpFunctionsCatalog', () => {
-    expect(AppRoot.catalogs).toHaveLength(2);
-    const [basic, mcp] = AppRoot.catalogs as Array<{id?: string; protocolVersion?: string}>;
+  it('registers multi-catalog handshake with v1.0 basicCatalog and McpFunctionsCatalog first, plus v0.9 catalogs', () => {
+    expect(AppRoot.catalogs).toHaveLength(4);
+    const [basic, mcp, v09Composer, v09Npm] = AppRoot.catalogs as Array<{
+      id?: string;
+      protocolVersion?: string;
+    }>;
     expect(basic?.id).toBe('https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json');
     expect(basic?.protocolVersion).toBe('1.0');
     expect(mcp?.id).toBe(MCP_FUNCTIONS_CATALOG_ID);
     expect(mcp?.protocolVersion).toBe('1.0');
+    expect(v09Composer?.protocolVersion).toBe('0.9');
+    expect(v09Npm?.protocolVersion).toBe('0.9');
   });
 
   it('processes RENDER_A2UI v1.0 createSurface payload correctly', async () => {

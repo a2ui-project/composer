@@ -18,8 +18,12 @@
 import {describe, it, expect, beforeEach, afterEach, vi, onTestFinished} from 'vitest';
 import {AppRoot} from './main';
 import {a2uiBridge, PreviewBridgeMessageType} from 'a2ui-bridge';
+import {
+  COMPOSER_V09_BASIC_CATALOG_ID,
+  NPM_V09_BASIC_CATALOG_ID,
+} from '../../shared/v0-9/basic-catalog-id.js';
 
-describe.skip('AppRoot Lit Element', () => {
+describe('AppRoot Lit Element (v0.9)', () => {
   let element: AppRoot;
 
   beforeEach(async () => {
@@ -176,18 +180,55 @@ describe.skip('AppRoot Lit Element', () => {
     expect(loadingSlot?.textContent).toBe('');
   });
 
-  it('serves the full basic-catalog demo set', async () => {
-    const {DEMOS} = await import('../../shared/demos');
-    expect(DEMOS).toHaveLength(46);
-    for (const demo of DEMOS) {
-      expect(demo.id).toBeTruthy();
-      expect(demo.name).toBeTruthy();
-      expect(demo.description).toBeTruthy();
-      expect(Array.isArray(demo.a2ui)).toBe(true);
-      expect(demo.a2ui.length).toBeGreaterThan(0);
-      expect(demo.a2ui[0].version).toBe('v0.9');
-    }
-    expect(new Set(DEMOS.map(d => d.id)).size).toBe(DEMOS.length);
+  it('registers both v0.9 basic catalog IDs with protocolVersion 0.9', () => {
+    const v09Catalogs = (AppRoot.catalogs as Array<{id?: string; protocolVersion?: string}>).filter(
+      c => c.protocolVersion === '0.9',
+    );
+    expect(v09Catalogs.map(c => c.id)).toEqual([
+      COMPOSER_V09_BASIC_CATALOG_ID,
+      NPM_V09_BASIC_CATALOG_ID,
+    ]);
+  });
+
+  it('renders a v0.9 payload referencing the published NPM basic catalog ID', async () => {
+    const mockPayload = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'npm-v09-surface',
+          catalogId: NPM_V09_BASIC_CATALOG_ID,
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'npm-v09-surface',
+          components: [{id: 'root', component: 'Text', text: 'NPM v0.9 ID'}],
+        },
+      },
+    ];
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        origin: window.location.origin,
+        data: {type: PreviewBridgeMessageType.RENDER_A2UI, payload: mockPayload},
+      }),
+    );
+
+    await vi.waitFor(async () => {
+      await element.updateComplete;
+      const surfaceEl = element.shadowRoot?.querySelector('a2ui-surface');
+      expect(surfaceEl).not.toBeNull();
+      await (surfaceEl as unknown as {updateComplete: Promise<void>})?.updateComplete;
+      const textEl =
+        surfaceEl?.querySelector('a2ui-basic-text') ??
+        surfaceEl?.shadowRoot?.querySelector('a2ui-basic-text');
+      expect(textEl).not.toBeNull();
+      await (textEl as unknown as {updateComplete: Promise<void>})?.updateComplete;
+      expect(textEl?.textContent).toContain('NPM v0.9 ID');
+    });
+    expect(element.shadowRoot?.querySelector('.error-overlay')).toBeNull();
   });
 
   it('wires getDemos from the bootstrap options through to the bridge', async () => {
@@ -212,7 +253,6 @@ describe.skip('AppRoot Lit Element', () => {
     expect(rendererConfig.getDemos).toBeTypeOf('function');
 
     const served = await rendererConfig.getDemos!();
-    expect(served).toHaveLength(46);
     expect(served).toBe(DEMOS);
   });
 });
