@@ -17,52 +17,6 @@
 import type {A2uiProtocolVersion} from 'a2ui-bridge';
 
 /**
- * Result of validating an A2UI payload against the active preview protocol version.
- */
-export type ProtocolValidationResult =
-  | {valid: true}
-  | {
-      valid: false;
-      code: 'PROTOCOL_VERSION_MISMATCH';
-      detectedVersion: A2uiProtocolVersion;
-      expectedVersion: A2uiProtocolVersion;
-      message: string;
-    };
-
-/**
- * Validates whether an array of A2UI messages conforms to the expected active protocol version.
- *
- * Examines explicit `version` fields as well as unambiguous structural markers (e.g. inline
- * `createSurface.components`/`dataModel`, `@path`/`@call`, `callRendererFunction`, `beginRendering`).
- */
-export function validatePayloadProtocolVersion(
-  messages: unknown[] | null | undefined,
-  activeProtocolVersion: A2uiProtocolVersion,
-): ProtocolValidationResult {
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return {valid: true};
-  }
-
-  for (const item of messages) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      continue;
-    }
-    const detected = detectMessageVersion(item as Record<string, unknown>);
-    if (detected && detected !== activeProtocolVersion) {
-      return {
-        valid: false,
-        code: 'PROTOCOL_VERSION_MISMATCH',
-        detectedVersion: detected,
-        expectedVersion: activeProtocolVersion,
-        message: `Payload protocol version ${detected} does not match active renderer protocol version ${activeProtocolVersion}.`,
-      };
-    }
-  }
-
-  return {valid: true};
-}
-
-/**
  * Detects the protocol version from an array of A2UI messages by inspecting explicit
  * version fields or unambiguous structural markers. Returns 'v1.0', 'v0.9', or null if indeterminate.
  */

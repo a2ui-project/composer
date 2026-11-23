@@ -46,12 +46,14 @@ import {EnvironmentContextService} from '../../shell/startup-resolution/state/en
 import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 import type {A2uiProtocolVersion} from 'a2ui-bridge';
 import {buildAgentFunctionResponseItem} from '../../shared/a2ui-rpc-envelope';
-import {validatePayloadProtocolVersion} from '../protocol-version-mismatch';
+import type {ProtocolSupport} from '../../storage/catalog-management/catalog-domain';
+import {gatePayloadDispatch} from '../payload-protocol-resolution';
 import {buildRendererUrl} from '../renderer-url';
 
 export interface GuestFrameCatalogState {
   hasReceivedCatalogResponse(): boolean;
   activeProtocolVersion(): A2uiProtocolVersion;
+  protocolSupport(): ProtocolSupport;
 }
 
 /** Emitted by {@link GuestFrame.payloadDispatched} when a payload is posted to the guest. */
@@ -237,7 +239,7 @@ export class GuestFrame implements OnInit {
     effect(() => {
       this.payload();
       this.catalogManagement?.hasReceivedCatalogResponse();
-      this.catalogManagement?.activeProtocolVersion();
+      this.catalogManagement?.protocolSupport();
       untracked(() => this.syncPayload());
     });
   }
@@ -413,24 +415,19 @@ export class GuestFrame implements OnInit {
       return;
     }
 
-    const activeVersion =
+    const support =
       this.catalogManagement && this.catalogManagement.hasReceivedCatalogResponse()
-        ? this.catalogManagement.activeProtocolVersion()
+        ? this.catalogManagement.protocolSupport()
         : null;
 
-    if (activeVersion !== null) {
-      const validation = validatePayloadProtocolVersion(payload, activeVersion);
-      if (!validation.valid) {
-        this.errorLogger.error({
-          sourceTag: '[GuestFrame]',
-          code: 'PROTOCOL_VERSION_MISMATCH',
-          message: validation.message,
-        });
-        this.lastSentPayload = null;
-        this.renderRejected.emit();
-        this.renderError.emit(undefined);
-        return;
-      }
+    if (
+      support !== null &&
+      !gatePayloadDispatch({payload}, true, support, this.errorLogger, '[GuestFrame]')
+    ) {
+      this.lastSentPayload = null;
+      this.renderRejected.emit();
+      this.renderError.emit(undefined);
+      return;
     }
 
     const content = stableStringify(payload);

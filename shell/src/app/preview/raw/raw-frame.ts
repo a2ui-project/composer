@@ -16,6 +16,7 @@
 
 import {
   Component,
+  computed,
   inject,
   signal,
   DestroyRef,
@@ -39,7 +40,11 @@ import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service'
 import {tryParseJsonArray} from '../../utils/json';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
-import {validatePayloadProtocolVersion} from '../protocol-version-mismatch';
+import {
+  gatePayloadDispatch,
+  type PayloadProtocolResolution,
+  resolvePayloadProtocol,
+} from '../payload-protocol-resolution';
 import type {editor} from 'monaco-editor';
 
 export const IFRAME_UNRESPONSIVE_ERROR_PREFIX = 'IFRAME_UNRESPONSIVE_ERROR: ';
@@ -62,6 +67,26 @@ export class RawFrame {
   protected readonly layoutJson: WritableSignal<string>;
   /** Tracks if the current layout string fails to parse. */
   protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
+
+  private readonly parsedDraft = computed<unknown[] | null>(() => {
+    const trimmed = this.layoutJson().trim();
+    if (!trimmed) {
+      return [];
+    }
+    const parsed = tryParseJsonArray(trimmed);
+    return parsed.success ? parsed.data : null;
+  });
+
+  protected readonly payloadResolution = computed<PayloadProtocolResolution | null>(() => {
+    if (!this.catalogManagement.hasReceivedCatalogResponse()) {
+      return null;
+    }
+    const payload = this.parsedDraft();
+    if (payload === null) {
+      return null;
+    }
+    return resolvePayloadProtocol(payload, this.catalogManagement.protocolSupport());
+  });
 
   readonly TEST_ONLY = {
     layoutJson: () => this.layoutJson,
@@ -155,7 +180,7 @@ export class RawFrame {
     effect(() => {
       const catalog = this.catalogManagement.activeCatalog();
       const hasCatalogResponse = this.catalogManagement.hasReceivedCatalogResponse();
-      this.catalogManagement.activeProtocolVersion();
+      this.catalogManagement.protocolSupport();
       if (catalog || hasCatalogResponse) {
         untracked(() => {
           this.renderSynchronizedCurrentLayout(false);
@@ -513,23 +538,23 @@ export class RawFrame {
   }
 
   private sendValidatedRenderA2UI(payload: unknown[]): boolean {
-    if (!this.catalogManagement.hasReceivedCatalogResponse()) {
+    const hasReceived = this.catalogManagement.hasReceivedCatalogResponse();
+    if (!hasReceived) {
       console.debug(
         '[RawFrame] Deferring RENDER_A2UI dispatch until catalog discovery handshake settles.',
       );
       return false;
     }
 
-    const activeVersion = this.catalogManagement.activeProtocolVersion();
-
-    const validation = validatePayloadProtocolVersion(payload, activeVersion);
-    if (!validation.valid) {
+    const resolution = gatePayloadDispatch(
+      {resolution: this.payloadResolution()},
+      hasReceived,
+      this.catalogManagement.protocolSupport(),
+      this.errorLogger,
+      '[RawFrame]',
+    );
+    if (!resolution) {
       this.clearWatchdog();
-      this.errorLogger.error({
-        sourceTag: '[RawFrame]',
-        code: 'PROTOCOL_VERSION_MISMATCH',
-        message: validation.message,
-      });
       return false;
     }
 
