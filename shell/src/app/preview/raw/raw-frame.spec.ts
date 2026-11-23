@@ -171,6 +171,7 @@ vi.mock('@monaco-editor/loader', () => {
           })),
           EndOfLineSequence: {LF: 0, CRLF: 1},
           getModelMarkers: vi.fn(() => []),
+          setModelMarkers: vi.fn(),
         },
         languages: {
           json: {
@@ -1854,6 +1855,133 @@ describe('RawFrame JSON Source Editor View', () => {
 
       expect(sendRenderA2UIMock).toHaveBeenCalledWith(foreignPayload);
       expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('forwards draft protocolVersion and protocolCatalog to MonacoEditor and ignores a2ui-protocol markers in Errors/snackbar', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      const v09ComposerCatalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        protocolVersion: '0.9',
+      };
+      const v09NpmCatalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+        protocolVersion: '0.9',
+      };
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [{catalogId: 'https://a2ui.org/v1_0/basic.json', protocolVersion: '1.0'}],
+          'v0.9': [v09ComposerCatalog, v09NpmCatalog],
+        },
+        announcedCatalogCount: 3,
+      });
+
+      const {fixture, component} = await setup(false);
+      const npmDraft = [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+          },
+        },
+      ];
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(npmDraft));
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      const editor = component.monacoEditor()!;
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(editor.protocolCatalog()).toEqual(v09NpmCatalog);
+      expect(editor.protocolProblem()).toBeNull();
+
+      // Unsupported catalog sets protocolProblem and ignores a2ui-protocol markers in notifySchemaErrors
+      snackBarMock.open.mockClear();
+      const materialDraft = [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+          },
+        },
+      ];
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(materialDraft));
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(editor.protocolProblem()).toEqual({
+        message:
+          'This renderer does not provide the catalog "https://a2ui.org/specification/v0_9/material_catalog.json" for A2UI v0.9. Catalogs it provides for v0.9: https://a2ui.org/specification/v0_9/basic_catalog.json, https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json.',
+        anchorText: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+
+      component.TEST_ONLY.notifySchemaErrors([
+        {
+          owner: 'a2ui-protocol',
+          severity: 8,
+          message: editor.protocolProblem()!.message,
+          startLineNumber: 1,
+          startColumn: 1,
+        } as unknown as monaco.editor.IMarker,
+      ]);
+      expect(snackBarMock.open).not.toHaveBeenCalled();
+    });
+
+    it('keeps RawFrame dispatch and Monaco editor protocol resolution synchronized across capability transitions (F4)', async () => {
+      const v09Catalog: Catalog = {
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        protocolVersion: '0.9',
+        components: {Text: {type: 'object'}},
+      };
+      const v10Catalog: Catalog = {
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        protocolVersion: '1.0',
+        components: {Text: {type: 'object'}},
+      };
+      mockActiveProtocolVersion.set('v1.0');
+      mockActiveCatalogs.set([v10Catalog]);
+      mockProtocolSupportOverride.set(null);
+      const {fixture, component} = await setup(false);
+      sendRenderA2UIMock.mockClear();
+
+      const v09Draft = [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+          },
+        },
+      ];
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(v09Draft));
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      const editor = component.monacoEditor()!;
+      expect(editor.protocolProblem()).not.toBeNull();
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+
+      // Upgrading renderer support resolves the same draft cleanly and dispatches once.
+      mockActiveCatalogs.set([v10Catalog, v09Catalog]);
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(editor.protocolProblem()).toBeNull();
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+      expect(sendRenderA2UIMock).toHaveBeenCalledWith(v09Draft);
     });
   });
 });

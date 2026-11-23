@@ -34,10 +34,15 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState} from '../../chat/chat-state/chat-state';
-import {isErrorOrWarningMarker, MonacoEditor} from '../../shared/monaco-editor/monaco-editor';
+import {
+  isErrorOrWarningMarker,
+  MonacoEditor,
+  PROTOCOL_MARKER_OWNER,
+  type ProtocolProblem,
+} from '../../shared/monaco-editor/monaco-editor';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
-import {tryParseJsonArray} from '../../utils/json';
+import {type JsonParseResult, tryParseJsonArray} from '../../utils/json';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 import {
@@ -68,16 +73,33 @@ export class RawFrame {
   /** Tracks if the current layout string fails to parse. */
   protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
 
-  private readonly parsedDraft = computed<unknown[] | null>(() => {
-    const trimmed = this.layoutJson().trim();
-    if (!trimmed) {
-      return [];
+  private readonly parsedLayout = computed<{
+    isEmpty: boolean;
+    parseResult: JsonParseResult<unknown[]> | null;
+  }>(() => {
+    const value = this.layoutJson();
+    if (!value.trim()) {
+      return {isEmpty: true, parseResult: null};
     }
-    const parsed = tryParseJsonArray(trimmed);
-    return parsed.success ? parsed.data : null;
+    return {isEmpty: false, parseResult: tryParseJsonArray(value)};
   });
 
-  protected readonly payloadResolution = computed<PayloadProtocolResolution | null>(() => {
+  private readonly parsedDraft = computed<unknown[] | null>(() => {
+    const parsed = this.parsedLayout();
+    if (parsed.isEmpty) {
+      return [];
+    }
+    return parsed.parseResult?.success ? parsed.parseResult.data : null;
+  });
+
+  private hasValidJsonArraySyntax(): boolean {
+    return this.parsedLayout().parseResult?.success === true;
+  }
+
+  private readonly resolvedDraft = computed<{
+    payload: unknown[];
+    resolution: PayloadProtocolResolution;
+  } | null>(() => {
     if (!this.catalogManagement.hasReceivedCatalogResponse()) {
       return null;
     }
@@ -85,7 +107,31 @@ export class RawFrame {
     if (payload === null) {
       return null;
     }
-    return resolvePayloadProtocol(payload, this.catalogManagement.protocolSupport());
+    return {
+      payload,
+      resolution: resolvePayloadProtocol(payload, this.catalogManagement.protocolSupport()),
+    };
+  });
+
+  protected readonly payloadResolution = computed<PayloadProtocolResolution | null>(
+    () => this.resolvedDraft()?.resolution ?? null,
+  );
+
+  protected readonly editorProtocolVersion = computed(() => {
+    const resolution = this.payloadResolution();
+    return resolution?.status === 'supported' ? resolution.version : null;
+  });
+
+  protected readonly editorProtocolCatalog = computed(() => {
+    const resolution = this.payloadResolution();
+    return resolution?.status === 'supported' ? resolution.catalog : null;
+  });
+
+  protected readonly editorProtocolProblem = computed<ProtocolProblem | null>(() => {
+    const resolution = this.payloadResolution();
+    return resolution?.status === 'unsupported'
+      ? {message: resolution.message, anchorText: resolution.anchor}
+      : null;
   });
 
   readonly TEST_ONLY = {
@@ -236,10 +282,8 @@ export class RawFrame {
                 this.cancelInvalidJsonTimer();
                 this.isJsonInvalid.set(false);
                 this.snackBar.dismiss();
-                if (this.sendValidatedRenderA2UI(payload)) {
+                if (this.sendValidatedRenderA2UI()) {
                   this.startWatchdog();
-                } else {
-                  this.clearWatchdog();
                 }
               } else {
                 this.clearWatchdog();
@@ -296,10 +340,8 @@ export class RawFrame {
           this.clearWatchdog();
           return;
         }
-        if (this.sendValidatedRenderA2UI(payload)) {
+        if (this.sendValidatedRenderA2UI()) {
           this.startWatchdog();
-        } else {
-          this.clearWatchdog();
         }
       });
   }
@@ -318,8 +360,9 @@ export class RawFrame {
   }
 
   protected onMarkersChange(markers: editor.IMarker[]): void {
-    const isSyntaxValid = tryParseJsonArray(this.layoutJson()).success;
-    const hasErrors = isSyntaxValid && markers.some(isErrorOrWarningMarker);
+    const isSyntaxValid = this.hasValidJsonArraySyntax();
+    const schemaMarkers = markers.filter(m => m.owner !== PROTOCOL_MARKER_OWNER);
+    const hasErrors = isSyntaxValid && schemaMarkers.some(isErrorOrWarningMarker);
     if (hasErrors) {
       this.clearWatchdog();
       this.hasActiveSchemaErrors = true;
@@ -327,7 +370,7 @@ export class RawFrame {
       this.hasActiveSchemaErrors = false;
     }
     if (isSyntaxValid) {
-      this.markerSubject.next(markers);
+      this.markerSubject.next(schemaMarkers);
     } else {
       this.lastErrorSignature = null;
       if (this.lastSyntaxError?.line === undefined) {
@@ -398,11 +441,13 @@ export class RawFrame {
   }
 
   private notifySchemaErrors(markers: editor.IMarker[]): void {
-    if (this.isJsonInvalid() || !tryParseJsonArray(this.layoutJson()).success) {
+    if (this.isJsonInvalid() || !this.hasValidJsonArraySyntax()) {
       this.lastErrorSignature = null;
       return;
     }
-    const errorMarkers = markers.filter(isErrorOrWarningMarker);
+    const errorMarkers = markers.filter(
+      m => m.owner !== PROTOCOL_MARKER_OWNER && isErrorOrWarningMarker(m),
+    );
     if (errorMarkers.length === 0) {
       this.lastErrorSignature = null;
       return;
@@ -446,7 +491,7 @@ export class RawFrame {
     try {
       const payload = this.parseLayoutString(currentLayout);
       if (payload !== null) {
-        this.sendValidatedRenderA2UI(payload);
+        this.sendValidatedRenderA2UI();
       }
     } catch (err) {
       if (!logErrors) {
@@ -472,11 +517,16 @@ export class RawFrame {
    * @return An array of parsed JSON objects (or empty array if input is empty).
    */
   private parseLayoutString(value: string): unknown[] | null {
-    const trimmed = value.trim();
-    if (!trimmed) {
+    const state =
+      value === this.layoutJson()
+        ? this.parsedLayout()
+        : !value.trim()
+          ? {isEmpty: true, parseResult: null}
+          : {isEmpty: false, parseResult: tryParseJsonArray(value)};
+    if (state.isEmpty) {
       return [];
     }
-    const parsed = tryParseJsonArray(trimmed);
+    const parsed = state.parseResult!;
     if (parsed.success) {
       return parsed.data;
     }
@@ -537,17 +587,24 @@ export class RawFrame {
     return undefined;
   }
 
-  private sendValidatedRenderA2UI(payload: unknown[]): boolean {
+  private sendValidatedRenderA2UI(): boolean {
     const hasReceived = this.catalogManagement.hasReceivedCatalogResponse();
     if (!hasReceived) {
       console.debug(
         '[RawFrame] Deferring RENDER_A2UI dispatch until catalog discovery handshake settles.',
       );
+      this.clearWatchdog();
+      return false;
+    }
+
+    const resolved = this.resolvedDraft();
+    if (!resolved) {
+      this.clearWatchdog();
       return false;
     }
 
     const resolution = gatePayloadDispatch(
-      {resolution: this.payloadResolution()},
+      {resolution: resolved.resolution},
       hasReceived,
       this.catalogManagement.protocolSupport(),
       this.errorLogger,
@@ -558,7 +615,7 @@ export class RawFrame {
       return false;
     }
 
-    this.hostCommunication.sendRenderA2UI(payload);
+    this.hostCommunication.sendRenderA2UI(resolved.payload);
     return true;
   }
 }

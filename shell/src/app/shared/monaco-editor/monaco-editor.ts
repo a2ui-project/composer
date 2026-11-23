@@ -30,10 +30,14 @@ import {
 } from '@angular/core';
 import loader from '@monaco-editor/loader';
 import type * as monaco from 'monaco-editor';
+import {selectCatalogsForVersion} from '../../storage/catalog-management/catalog-domain';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import type {Catalog} from '../../storage/models/catalog-storage.model';
 import {generateUuid} from '../../utils/uuid';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {ThemePreference} from 'a2ui-bridge';
+import {type A2uiProtocolVersion, ThemePreference} from 'a2ui-bridge';
+import type {VersionRegistry} from '../protocol/version-registry';
+import type {MonacoSchemaStrategy} from './schemas/monaco-schema-strategy';
 import {V09MonacoSchemaStrategy} from './schemas/v0-9-monaco-schema-strategy';
 import {V10MonacoSchemaStrategy} from './schemas/v1-0-monaco-schema-strategy';
 
@@ -83,11 +87,74 @@ function registerSurfaceThemes(monacoInstance: typeof monaco): void {
     monacoInstance.editor.defineTheme(name, {base, inherit: true, rules: [], colors});
   }
 }
+/** Owner identifier for protocol-level version and catalog error markers set by Composer. */
+export const PROTOCOL_MARKER_OWNER = 'a2ui-protocol';
+
+/** Protocol-level error surfaced directly as an editor marker instead of schema validation. */
+export interface ProtocolProblem {
+  readonly message: string;
+  readonly anchorText: string | null;
+}
+
 /** Numeric values of `monaco.MarkerSeverity` (unavailable at runtime via AMD type-only import). */
 const MONACO_SEVERITY_WARNING = 4;
 const MONACO_SEVERITY_ERROR = 8;
 /** vscode-json-languageservice ErrorCode.CommentsNotPermitted/ValueExpected. */
 const JSON_COMMENT_NOT_PERMITTED_CODE = '521';
+
+function offsetToLineCol(text: string, offset: number): {lineNumber: number; column: number} {
+  let lineNumber = 1;
+  let lastNewline = -1;
+  const clamped = Math.max(0, Math.min(offset, text.length));
+  for (let i = 0; i < clamped; i++) {
+    if (text.charCodeAt(i) === 10) {
+      lineNumber++;
+      lastNewline = i;
+    }
+  }
+  return {
+    lineNumber,
+    column: clamped - lastNewline,
+  };
+}
+
+function computeProtocolMarkerRange(
+  text: string,
+  anchorText: string | null,
+): {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
+} {
+  if (anchorText) {
+    const quoted = JSON.stringify(anchorText);
+    let idx = text.indexOf(quoted);
+    let len = quoted.length;
+    if (idx === -1) {
+      idx = text.indexOf(anchorText);
+      len = anchorText.length;
+    }
+    if (idx !== -1) {
+      const start = offsetToLineCol(text, idx);
+      const end = offsetToLineCol(text, idx + len);
+      return {
+        startLineNumber: start.lineNumber,
+        startColumn: start.column,
+        endLineNumber: end.lineNumber,
+        endColumn: end.column,
+      };
+    }
+  }
+  const firstNewline = text.indexOf('\n');
+  const firstLineLen = firstNewline === -1 ? text.length : firstNewline;
+  return {
+    startLineNumber: 1,
+    startColumn: 1,
+    endLineNumber: 1,
+    endColumn: Math.max(1, firstLineLen + 1),
+  };
+}
 
 /**
  * Determines whether a Monaco diagnostic marker represents an error or warning.
@@ -110,6 +177,9 @@ export class MonacoEditor {
   readonly readOnly = input<boolean>(false);
   readonly ariaLabel = input<string>('Raw layout JSON');
   readonly schemaMode = input<'layout' | 'gallery-example'>('layout');
+  readonly protocolVersion = input<A2uiProtocolVersion | null>(null);
+  readonly protocolCatalog = input<Catalog | null>(null);
+  readonly protocolProblem = input<ProtocolProblem | null>(null);
   readonly valueChange = output<string>();
   readonly markersChange = output<monaco.editor.IMarker[]>();
   readonly userInteraction = output<void>();
@@ -123,12 +193,17 @@ export class MonacoEditor {
 
   private editor?: monaco.editor.IStandaloneCodeEditor;
   private readonly monacoInstance = signal<typeof monaco | null>(null);
+  private readonly editorModel = signal<monaco.editor.ITextModel | null>(null);
 
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly destroyRef = inject(DestroyRef);
   private readonly v09SchemaStrategy = inject(V09MonacoSchemaStrategy);
   private readonly v10SchemaStrategy = inject(V10MonacoSchemaStrategy);
+  private readonly schemaStrategies: VersionRegistry<MonacoSchemaStrategy> = {
+    'v0.9': this.v09SchemaStrategy,
+    'v1.0': this.v10SchemaStrategy,
+  };
 
   private markerDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingMarkers: monaco.editor.IMarker[] | null = null;
@@ -422,11 +497,19 @@ export class MonacoEditor {
     });
 
     // Dynamically register and update the JSON schema validation for Monaco
-    // based on the currently active A2UI catalog, catalogs, and protocol version.
+    // based on the draft's resolved protocol version, catalog, or protocol-level problem.
     effect(() => {
-      const catalog = this.catalogManagement.activeCatalog();
-      const catalogs = this.catalogManagement.activeCatalogs();
-      const protocolVersion = this.catalogManagement.activeProtocolVersion();
+      const problem = this.protocolProblem();
+      const support = this.catalogManagement.protocolSupport();
+      const version = this.protocolVersion() ?? support.defaultVersion;
+      const strategy = this.schemaStrategies[version];
+      const {primary, catalogs: versionCatalogs} = selectCatalogsForVersion(
+        support,
+        version,
+        this.catalogManagement.activeCatalog(),
+        this.catalogManagement.activeCatalogs(),
+      );
+      const catalog = this.protocolCatalog() ?? primary;
       const hasSettled = this.catalogManagement.hasReceivedCatalogResponse();
       const monacoInstance = this.monacoInstance();
 
@@ -435,16 +518,7 @@ export class MonacoEditor {
       }
 
       const jsonContrib = (monacoInstance.languages as unknown as {json: typeof monaco.json}).json;
-      if (!catalog && (!catalogs || catalogs.length === 0)) {
-        if (hasSettled && protocolVersion === 'v1.0') {
-          const schemas = this.v10SchemaStrategy.buildSchemas({catalog: null, catalogs: []});
-          jsonContrib.jsonDefaults.setDiagnosticsOptions({
-            validate: true,
-            schemaValidation: 'error',
-            schemas,
-          });
-          return;
-        }
+      if (problem) {
         jsonContrib.jsonDefaults.setDiagnosticsOptions({
           validate: true,
           schemaValidation: 'error',
@@ -453,10 +527,22 @@ export class MonacoEditor {
         return;
       }
 
-      const strategy = protocolVersion === 'v1.0' ? this.v10SchemaStrategy : this.v09SchemaStrategy;
+      if (!catalog && versionCatalogs.length === 0) {
+        const schemas =
+          hasSettled && strategy.allowsEmptyCatalogSchema
+            ? strategy.buildSchemas({catalog: null, catalogs: []})
+            : [];
+        jsonContrib.jsonDefaults.setDiagnosticsOptions({
+          validate: true,
+          schemaValidation: 'error',
+          schemas,
+        });
+        return;
+      }
+
       const schemas = strategy.buildSchemas({
         catalog,
-        catalogs: catalogs || [],
+        catalogs: [...versionCatalogs],
       });
 
       // @types/monaco-editor deprecates `monaco.languages.json` in favor of `monaco.json`,
@@ -468,6 +554,37 @@ export class MonacoEditor {
         schemaValidation: 'error',
         schemas,
       });
+    });
+
+    // Apply or clear the single protocol-level error marker owned by `a2ui-protocol`.
+    effect(() => {
+      const monacoInstance = this.monacoInstance();
+      const model = this.editorModel();
+      const problem = this.protocolProblem();
+      const fallbackText = this.value();
+
+      if (
+        !monacoInstance ||
+        !model ||
+        typeof monacoInstance.editor.setModelMarkers !== 'function'
+      ) {
+        return;
+      }
+
+      if (!problem) {
+        monacoInstance.editor.setModelMarkers(model, PROTOCOL_MARKER_OWNER, []);
+        return;
+      }
+
+      const text = typeof model.getValue === 'function' ? model.getValue() : fallbackText;
+      const range = computeProtocolMarkerRange(text, problem.anchorText);
+      monacoInstance.editor.setModelMarkers(model, PROTOCOL_MARKER_OWNER, [
+        {
+          severity: MONACO_SEVERITY_ERROR as monaco.MarkerSeverity,
+          message: problem.message,
+          ...range,
+        },
+      ]);
     });
 
     // Update the editor's theme (dark vs. light mode) in response to
@@ -506,6 +623,7 @@ export class MonacoEditor {
         this.markerDebounceTimer = null;
       }
       this.pendingMarkers = null;
+      this.editorModel.set(null);
       if (this.editor) {
         const model = this.editor.getModel();
         if (model) {
@@ -537,6 +655,7 @@ export class MonacoEditor {
         // writes use LF, so on Windows every draft written into the editor came back as a
         // different string and was reported as a user edit. Keep the model on LF.
         model.setEOL(monacoInstance.editor.EndOfLineSequence.LF);
+        this.editorModel.set(model);
 
         const editor = monacoInstance.editor.create(this.editorContainer().nativeElement, {
           model,
