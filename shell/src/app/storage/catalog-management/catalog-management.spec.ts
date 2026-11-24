@@ -1888,7 +1888,7 @@ describe('CatalogManagement', () => {
       TestBed.tick();
       expect(service.isHandshakeInProgress()).toBe(true);
 
-      registered.delete(win2);
+      unregisterWindow(registered, win2);
       vi.advanceTimersByTime(5000);
 
       expect(errorSpy).not.toHaveBeenCalled();
@@ -1913,7 +1913,7 @@ describe('CatalogManagement', () => {
       });
       TestBed.tick();
 
-      registered.delete(win1);
+      unregisterWindow(registered, win1);
       vi.advanceTimersByTime(5000);
 
       expect(errorSpy).toHaveBeenCalledWith(
@@ -2013,7 +2013,7 @@ describe('CatalogManagement', () => {
         sourceWindow: win2,
       });
       TestBed.tick();
-      registered.delete(win2);
+      unregisterWindow(registered, win2);
       vi.advanceTimersByTime(5000);
 
       expect(errorSpy).toHaveBeenCalledWith(
@@ -2062,7 +2062,7 @@ describe('CatalogManagement', () => {
         sourceWindow: win2,
       });
       TestBed.tick();
-      registered.delete(win2);
+      unregisterWindow(registered, win2);
       vi.advanceTimersByTime(5000);
       expect(service.isHandshakeInProgress()).toBe(false);
       expect(errorSpy).not.toHaveBeenCalled();
@@ -2142,7 +2142,7 @@ describe('CatalogManagement', () => {
         sourceWindow: winA2,
       });
       TestBed.tick();
-      registered.delete(winA2);
+      unregisterWindow(registered, winA2);
       vi.advanceTimersByTime(5000);
 
       expect(errorSpy).toHaveBeenCalledWith(
@@ -2193,7 +2193,7 @@ describe('CatalogManagement', () => {
         sourceWindow: winCached,
       });
       TestBed.tick();
-      registered.delete(winCached);
+      unregisterWindow(registered, winCached);
       vi.advanceTimersByTime(5000);
 
       expect(errorSpy).toHaveBeenCalledWith(

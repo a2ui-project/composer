@@ -110,13 +110,9 @@ export class CatalogManagement {
     }
   }
 
-  private resetHandshakeWatchdog(options?: {settle?: boolean}): void {
+  private resetHandshakeWatchdog(): void {
     this.clearWatchdogTimer();
     this.handshakeWindow = null;
-    if (options?.settle) {
-      this._isHandshakeInProgress.set(false);
-      this._handshakeState.set('settled');
-    }
   }
 
   /**
@@ -371,8 +367,9 @@ export class CatalogManagement {
    * neither `settleHandshakeError()` nor IndexedDB cache hydration marks a catalog
    * established here, and `syncResolutionGeneration()` resets it eagerly to `false` on every
    * resolved-URL change (so A -> B -> A switches cannot preserve a stale `true`). Only after
-   * a live `A2UI_CATALOG` response succeeds for the current URL may an unregistered secondary
-   * frame's watchdog expire silently.
+   * a live `A2UI_CATALOG` response succeeds for the current URL is a handshake cancelled
+   * silently when its frame is unregistered, or skipped for a frame that is already
+   * unregistered; otherwise the watchdog reports the missing catalog.
    */
   private readonly _hasEstablishedLiveCatalog = signal<boolean>(false);
 
@@ -535,7 +532,9 @@ export class CatalogManagement {
     if (!this.hasLiveCatalogForCurrentUrl()) {
       return;
     }
-    this.resetHandshakeWatchdog({settle: true});
+    this.resetHandshakeWatchdog();
+    this._isHandshakeInProgress.set(false);
+    this._handshakeState.set('settled');
   }
 
   private handleRendererReady(envelope: MessageEnvelope) {
@@ -585,18 +584,6 @@ export class CatalogManagement {
     this.handshakeWindow = incomingWindow;
     this.watchdogTimerId = setTimeout(() => {
       if (this.watchdogTimerId === null) {
-        return;
-      }
-      // TODO(follow-up): Root-cause fix is cancelling the handshake on
-      // HostCommunication.unregisterIframe rather than checking registration when the
-      // 5s timer fires. Keep error reporting intact if no live catalog was established
-      // (including cache-only or prior failed handshakes) or the window is registered.
-      if (
-        this._hasEstablishedLiveCatalog() &&
-        this.handshakeWindow !== null &&
-        !this.hostCommunication.isRegisteredWindow(this.handshakeWindow)
-      ) {
-        this.resetHandshakeWatchdog({settle: true});
         return;
       }
       this._watchdogFired.set(true);
