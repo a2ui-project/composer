@@ -1548,6 +1548,197 @@ describe('CatalogManagement', () => {
       expect(service.activeProtocolVersion()).toBe('v1.0');
       warnSpy.mockRestore();
     });
+
+    it('ignores A2UI_CATALOG from another window when RENDERER_READY is handled right after a renderer URL change', async () => {
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
+      const winA = {name: 'winA'} as unknown as Window;
+      const winB = {name: 'winB'} as unknown as Window;
+
+      // The URL changes and the new frame announces before anything has
+      // observed the change: no tick, no flush and no signal read in between.
+      resolvedUrlSignal.set('http://localhost/renderer-next');
+      startupResolutionMock.getResolvedRendererUrl.mockReturnValue(
+        'http://localhost/renderer-next',
+      );
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5201,
+        sourceWindow: winA,
+      });
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalogId: 'other-window-cat', protocolVersion: '1.0'},
+        timestamp: 5202,
+        sourceWindow: winB,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Ignoring A2UI_CATALOG from stale renderer window.',
+        }),
+      );
+      expect(service.isHandshakeInProgress()).toBe(true);
+      expect(service.handshakeState()).toBe('in-progress');
+      expect(service.activeCatalog()).toBeNull();
+      expect(service.hasReceivedCatalogResponse()).toBe(false);
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalogId: 'handshake-window-cat', protocolVersion: '1.0'},
+        timestamp: 5203,
+        sourceWindow: winA,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.handshakeState()).toBe('settled');
+      expect(service.activeCatalog()?.catalogId).toBe('handshake-window-cat');
+      warnSpy.mockRestore();
+    });
+
+    it('lets a replacement frame take over a handshake started right after a renderer URL change', () => {
+      const winA = {name: 'winA'} as unknown as Window;
+      const winB = {name: 'winB'} as unknown as Window;
+      const registered = new Set<Window>([winA]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      resolvedUrlSignal.set('http://localhost/renderer-next');
+      startupResolutionMock.getResolvedRendererUrl.mockReturnValue(
+        'http://localhost/renderer-next',
+      );
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5301,
+        sourceWindow: winA,
+      });
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
+
+      // winA detaches before answering and winB announces in its place.
+      registered.delete(winA);
+      registered.add(winB);
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5302,
+        sourceWindow: winB,
+      });
+
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(2);
+      expect(hostCommunicationMock.sendMessage).toHaveBeenNthCalledWith(
+        2,
+        {type: PreviewBridgeMessageType.GET_CATALOG},
+        winB,
+      );
+    });
+
+    describe('when the renderer URL is resolved after construction', () => {
+      const winA = {name: 'winA'} as unknown as Window;
+      const winB = {name: 'winB'} as unknown as Window;
+
+      beforeEach(() => {
+        // Rebuild the service with no renderer URL yet, as on first load.
+        TestBed.resetTestingModule();
+        resolvedUrlSignal.set(null);
+        startupResolutionMock.getResolvedRendererUrl.mockReturnValue(null);
+        TestBed.configureTestingModule({
+          providers: [
+            CatalogManagement,
+            {provide: HostCommunication, useValue: hostCommunicationMock},
+            {provide: IndexedDbStorage, useValue: indexedDbStorageMock},
+            {provide: StartupResolution, useValue: startupResolutionMock},
+          ],
+        });
+        service = TestBed.inject(CatalogManagement);
+
+        // The URL resolves and the frame announces before anything has
+        // observed the change: no tick, no flush and no signal read.
+        resolvedUrlSignal.set('http://localhost/renderer');
+        startupResolutionMock.getResolvedRendererUrl.mockReturnValue('http://localhost/renderer');
+        hostCommunicationMock.messageStream$.next({
+          type: PreviewBridgeMessageType.RENDERER_READY,
+          origin: 'http://localhost',
+          timestamp: 5401,
+          sourceWindow: winA,
+        });
+      });
+
+      it('commits the catalog answered by the announcing window', async () => {
+        hostCommunicationMock.messageStream$.next({
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          origin: 'http://localhost',
+          payload: {catalogId: 'first-load-cat', title: 'First Load', protocolVersion: '1.0'},
+          timestamp: 5402,
+          sourceWindow: winA,
+        });
+        TestBed.tick();
+        await flushMicrotasks();
+
+        expect(service.isHandshakeInProgress()).toBe(false);
+        expect(service.catalogError()).toBeNull();
+        expect(service.activeCatalog()?.catalogId).toBe('first-load-cat');
+        expect(service.activeCatalogTitle()).toBe('First Load');
+      });
+
+      it('commits a catalog that carries no source window', async () => {
+        hostCommunicationMock.messageStream$.next({
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          origin: 'http://localhost',
+          payload: {catalogId: 'first-load-cat', title: 'First Load', protocolVersion: '1.0'},
+          timestamp: 5403,
+        });
+        TestBed.tick();
+        await flushMicrotasks();
+
+        expect(service.isHandshakeInProgress()).toBe(false);
+        expect(service.catalogError()).toBeNull();
+        expect(service.activeCatalog()?.catalogId).toBe('first-load-cat');
+        expect(service.activeCatalogTitle()).toBe('First Load');
+      });
+
+      it('ignores a catalog from another window and reports the watchdog timeout', async () => {
+        const logger = TestBed.inject(ErrorLogger);
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+        hostCommunicationMock.messageStream$.next({
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          origin: 'http://localhost',
+          payload: {catalogId: 'other-window-cat', title: 'Other', protocolVersion: '1.0'},
+          timestamp: 5404,
+          sourceWindow: winB,
+        });
+        TestBed.tick();
+        await flushMicrotasks();
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Ignoring A2UI_CATALOG from stale renderer window.',
+          }),
+        );
+        expect(service.isHandshakeInProgress()).toBe(true);
+        expect(service.activeCatalog()).toBeNull();
+
+        vi.advanceTimersByTime(5000);
+
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+          }),
+        );
+        expect(service.watchdogFired()).toBe(true);
+        expect(service.activeCatalog()).toBeNull();
+        expect(service.activeCatalogTitle()).toBe('');
+        warnSpy.mockRestore();
+        errorSpy.mockRestore();
+      });
+    });
   });
 
   describe('stale async catalog continuation guards', () => {

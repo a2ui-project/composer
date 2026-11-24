@@ -453,7 +453,6 @@ export class CatalogManagement {
       this.clearWatchdogTimer();
     }
 
-    this.handshakeWindow = incomingWindow;
     this._isHandshakeInProgress.set(true);
     this._handshakeState.set('in-progress');
     this._watchdogFired.set(false);
@@ -471,6 +470,10 @@ export class CatalogManagement {
       });
     }
 
+    // Recorded only now: the state writes above can make the cached-catalog
+    // resource notice a renderer URL change, and that clears the handshake
+    // window of the handshake it believes it is replacing.
+    this.handshakeWindow = incomingWindow;
     this.watchdogTimerId = setTimeout(() => {
       if (this.watchdogTimerId === null) {
         return;
