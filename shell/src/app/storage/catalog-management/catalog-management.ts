@@ -540,6 +540,17 @@ export class CatalogManagement {
 
   private handleRendererReady(envelope: MessageEnvelope) {
     const incomingWindow = envelope.sourceWindow ?? null;
+    // The announcement can wait in the concatMap behind an asynchronous
+    // catalog commit. If its frame was unregistered meanwhile, that
+    // notification has already passed and found no handshake to cancel, so a
+    // handshake started now could only time out.
+    if (
+      incomingWindow !== null &&
+      !this.hostCommunication.isRegisteredWindow(incomingWindow) &&
+      this.hasLiveCatalogForCurrentUrl()
+    ) {
+      return of(null);
+    }
     if (this._isHandshakeInProgress()) {
       const priorWindowDetached =
         this.handshakeWindow !== null &&

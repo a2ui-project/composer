@@ -46,6 +46,9 @@ class MockHostCommunication {
   getDefaultTargetWindow = vi.fn(() => null);
   registerIframe = vi.fn();
   unregisterIframe = vi.fn();
+  // The real service always has this. Every frame that announces here is a
+  // mounted DemoCard frame, which GuestFrame registers.
+  isRegisteredWindow = vi.fn((_targetWindow: Window): boolean => true);
   sendTheme = vi.fn();
   readonly messageStream$ = new ReplaySubject<unknown>(1);
   readonly windowUnregistered$ = new Subject<Window>();
