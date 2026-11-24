@@ -53,6 +53,7 @@ describe('A2aChatMessage', () => {
             sendRenderA2UI: vi.fn(),
             messageStream: signal(null),
             messageStream$: EMPTY,
+            windowUnregistered$: EMPTY,
           },
         },
         {

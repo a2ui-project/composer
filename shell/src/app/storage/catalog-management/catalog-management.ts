@@ -24,6 +24,7 @@ import {
   linkedSignal,
   resource,
   effect,
+  untracked,
 } from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {
@@ -495,6 +496,46 @@ export class CatalogManagement {
         }),
       )
       .subscribe();
+
+    // Not routed through the concatMap above: a cancellation must not wait
+    // behind an asynchronous catalog commit.
+    this.hostCommunication.windowUnregistered$
+      .pipe(takeUntilDestroyed())
+      .subscribe((unregisteredWindow: Window) => {
+        // The emission can originate in an effect cleanup; keep the signal
+        // reads and writes below out of any reactive context.
+        untracked(() => {
+          this.handleWindowUnregistered(unregisteredWindow);
+        });
+      });
+  }
+
+  /**
+   * Whether a live `A2UI_CATALOG` handshake succeeded for the renderer URL
+   * that is current right now, even if no effect has observed a URL change yet.
+   */
+  private hasLiveCatalogForCurrentUrl(): boolean {
+    this.syncResolutionGeneration();
+    return this._hasEstablishedLiveCatalog();
+  }
+
+  /**
+   * Ends the handshake that is waiting on `unregisteredWindow`, which can no
+   * longer answer. Only done when a live catalog is already established, so
+   * that nothing is left waiting on the outcome; otherwise the watchdog keeps
+   * running and reports the missing catalog.
+   */
+  private handleWindowUnregistered(unregisteredWindow: Window): void {
+    if (this.handshakeWindow !== unregisteredWindow) {
+      return;
+    }
+    if (!this._isHandshakeInProgress()) {
+      return;
+    }
+    if (!this.hasLiveCatalogForCurrentUrl()) {
+      return;
+    }
+    this.resetHandshakeWatchdog({settle: true});
   }
 
   private handleRendererReady(envelope: MessageEnvelope) {
