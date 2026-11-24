@@ -15,7 +15,7 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach, type Mock} from 'vitest';
-import {CrossFrameValidator} from './cross-frame-validator';
+import {CrossFrameValidator, isCatalogHandshakeErrorPayload} from './cross-frame-validator';
 import {stripPrototypePollutionKeys} from './wire-version-validator';
 import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 
@@ -1511,6 +1511,26 @@ describe('CrossFrameValidator', () => {
       ).toBe(true);
     });
 
+    it('rejects handshake error payload with non-string message', () => {
+      const payload = {
+        error: {message: null},
+        catalogs: [null],
+      };
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.A2UI_CATALOG,
+            payload,
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(false);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Malformed error in A2UI_CATALOG: must match { error: { message?: string } }.',
+      );
+    });
+
     it('rejects primitive non-object payload for A2UI_CATALOG', () => {
       expect(
         CrossFrameValidator.validateIncomingMessage(
@@ -1703,6 +1723,38 @@ describe('CrossFrameValidator', () => {
         ),
       ).toBe(false);
     });
+
+    it('validates incoming MCP_REQUEST payloads and rejects null, primitive, and malformed payloads', () => {
+      expect(
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.MCP_REQUEST,
+            payload: {requestId: 'req-1', toolName: 'read_file', args: {path: '/'}},
+          },
+          undefined,
+          mockLogger,
+        ),
+      ).toBe(true);
+
+      for (const badPayload of [
+        null,
+        'bad',
+        {requestId: '', toolName: 'read_file'},
+        {requestId: 'req-1', toolName: '   '},
+        {requestId: 'req-1', toolName: 'read_file', args: 'not-an-object'},
+      ]) {
+        expect(
+          CrossFrameValidator.validateIncomingMessage(
+            {
+              type: PreviewBridgeMessageType.MCP_REQUEST,
+              payload: badPayload,
+            },
+            undefined,
+            mockLogger,
+          ),
+        ).toBe(false);
+      }
+    });
   });
 
   describe('stripPrototypePollutionKeys', () => {
@@ -1735,5 +1787,36 @@ describe('CrossFrameValidator', () => {
       expect(stripPrototypePollutionKeys(pollutedObj, 0)).toEqual({});
       expect(stripPrototypePollutionKeys([pollutedObj], 0)).toEqual([]);
     });
+  });
+});
+
+describe('isCatalogHandshakeErrorPayload', () => {
+  it('accepts valid handshake error payloads', () => {
+    expect(isCatalogHandshakeErrorPayload({error: {message: 'catalog failed'}})).toBe(true);
+    expect(isCatalogHandshakeErrorPayload({error: {}})).toBe(true);
+    expect(isCatalogHandshakeErrorPayload({error: {message: undefined}})).toBe(true);
+  });
+
+  it('rejects invalid or non-matching error payloads', () => {
+    expect(isCatalogHandshakeErrorPayload(null)).toBe(false);
+    expect(isCatalogHandshakeErrorPayload(undefined)).toBe(false);
+    expect(isCatalogHandshakeErrorPayload('string')).toBe(false);
+    expect(isCatalogHandshakeErrorPayload(123)).toBe(false);
+    expect(isCatalogHandshakeErrorPayload([])).toBe(false);
+    expect(isCatalogHandshakeErrorPayload({})).toBe(false);
+    expect(isCatalogHandshakeErrorPayload({error: null})).toBe(false);
+    expect(isCatalogHandshakeErrorPayload({error: 'failed'})).toBe(false);
+    expect(isCatalogHandshakeErrorPayload({error: []})).toBe(false);
+    expect(isCatalogHandshakeErrorPayload({error: {message: 123}})).toBe(false);
+  });
+
+  it('rejects payloads with prototype pollution', () => {
+    const polluted = JSON.parse('{"error": {}, "__proto__": {"polluted": true}}');
+    expect(isCatalogHandshakeErrorPayload(polluted)).toBe(false);
+
+    const pollutedChild = JSON.parse(
+      '{"error":{"message":"bad","__proto__":{"polluted":true}}}',
+    ) as unknown;
+    expect(isCatalogHandshakeErrorPayload(pollutedChild)).toBe(false);
   });
 });

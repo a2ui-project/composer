@@ -103,6 +103,19 @@ function findFirstInvalidTokenOffset(jsonText: string, rawToken: string): number
     return false;
   }
 
+  function readKeyword(): boolean {
+    for (const kw of ['true', 'false', 'null'] as const) {
+      if (jsonText.startsWith(kw, i)) {
+        const nextChar = jsonText[i + kw.length];
+        if (!nextChar || !/[A-Za-z0-9_$]/.test(nextChar)) {
+          i += kw.length;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   while (i < len) {
     skipWhitespace();
     if (i >= len) break;
@@ -128,16 +141,7 @@ function findFirstInvalidTokenOffset(jsonText: string, rawToken: string): number
         i++;
         stack.push('[');
         state = 'value_or_end';
-      } else if (
-        readString() ||
-        readNumber() ||
-        jsonText.startsWith('true', i) ||
-        jsonText.startsWith('false', i) ||
-        jsonText.startsWith('null', i)
-      ) {
-        if (jsonText.startsWith('true', tokenStart)) i += 4;
-        else if (jsonText.startsWith('false', tokenStart)) i += 5;
-        else if (jsonText.startsWith('null', tokenStart)) i += 4;
+      } else if (readString() || readNumber() || readKeyword()) {
         state = 'after_value';
       } else {
         return jsonText.startsWith(rawToken, tokenStart) ? tokenStart : -1;

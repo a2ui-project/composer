@@ -21,7 +21,10 @@ import {filter} from 'rxjs/operators';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {EnvironmentContextService} from '../startup-resolution/state/environment-context.service';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {CrossFrameValidator} from '../cross-frame-validator/cross-frame-validator';
+import {
+  CrossFrameValidator,
+  type CatalogHandshakeErrorPayload,
+} from '../cross-frame-validator/cross-frame-validator';
 import {
   PreviewBridgeMessageType,
   McpRequestPayload,
@@ -32,6 +35,7 @@ import type {
   V10CallAgentFunctionPayload,
   V10RendererFunctionResponsePayload,
 } from '../cross-frame-validator/v1-0-wire-validator';
+import {hasPrototypePollution} from '../cross-frame-validator/wire-version-validator';
 import {ErrorLogger, ErrorLogLevel} from '../../debug/error-logger.service';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
@@ -66,13 +70,7 @@ export declare interface SendToServerEnvelope<T = SendToServerPayload> {
   timestamp: number;
 }
 
-/**
- * Error payload substituted when an incoming A2UI_CATALOG fails validation or
- * bridge resolution.
- */
-export interface CatalogHandshakeErrorPayload {
-  readonly error: {readonly message: string};
-}
+export type {CatalogHandshakeErrorPayload} from '../cross-frame-validator/cross-frame-validator';
 
 /**
  * What registering a frame does to the default target: the frame that
@@ -288,6 +286,27 @@ export class HostCommunication implements OnDestroy {
     );
   }
 
+  private isAllowedExpectedOrigin(origin: string): boolean {
+    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
+    if (!expectedUrl) {
+      return false;
+    }
+    try {
+      const expectedOrigin = this.environmentContext.resolveRendererUrl(expectedUrl).origin;
+      return origin === expectedOrigin;
+    } catch {
+      return false;
+    }
+  }
+
+  private dropIfPrototypePolluted(type: string, payload: unknown): boolean {
+    if (payload && typeof payload === 'object' && hasPrototypePollution(payload)) {
+      this.logger.warn(`Dropped prototype-polluted ${type} envelope`);
+      return true;
+    }
+    return false;
+  }
+
   private readonly messageListener = (event: MessageEvent) => {
     if (!this.hasRegisteredTarget()) {
       const isBridgeMessage =
@@ -296,17 +315,7 @@ export class HostCommunication implements OnDestroy {
         Object.values(PreviewBridgeMessageType).includes(event.data.type);
 
       if (event.data?.type === PreviewBridgeMessageType.CONSOLE_LOG) {
-        const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-        if (!expectedUrl) {
-          return;
-        }
-
-        try {
-          const expectedOrigin = this.environmentContext.resolveRendererUrl(expectedUrl).origin;
-          if (event.origin !== expectedOrigin) {
-            return;
-          }
-        } catch {
+        if (!this.isAllowedExpectedOrigin(event.origin)) {
           return;
         }
 
@@ -317,6 +326,9 @@ export class HostCommunication implements OnDestroy {
           timestamp: Date.now(),
           sourceWindow: (event.source as Window) ?? null,
         };
+        if (this.dropIfPrototypePolluted(envelope.type, envelope.payload)) {
+          return;
+        }
         this.handleConsoleLog(event.data.payload);
         this.messageStreamSubject.next(envelope);
         return;
@@ -342,24 +354,14 @@ export class HostCommunication implements OnDestroy {
       return;
     }
 
-    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-    if (!expectedUrl) {
-      return;
-    }
-
-    try {
-      const expectedOrigin = this.environmentContext.resolveRendererUrl(expectedUrl).origin;
-      if (event.origin !== expectedOrigin) {
-        return;
-      }
-    } catch (err) {
+    if (!this.isAllowedExpectedOrigin(event.origin)) {
       return;
     }
 
     const data = event.data;
     if (data && typeof data === 'object' && data.type) {
       const type = data.type as string;
-      const envelope: MessageEnvelope = {
+      let envelope: MessageEnvelope = {
         type,
         payload: data.payload,
         ...(typeof data.renderId === 'string' && data.renderId ? {renderId: data.renderId} : {}),
@@ -368,6 +370,15 @@ export class HostCommunication implements OnDestroy {
         timestamp: Date.now(),
         sourceWindow: (event.source as Window) ?? null,
       };
+      // Allow A2UI_CATALOG through to CrossFrameValidator below so polluted/malformed
+      // catalog frames synthesize a CatalogHandshakeErrorPayload instead of stalling
+      // the handshake until the 5s catalog watchdog fires.
+      if (
+        type !== PreviewBridgeMessageType.A2UI_CATALOG &&
+        this.dropIfPrototypePolluted(type, envelope.payload)
+      ) {
+        return;
+      }
       const sourceWindow = envelope.sourceWindow ?? null;
       if (type === PreviewBridgeMessageType.RENDERER_READY && sourceWindow) {
         this.markWindowReady(sourceWindow);
@@ -384,6 +395,9 @@ export class HostCommunication implements OnDestroy {
       }
 
       if (type === PreviewBridgeMessageType.MCP_REQUEST) {
+        if (!CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
+          return;
+        }
         // A frame that calls tools is evidently up, even if its RENDERER_READY
         // was missed; treat it exactly like a handshake so anything queued for
         // it does not wait for some other frame's RENDERER_READY.
@@ -466,7 +480,7 @@ export class HostCommunication implements OnDestroy {
           const errorPayload: CatalogHandshakeErrorPayload = {
             error: {message: errors[0] ?? 'Malformed A2UI_CATALOG payload.'},
           };
-          envelope.payload = errorPayload;
+          envelope = {...envelope, payload: errorPayload};
         }
       }
 
@@ -550,7 +564,11 @@ export class HostCommunication implements OnDestroy {
     return this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
   }
 
-  private isRegisteredWindow(targetWindow: Window): boolean {
+  /**
+   * Returns whether `targetWindow` is currently registered as a live guest
+   * frame or window target in this service.
+   */
+  isRegisteredWindow(targetWindow: Window): boolean {
     if (this.registeredWindows.has(targetWindow)) {
       return true;
     }

@@ -21,7 +21,13 @@ import {CATALOG_WATCHDOG_MESSAGE} from '../src/app/storage/catalog-management/ca
 import {inlineSurfaceFrame, previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 import {connectMockAgent, sseEvent} from '../src/app/agent-chat/test/mock-a2a-agent';
-import {getMonacoContent, resetStorageOnce, setMonacoContent, waitForMonacoEditor} from './helpers';
+import {
+  getMonacoContent,
+  resetStorageOnce,
+  setMonacoContent,
+  stubRendererHtml,
+  waitForMonacoEditor,
+} from './helpers';
 
 const V09_RENDERER_URL = 'http://mock-v09-renderer.local/index.html';
 const V10_RENDERER_URL = 'http://mock-v10-renderer.local/index.html';
@@ -32,16 +38,15 @@ function createStubRendererHtml(options: {
   bodyContent?: string;
 }): string {
   const isV10 = options.protocolVersion === '1.0';
-  const catalogId =
-    options.catalogId ??
-    (isV10
-      ? 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json'
-      : 'https://a2ui.org/specification/v0_9/basic_catalog.json');
-  const catalogObj = {
-    catalogId,
+  return stubRendererHtml(options.bodyContent ?? '<div id="root">Stub Renderer</div>', {
+    version: isV10 ? 'v1.0' : 'v0.9',
+    catalogId:
+      options.catalogId ??
+      (isV10
+        ? 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json'
+        : 'https://a2ui.org/specification/v0_9/basic_catalog.json'),
     title: isV10 ? 'Stub v1.0 Catalog' : 'Stub v0.9 Catalog',
     description: isV10 ? 'Stub v1.0 Catalog Description' : 'Stub v0.9 Catalog Description',
-    ...(isV10 ? {protocolVersion: '1.0'} : {version: 'v0.9'}),
     components: {
       Column: {},
       Text: {},
@@ -49,53 +54,9 @@ function createStubRendererHtml(options: {
       DateTimeInput: {},
       Button: {},
     },
-  };
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-<script>
-  window.__receivedRenderA2ui = [];
-  window.__receivedMessages = [];
-  let answered = false;
-  let interval = null;
-
-  function respondCatalog() {
-    if (answered) return;
-    answered = true;
-    if (interval) clearInterval(interval);
-    window.parent.postMessage({
-      type: 'A2UI_CATALOG',
-      payload: {
-        catalog: ${JSON.stringify(catalogObj)},
-        catalogs: [${JSON.stringify(catalogObj)}]
-      }
-    }, '*');
-  }
-
-  interval = setInterval(() => {
-    if (answered) {
-      clearInterval(interval);
-      return;
-    }
-    window.parent.postMessage({ type: 'RENDERER_READY' }, '*');
-  }, 100);
-
-  window.addEventListener('message', (event) => {
-    const data = event.data;
-    window.__receivedMessages.push(data);
-    if (data?.type === 'GET_CATALOG') {
-      respondCatalog();
-    } else if (data?.type === 'RENDER_A2UI') {
-      window.__receivedRenderA2ui.push(data.payload);
-    }
+    wrapCatalog: true,
+    recordMessages: true,
   });
-
-  window.parent.postMessage({ type: 'RENDERER_READY' }, '*');
-</script>
-</head>
-<body>${options.bodyContent ?? '<div id="root">Stub Renderer</div>'}</body>
-</html>`;
 }
 
 async function setupMockRenderers(context: BrowserContext | Page): Promise<void> {

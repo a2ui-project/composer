@@ -16,11 +16,11 @@
 
 import {MessageProcessor} from '@a2ui/web_core/v0_9';
 import Ajv2019, {type SchemaObject, type ValidateFunction} from 'ajv/dist/2019';
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 // web_core doesn't export its JSON schemas, so this reads the copy it ships from
 // the workspace's root node_modules, as vitest.config.ts does for React.
 import commonTypesJson from '../../../node_modules/@a2ui/web_core/src/v0_9/schemas/common_types.json';
-import {SLACK_CATALOG_ID, slackCatalog, slackCatalogJson} from './catalog';
+import {SLACK_CATALOG_ID, createSlackCatalogJson, slackCatalog, slackCatalogJson} from './catalog';
 import dataBoundActionJson from '../public/examples/data-bound-action.json';
 import marketSnapshotJson from '../public/examples/market-snapshot.json';
 import {SLACK_COMPONENT_USAGES} from './examples';
@@ -689,5 +689,40 @@ describe('Slack catalog schema payload', () => {
       true,
     );
     expect(defs.anyFunction?.oneOf?.length).toBeGreaterThan(0);
+  });
+
+  it('emits zero warnings and resolves component/function refs when generating the catalog schema', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const generated = createSlackCatalogJson(slackCatalog);
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      expect(generated.catalogId).toBe(slackCatalog.id);
+      const componentNames = Object.keys(generated.components ?? {});
+      expect(componentNames.sort()).toEqual(EXPECTED_COMPONENTS);
+
+      const anyComponentOneOf = (generated.$defs?.['anyComponent'] as {oneOf: unknown[]})?.oneOf;
+      expect(anyComponentOneOf).toHaveLength(EXPECTED_COMPONENTS.length);
+      expect(anyComponentOneOf).toEqual(
+        expect.arrayContaining(EXPECTED_COMPONENTS.map(name => ({$ref: `#/components/${name}`}))),
+      );
+
+      const textSchema = generated.components?.['Text'] as {
+        allOf: [unknown, {properties: {text: unknown}}];
+      };
+      expect(textSchema.allOf[1].properties.text).toEqual(
+        expect.objectContaining({
+          $ref: 'common_types.json#/$defs/DynamicString',
+        }),
+      );
+
+      const functionCount = generated.functions?.length ?? 0;
+      expect(functionCount).toBeGreaterThan(0);
+      expect((generated.$defs?.['anyFunction'] as {oneOf: unknown[]})?.oneOf).toHaveLength(
+        functionCount,
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

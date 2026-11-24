@@ -1273,5 +1273,133 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(lastMessage.content).toContain('Version 1.0 is officially released!');
       expect(lastMessage.content).toContain('"component":"Text"');
     });
+
+    it('syncCatalogDraft() swaps an untouched samplePayload to CAR_BOOKING_V1_0 when switching from a v0.9 renderer with samplePayload to a v1.0 renderer without samplePayload', () => {
+      const SLACK_SAMPLE = JSON.stringify([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'slack',
+            catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
+          },
+        },
+      ]);
+      startupConfigStateMock.activeRenderer.set({samplePayload: SLACK_SAMPLE});
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
+      });
+      catalogManagementMock.activeProtocolVersion.set('v0.9');
+      TestBed.tick();
+
+      expect(service.activeDraft()).toBe(SLACK_SAMPLE);
+      expect(service.hasEditedDraft()).toBe(false);
+
+      // Now switch to Angular Basic (no samplePayload, v1.0 protocol)
+      startupConfigStateMock.activeRenderer.set(null);
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set({catalogId: BASIC_CATALOG_ID_V1_0});
+
+      // Calling syncCatalogDraft() synchronously reconciles the draft before microtasks/subscriptions run
+      service.syncCatalogDraft();
+      expect(service.activeDraft()).toBe(CAR_BOOKING_V1_0);
+      expect(service.hasEditedDraft()).toBe(false);
+    });
+
+    it('syncCatalogDraft() reconciles protocol version even when activeCatalog is non-null and hasReceivedCatalogResponse is true', () => {
+      catalogManagementMock.hasReceivedCatalogResponse.set(true);
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      catalogManagementMock.activeCatalog.set({catalogId: BASIC_CATALOG_ID_V1_0});
+
+      service.syncCatalogDraft();
+      expect(service.activeDraft()).toBe(CAR_BOOKING_V1_0);
+    });
+
+    it('restores samplePayload when switching from Slack to an empty-catalog renderer and back to Slack', () => {
+      const SLACK_SAMPLE = JSON.stringify([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'slack',
+            catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
+          },
+        },
+      ]);
+      const slackRenderer = {samplePayload: SLACK_SAMPLE};
+      const slackCatalog = {
+        catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
+      };
+
+      // 1. Start on Slack renderer
+      startupConfigStateMock.activeRenderer.set(slackRenderer);
+      catalogManagementMock.activeProtocolVersion.set('v0.9');
+      catalogManagementMock.hasReceivedCatalogResponse.set(true);
+      catalogManagementMock.activeCatalog.set(slackCatalog);
+      TestBed.tick();
+      expect(service.activeDraft()).toBe(SLACK_SAMPLE);
+
+      // 2. Switch to an empty-catalog renderer via real signal sequence:
+      // activeCatalog clears while hasReceivedCatalogResponse is false, then response settles.
+      startupConfigStateMock.activeRenderer.set(null);
+      catalogManagementMock.hasReceivedCatalogResponse.set(false);
+      catalogManagementMock.activeCatalog.set(null);
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      TestBed.tick();
+      catalogManagementMock.hasReceivedCatalogResponse.set(true);
+      TestBed.tick();
+      expect(service.activeDraft()).toBe('');
+
+      // 3. Switch back to Slack renderer with the same catalogId
+      startupConfigStateMock.activeRenderer.set(slackRenderer);
+      catalogManagementMock.hasReceivedCatalogResponse.set(false);
+      TestBed.tick();
+      catalogManagementMock.activeProtocolVersion.set('v0.9');
+      catalogManagementMock.activeCatalog.set(slackCatalog);
+      catalogManagementMock.hasReceivedCatalogResponse.set(true);
+      TestBed.tick();
+      expect(service.activeDraft()).toBe(SLACK_SAMPLE);
+    });
+
+    it('loads samplePayload when switching from an empty-catalog renderer without samplePayload to another empty-catalog renderer with samplePayload', () => {
+      const SLACK_SAMPLE = JSON.stringify([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'slack',
+            catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
+          },
+        },
+      ]);
+      const EMPTY_SAMPLE = JSON.stringify([
+        {version: '1.0', createSurface: {surfaceId: 'empty-sample', catalogId: 'custom'}},
+      ]);
+
+      // Start on a samplePayload renderer, then settle on an empty-catalog renderer without samplePayload
+      startupConfigStateMock.activeRenderer.set({samplePayload: SLACK_SAMPLE});
+      catalogManagementMock.activeProtocolVersion.set('v0.9');
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
+      });
+      TestBed.tick();
+      expect(service.activeDraft()).toBe(SLACK_SAMPLE);
+
+      // 1. Settle on an empty-catalog renderer without samplePayload (activeDraft === '')
+      startupConfigStateMock.activeRenderer.set(null);
+      catalogManagementMock.hasReceivedCatalogResponse.set(false);
+      catalogManagementMock.activeCatalog.set(null);
+      catalogManagementMock.activeProtocolVersion.set('v1.0');
+      TestBed.tick();
+      catalogManagementMock.hasReceivedCatalogResponse.set(true);
+      TestBed.tick();
+      expect(service.activeDraft()).toBe('');
+
+      // 2. Switch to an empty-catalog renderer that defines samplePayload
+      catalogManagementMock.hasReceivedCatalogResponse.set(false);
+      TestBed.tick();
+      startupConfigStateMock.activeRenderer.set({samplePayload: EMPTY_SAMPLE});
+      catalogManagementMock.hasReceivedCatalogResponse.set(true);
+      TestBed.tick();
+
+      expect(service.activeDraft()).toBe(EMPTY_SAMPLE);
+    });
   });
 });
