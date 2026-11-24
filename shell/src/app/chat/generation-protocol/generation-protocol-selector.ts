@@ -23,11 +23,50 @@ import {
   isUntouchedBlankDraft,
 } from '../chat-service/draft-protocol-strategy';
 
-// Match explicit `v0.9`/`v0_9`/`v1.0`/`v1_0` (with required `v`) or bare `0.9`/`1.0` preceded by
-// a protocol keyword (`a2ui`/`version`/`protocol`/`spec`), excluding CSS/numeric decimals
-// (`opacity: 0.9`, `0.9rem`, `scale ... 1.0`) and sub-versions/identifiers (`v1.0.2`, `v0.9_foo`).
-const VERSION_MENTION_PATTERN =
-  /\b(?:a2ui|version|protocol|spec)\s+v?(0[._]9|1[._]0)(?![a-zA-Z\d_]|(?:\.\d))|(?<![.$\w])v(0[._]9|1[._]0)(?![a-zA-Z\d_]|(?:\.\d))/gi;
+const VERSION_GROUP = {
+  keywordPrefixed: 'kwPrefixed',
+  keywordBare: 'kwBare',
+  standalone: 'standalone',
+} as const;
+
+const DOTTED_VERSION = String.raw`(?:0[._]9|1[._]0)`;
+const DOTLESS_SHORTHAND = String.raw`(?:09|10)`;
+const KEYWORD_LEFT_BOUNDARY = String.raw`(?<![.$\w?&=-])`;
+const KEYWORD = String.raw`(?:a2ui|version|protocol|spec)`;
+const KEYWORD_SEPARATOR = String.raw`(?:\s*:\s*|\s+)`;
+const STANDALONE_LEFT_BOUNDARY = String.raw`(?<![.$\w])`;
+const TRAILING_BOUNDARY = String.raw`(?!\w|\.\d)`;
+
+const KEYWORD_FORM = String.raw`${KEYWORD_LEFT_BOUNDARY}${KEYWORD}${KEYWORD_SEPARATOR}(?:v(?<${VERSION_GROUP.keywordPrefixed}>${DOTTED_VERSION}|${DOTLESS_SHORTHAND})|(?<${VERSION_GROUP.keywordBare}>${DOTTED_VERSION}))`;
+const STANDALONE_FORM = String.raw`${STANDALONE_LEFT_BOUNDARY}v(?<${VERSION_GROUP.standalone}>${DOTTED_VERSION})`;
+
+// Match either:
+// 1. Keyword form (`KEYWORD_FORM`): a protocol keyword (`a2ui`, `version`, `protocol`, `spec`),
+//    protected by `KEYWORD_LEFT_BOUNDARY` against preceding `\w` or `.`, `$`, `?`, `&`, `=`, `-`
+//    (blocks compound tokens and URL query keys like `sub-version 1.0`, `app.version: 1.0`,
+//    `?protocol:1.0`, `&version 1.0`), followed by ONE separator (whitespace or a single colon
+//    with optional surrounding whitespace), and either dotted/underscored `0.9`/`1.0` or
+//    `v`-prefixed versions including dotless `v09`/`v10`.
+//    - The stricter left boundary applies only to bare and dotless keyword forms (`v`-dotted
+//      versions are still matched by `STANDALONE_FORM` regardless of what precedes the keyword).
+//    - `=` and `-` are deliberately excluded as separators (URL queries, CSS/component names,
+//      subtraction).
+//    - Dotless shorthand requires a keyword because bare `v10`/`v09` collides with product names
+//      (`Dyson V10`), URLs (`/v10/`), and identifiers (`v10-button`, `Angular v10`), while bare
+//      `"version 10"` without `v` is excluded so prose numbers do not trigger whole-UI
+//      regeneration or refusal.
+//    - Pre-existing UI prose like `"version 1.0"` still matches (accepted).
+// 2. Standalone form (`STANDALONE_FORM`): `v`-prefixed dotted/underscored `0.9`/`1.0`, protected by
+//    `STANDALONE_LEFT_BOUNDARY` against preceding `.`, `$`, or `\w`.
+// Both forms share `TRAILING_BOUNDARY`, which rejects trailing `\w` and `.\d` (blocking `0.95`,
+// `1.0.2`, `v0.9_foo`, `a2ui v10.5`, `a2ui v100`), while hyphenated descriptors (`v1.0-card`,
+// `version: 1.0-beta`, `a2ui v10-beta`) match and are accepted. Ranges with a bare second endpoint
+// (`version 0.9-1.0`) yield only the first version, while `v`-prefixed endpoints
+// (`version 0.9-v1.0`, `v0.9-v1.0`) yield both.
+const VERSION_MENTION_PATTERN = new RegExp(
+  String.raw`(?:${KEYWORD_FORM}|${STANDALONE_FORM})${TRAILING_BOUNDARY}`,
+  'gi',
+);
 
 /**
  * Outcome of selecting the A2UI protocol version for a chat generation run.
@@ -92,7 +131,14 @@ export function requestedVersions(requestText: string): readonly A2uiProtocolVer
   const seen = new Set<A2uiProtocolVersion>();
   const matches = requestText.matchAll(VERSION_MENTION_PATTERN);
   for (const match of matches) {
-    const raw = match[1] ?? match[2] ?? '';
+    const groups = match.groups;
+    const raw =
+      groups?.[VERSION_GROUP.keywordPrefixed] ??
+      groups?.[VERSION_GROUP.keywordBare] ??
+      groups?.[VERSION_GROUP.standalone];
+    if (!raw) {
+      throw new Error('VERSION_MENTION_PATTERN matched without a named version capture group');
+    }
     const version: A2uiProtocolVersion = raw.startsWith('0') ? 'v0.9' : 'v1.0';
     seen.add(version);
   }

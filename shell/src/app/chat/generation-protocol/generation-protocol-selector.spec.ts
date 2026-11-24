@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type {A2uiProtocolVersion} from 'a2ui-bridge';
 import {describe, expect, it} from 'vitest';
 import type {ProtocolSupport} from '../../storage/catalog-management/catalog-domain';
 import {CAR_BOOKING, CAR_BOOKING_V1_0} from '../chat-service/initial-draft';
@@ -22,6 +23,7 @@ import {V10DraftStrategy} from '../chat-service/v1-0-draft-strategy';
 import {
   existingUiVersion,
   formatUnsupportedGenerationMessage,
+  type GenerationProtocolDecision,
   requestedVersions,
   selectGenerationVersion,
 } from './generation-protocol-selector';
@@ -139,31 +141,161 @@ describe('generation-protocol-selector', () => {
   });
 
   describe('requestedVersions', () => {
-    it('extracts explicit v0.9, v0_9, v1.0, v1_0 and keyword-prefixed asks case-insensitively (C1)', () => {
-      expect(requestedVersions('Build a v0.9 login form')).toEqual(['v0.9']);
-      expect(requestedVersions('use v0_9')).toEqual(['v0.9']);
-      expect(requestedVersions('A2UI v0_9 please')).toEqual(['v0.9']);
-      expect(requestedVersions('use version 0.9')).toEqual(['v0.9']);
-      expect(requestedVersions('Please use A2UI 0.9')).toEqual(['v0.9']);
-      expect(requestedVersions('Use spec 0.9')).toEqual(['v0.9']);
-      expect(requestedVersions('Generate in V1.0')).toEqual(['v1.0']);
-      expect(requestedVersions('A2UI 1.0')).toEqual(['v1.0']);
-      expect(requestedVersions('Use v1_0')).toEqual(['v1.0']);
-      expect(requestedVersions('Use protocol 1.0')).toEqual(['v1.0']);
-      expect(requestedVersions('Both v0.9 and v1.0 and v0.9 again')).toEqual(['v0.9', 'v1.0']);
+    it.each<[string, readonly A2uiProtocolVersion[]]>([
+      ['use version 0.9', ['v0.9']],
+      ['Please use A2UI 0.9', ['v0.9']],
+      ['Use spec 0.9', ['v0.9']],
+      ['A2UI 1.0', ['v1.0']],
+      ['Use protocol 1.0', ['v1.0']],
+      ['version  0.9', ['v0.9']],
+      ['version: 0.9', ['v0.9']],
+      ['version:0.9', ['v0.9']],
+      ['version : 0.9', ['v0.9']],
+      ['version:\n0.9', ['v0.9']],
+      ['protocol: v0.9', ['v0.9']],
+      ['protocol:v0.9', ['v0.9']],
+      ['A2UI: v1.0', ['v1.0']],
+      ['spec: 1.0', ['v1.0']],
+      ['version\tv1.0', ['v1.0']],
+      ['A2UI\nv0.9', ['v0.9']],
+      ['version v0.9', ['v0.9']],
+      ['A2UI v0_9 please', ['v0.9']],
+      ['A2UI v1_0', ['v1.0']],
+      ['A2UI v10', ['v1.0']],
+      ['a2ui v09', ['v0.9']],
+      ['protocol:v09', ['v0.9']],
+      ['protocol: v10', ['v1.0']],
+      ['version v10', ['v1.0']],
+      ['a2ui: v10 and v0.9', ['v1.0', 'v0.9']],
+      ['a2ui/spec 0.9', ['v0.9']],
+      ['v0.9/version 1.0', ['v0.9', 'v1.0']],
+      ['version: 1.0-beta', ['v1.0']],
+      ['a2ui v10-beta', ['v1.0']],
+      ['A2UI v1.0-only', ['v1.0']],
+    ])(
+      'matches keyword-prefixed versions across whitespace/colon separators and keyword dotless shorthand: %j -> %j',
+      (requestText, expected) => {
+        expect(requestedVersions(requestText)).toEqual(expected);
+      },
+    );
+
+    it.each<[string, readonly A2uiProtocolVersion[]]>([
+      ['Build a v0.9 login form', ['v0.9']],
+      ['use v0_9', ['v0.9']],
+      ['Generate in V1.0', ['v1.0']],
+      ['Use v1_0', ['v1.0']],
+      ['use v0.9', ['v0.9']],
+      ['v1.0', ['v1.0']],
+      ['(v1.0)', ['v1.0']],
+      ['"v0.9"', ['v0.9']],
+      ['v1.0-card', ['v1.0']],
+      ['make it v0.9-compatible', ['v0.9']],
+      ['v0.9-style layout', ['v0.9']],
+      ['Both v0.9 and v1.0 and v0.9 again', ['v0.9', 'v1.0']],
+      ['Convert this v0.9 UI to v1.0', ['v0.9', 'v1.0']],
+      ['switch from v1.0 to v0.9', ['v1.0', 'v0.9']],
+      ['v0.9-v1.0', ['v0.9', 'v1.0']],
+      ['v1.0-v0.9', ['v1.0', 'v0.9']],
+      ['version 0.9-v1.0', ['v0.9', 'v1.0']],
+      // Pin current range behavior: a hyphenated range with a bare second endpoint yields only the first version.
+      ['version 0.9-1.0', ['v0.9']],
+    ])(
+      'matches standalone v-prefixed dotted/underscored versions, preserves order, and pins ranges: %j -> %j',
+      (requestText, expected) => {
+        expect(requestedVersions(requestText)).toEqual(expected);
+      },
+    );
+
+    it.each<string>([
+      'v10',
+      'V10',
+      'v09',
+      'use v09',
+      'Build a Dyson V10 product card',
+      'Fetch items from https://api.example.com/v10/orders',
+      'Style the v10-button with icon-v10',
+      'Angular v10',
+      'version 10',
+      'version: 10',
+      'spec: 10',
+      'protocol 09',
+      'a2ui 10',
+      'version1.0',
+      'spec0.9',
+    ])(
+      'ignores standalone bare v09/v10, unprefixed dotless numbers, and missing separators: %j',
+      input => {
+        expect(requestedVersions(input)).toEqual([]);
+      },
+    );
+
+    it.each<string>([
+      'spec = 1.0',
+      'spec=1.0',
+      'spec=v10',
+      'a2ui-1.0',
+      'a2ui-10',
+      'version - 1.0',
+      'version- 1.0',
+      'version -1.0',
+      'version: -1.0',
+      'if (version == 1.0)',
+      'version := 1.0',
+      'https://api.example.com/items?protocol=1.0',
+      '?version=1.0',
+      '?protocol:1.0',
+      '&version 1.0',
+      'x=protocol 1.0',
+      '$version 1.0',
+      'aspect-spec 1.0',
+      'sub-version 1.0',
+      'app.version: 1.0',
+      'subversion 1.0',
+      'Style the spec-1.0-card',
+      'Style the version-v10-button',
+    ])('ignores = and - keyword separators and compound/URL left boundaries: %j', input => {
+      expect(requestedVersions(input)).toEqual([]);
     });
 
-    it('ignores bare decimals, CSS values, and versioned sub-numbers (C1)', () => {
-      expect(requestedVersions('')).toEqual([]);
-      expect(requestedVersions('set the opacity to 0.9')).toEqual([]);
-      expect(requestedVersions('opacity:0.9;')).toEqual([]);
-      expect(requestedVersions('make it 0.9rem')).toEqual([]);
-      expect(requestedVersions('scale the logo by 1.0')).toEqual([]);
-      expect(requestedVersions('line-height 1.0')).toEqual([]);
-      expect(requestedVersions('Add a $1.00 tip button and 0.95 opacity')).toEqual([]);
-      expect(requestedVersions('Upgrade to 1.0.2 or 20.9')).toEqual([]);
-      expect(requestedVersions('Make the title blue')).toEqual([]);
-    });
+    it.each<string>([
+      '',
+      'Make the title blue',
+      'set the opacity to 0.9',
+      'opacity:0.9;',
+      'opacity: 0.9',
+      'make it 0.9rem',
+      'scale the logo by 1.0',
+      'line-height 1.0',
+      'line-height: 1.0',
+      'Add a $1.00 tip button and 0.95 opacity',
+      'Upgrade to 1.0.2 or 20.9',
+      'A2UI v100',
+      'A2UI v090',
+      'A2UI v10px',
+      'A2UI v10.5',
+      'a2ui v10.5',
+      'a2ui v100',
+      'version v1.0.2',
+      'spec 1.0.2',
+      'version 0.95',
+      'v1.0.2',
+      'v0.9_foo',
+      '$1.00',
+      '$v1.0',
+      'foo.v1.0',
+      'av1.0',
+      'v100',
+      'v090',
+      'rev10',
+      'mv10',
+      'v10px',
+      'v10.5',
+    ])(
+      'ignores CSS/numeric decimals, sub-versions, and prefixed/suffixed identifiers: %j',
+      input => {
+        expect(requestedVersions(input)).toEqual([]);
+      },
+    );
   });
 
   describe('selectGenerationVersion', () => {
@@ -299,6 +431,37 @@ describe('generation-protocol-selector', () => {
         }),
       ).toEqual({kind: 'selected', version: 'v0.9', replacesDraft: false});
     });
+
+    it.each<[string, string, GenerationProtocolDecision]>([
+      ['use protocol: 0.9', v10Ui, {kind: 'selected', version: 'v0.9', replacesDraft: true}],
+      ['use A2UI v09', v10Ui, {kind: 'selected', version: 'v0.9', replacesDraft: true}],
+      [
+        'make the title version 10',
+        v09Ui,
+        {kind: 'selected', version: 'v0.9', replacesDraft: false},
+      ],
+      [
+        'Build a Dyson V10 product card',
+        v09Ui,
+        {kind: 'selected', version: 'v0.9', replacesDraft: false},
+      ],
+      [
+        'fetch https://api.example.com/items?protocol=1.0',
+        v09Ui,
+        {kind: 'selected', version: 'v0.9', replacesDraft: false},
+      ],
+    ])(
+      'handles colon/keyword-dotless version asks and ignores non-keyword v10, query params, and bare version 10: %j',
+      (requestText, draft, expected) => {
+        expect(
+          selectGenerationVersion({
+            draft,
+            requestText,
+            support: dualSupport,
+          }),
+        ).toEqual(expected);
+      },
+    );
 
     it('handles requests naming both versions (C2/R3): converts away from existing UI, or defaults when no existing UI', () => {
       expect(
