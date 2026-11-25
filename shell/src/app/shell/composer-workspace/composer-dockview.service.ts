@@ -136,9 +136,23 @@ export class ComposerDockview {
   private eventsInstance?: Events;
   private errorsInstance?: Errors;
   private readonly componentTreeInstance = signal<ComponentTree | undefined>(undefined);
-  private readonly draftRevision = linkedSignal<[string, number], number>({
-    source: () => [this.stateSync.activeDraft(), this.stateSync.sessionResetNonce()],
-    computation: (_source, previous) => (previous?.value ?? -1) + 1,
+  private readonly lastPropertyEdit = signal<{readonly draft: string} | null>(null);
+  private readonly draftRevision = linkedSignal({
+    source: () => ({
+      draft: this.stateSync.activeDraft(),
+      resetNonce: this.stateSync.sessionResetNonce(),
+      propertyEdit: this.lastPropertyEdit(),
+    }),
+    computation: (current, previous): number => {
+      if (!previous) return 0;
+      const isOwnPropertyEdit =
+        current.propertyEdit !== previous.source.propertyEdit &&
+        current.propertyEdit?.draft === current.draft;
+      const shouldBump =
+        current.resetNonce !== previous.source.resetNonce ||
+        (current.draft !== previous.source.draft && !isOwnPropertyEdit);
+      return shouldBump ? previous.value + 1 : previous.value;
+    },
   });
 
   private resizeObserver?: ResizeObserver;
@@ -478,6 +492,7 @@ export class ComposerDockview {
       inputBinding('showStatus', () => true),
       outputBinding<Record<string, unknown>>('componentChange', updatedComponent => {
         this.componentTreeInstance()?.updateSelectedComponent(updatedComponent);
+        this.lastPropertyEdit.set({draft: this.stateSync.activeDraft()});
       }),
       outputBinding<string>('statusMessage', message => {
         if (message) {

@@ -1044,6 +1044,40 @@ describe('ComposerWorkspace Dashboard', () => {
         expect(propertyEditor.resetKey()).not.toBe(initialResetKey);
       });
 
+      it('keeps resetKey unchanged on Property Editor edits while still bumping on later external edits', () => {
+        componentTree.selectNode('s', TITLE_NODE);
+        fixture.detectChanges();
+        const initialDraft = stateSync.activeDraft();
+        const initialResetKey = propertyEditor.resetKey();
+
+        propertyEditor.componentChange.emit({
+          id: 'title',
+          component: 'Text',
+          text: 'Edited in panel',
+        });
+        fixture.detectChanges();
+        const componentAfterPropertyEdit = propertyEditor.component();
+        const propertyEditedDraft = stateSync.activeDraft();
+        const resetKeyAfterPropertyEdit = propertyEditor.resetKey();
+
+        stateSync.activeDraftSignal.set(initialDraft);
+        fixture.detectChanges();
+        const resetKeyAfterExternalEdit = propertyEditor.resetKey();
+
+        stateSync.activeDraftSignal.set(propertyEditedDraft);
+        fixture.detectChanges();
+        const resetKeyAfterExternalRevert = propertyEditor.resetKey();
+
+        expect(componentAfterPropertyEdit).toEqual({
+          id: 'title',
+          component: 'Text',
+          text: 'Edited in panel',
+        });
+        expect(resetKeyAfterPropertyEdit).toBe(initialResetKey);
+        expect(resetKeyAfterExternalEdit).not.toBe(initialResetKey);
+        expect(resetKeyAfterExternalRevert).not.toBe(resetKeyAfterExternalEdit);
+      });
+
       it('changes resetKey when the session resets even if the draft text is unchanged', () => {
         componentTree.selectNode('s', TITLE_NODE);
         fixture.detectChanges();
