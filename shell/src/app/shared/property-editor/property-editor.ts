@@ -16,8 +16,10 @@
 
 import {
   Component,
+  Injector,
   Signal,
   WritableSignal,
+  afterNextRender,
   computed,
   inject,
   input,
@@ -105,6 +107,7 @@ interface JsonFieldError {
 export class PropertyEditor {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly errorLogger = inject(ErrorLogger);
+  private readonly injector = inject(Injector);
 
   /** The A2UI component object being inspected and edited. */
   readonly component = input<Record<string, unknown> | null | undefined>(null);
@@ -243,10 +246,21 @@ export class PropertyEditor {
   });
 
   /**
-   * Component record read by edit mutations: layers any in-flight debounced edit on top of
-   * `component()` so discrete controls or sibling fields don't lose uncommitted keystrokes.
+   * Latest emitted component record awaiting the next change-detection pass so a sibling
+   * control triggered in the same frame (e.g. blur + click) doesn't overwrite a flushed edit.
    */
-  private readonly activeComponent = computed(() => this.pendingCommit() ?? this.component());
+  private readonly lastCommitted: WritableSignal<Record<string, unknown> | null> = linkedSignal({
+    source: () => [this.component(), this.contextIdentity(), this.disabled()] as const,
+    computation: (): Record<string, unknown> | null => null,
+  });
+
+  /**
+   * Component record read by edit mutations: layers any in-flight debounced or just-committed
+   * edit on top of `component()` so discrete controls or sibling fields don't lose keystrokes.
+   */
+  private readonly activeComponent = computed(
+    () => this.pendingCommit() ?? this.lastCommitted() ?? this.component(),
+  );
 
   /**
    * Every catalog property of the selected component except its identity and constants.
@@ -306,6 +320,7 @@ export class PropertyEditor {
    */
   clearErrors(): void {
     this.pendingCommit.set(null);
+    this.lastCommitted.set(null);
     this.jsonFieldErrors.set({});
     this.setStatusMessage('');
   }
@@ -320,13 +335,26 @@ export class PropertyEditor {
     }
   }
 
-  private commitPending(updatedComponent: Record<string, unknown>): void {
+  private commitPending(updatedComponent: Record<string, unknown>) {
     this.pendingCommit.set(null);
-    const current = this.component();
-    if (!current || stableStringify(updatedComponent) === stableStringify(current)) {
+    const baseline = this.lastCommitted() ?? this.component();
+    if (!baseline || stableStringify(updatedComponent) === stableStringify(baseline)) {
       return;
     }
+    this.emitComponentChange(updatedComponent);
+  }
+
+  private emitComponentChange(updatedComponent: Record<string, unknown>) {
+    this.lastCommitted.set(updatedComponent);
     this.componentChange.emit(updatedComponent);
+    afterNextRender(
+      () => {
+        if (this.lastCommitted() === updatedComponent) {
+          this.lastCommitted.set(null);
+        }
+      },
+      {injector: this.injector},
+    );
   }
 
   /**
@@ -402,7 +430,7 @@ export class PropertyEditor {
       this.pendingCommit$.next(updatedComponent);
     } else {
       this.pendingCommit.set(null);
-      this.componentChange.emit(updatedComponent);
+      this.emitComponentChange(updatedComponent);
     }
     return null;
   }

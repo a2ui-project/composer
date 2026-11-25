@@ -15,6 +15,7 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
+import {manualChangeDetection} from '@angular/cdk/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal} from '@angular/core';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
@@ -1005,6 +1006,46 @@ describe('PropertyEditor Component', () => {
 
       expect(changesOnToggle).toEqual([{...initial, label: 'Updated', filterable: false}]);
       expect(componentChanges).toHaveLength(1);
+    });
+
+    it('preserves a blur-flushed edit when a sibling control fires in the same frame before component updates', async () => {
+      const initial = createChoicePicker({label: 'Size', filterable: true});
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.typeProperty('label', 'Updated');
+      await manualChangeDetection(async () => {
+        await harness.blurProperty('label');
+        await harness.toggleProperty('filterable');
+      });
+
+      expect(componentChanges).toEqual([
+        {...initial, label: 'Updated'},
+        {...initial, label: 'Updated', filterable: false},
+      ]);
+    });
+
+    it('clears the committed edit after the next render when the host keeps the previous component', async () => {
+      const initial = createChoicePicker({label: 'Size', filterable: true});
+      const componentChanges: Array<Record<string, unknown>> = [];
+      fixture.componentInstance.componentChange.subscribe(updatedComponent =>
+        componentChanges.push(updatedComponent),
+      );
+      fixture.componentRef.setInput('component', initial);
+      fixture.detectChanges();
+
+      await harness.editProperty('label', 'Rejected');
+      fixture.detectChanges();
+      await harness.toggleProperty('filterable');
+
+      expect(componentChanges).toEqual([
+        {...initial, label: 'Rejected'},
+        {...initial, filterable: false},
+      ]);
     });
 
     it('layers consecutive debounced edits to sibling nested object fields within 300ms', async () => {
