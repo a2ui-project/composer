@@ -16,9 +16,13 @@
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {signal, WritableSignal} from '@angular/core';
-import {MonacoEditor} from './monaco-editor';
+import {computed, signal, WritableSignal} from '@angular/core';
+import {MonacoEditor, PROTOCOL_MARKER_OWNER} from './monaco-editor';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {
+  resolveProtocolSupport,
+  type ProtocolSupport,
+} from '../../storage/catalog-management/catalog-domain';
 import {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {ThemePreference, type A2uiProtocolVersion} from 'a2ui-bridge';
@@ -49,6 +53,7 @@ const {
   mockKeyDownDisposable,
   mockMouseDownDisposable,
   mockSetDiagnosticsOptions,
+  mockSetModelMarkers,
 } = vi.hoisted(() => {
   const mockSetValue = vi.fn();
   const mockSetEOL = vi.fn();
@@ -65,6 +70,7 @@ const {
   const mockKeyDownDisposable = {dispose: vi.fn()};
   const mockMouseDownDisposable = {dispose: vi.fn()};
   const mockSetDiagnosticsOptions = vi.fn();
+  const mockSetModelMarkers = vi.fn();
 
   const mockOnDidChangeModelContent = vi.fn<
     (listener: () => void) => {dispose: ReturnType<typeof vi.fn>}
@@ -130,6 +136,7 @@ const {
     mockKeyDownDisposable,
     mockMouseDownDisposable,
     mockSetDiagnosticsOptions,
+    mockSetModelMarkers,
     mockDefineTheme,
   };
 });
@@ -149,6 +156,7 @@ vi.mock('@monaco-editor/loader', () => ({
         create: mockEditorCreate,
         onDidChangeMarkers: mockOnDidChangeMarkers,
         getModelMarkers: mockGetModelMarkers,
+        setModelMarkers: mockSetModelMarkers,
       },
       languages: {
         json: {
@@ -166,6 +174,31 @@ class MockCatalogManagement {
   readonly activeCatalogs = signal<CatalogJson[]>([]);
   readonly activeProtocolVersion = signal<A2uiProtocolVersion>('v0.9');
   readonly hasReceivedCatalogResponse = signal(true);
+  readonly protocolSupportOverride = signal<ProtocolSupport | null>(null);
+  readonly protocolSupport = computed<ProtocolSupport>(() => {
+    const override = this.protocolSupportOverride();
+    if (override) {
+      return override;
+    }
+    const base = resolveProtocolSupport(
+      this.hasReceivedCatalogResponse(),
+      this.activeCatalogs(),
+      false,
+      this.activeCatalog(),
+    );
+    const forced = this.activeProtocolVersion();
+    if (forced === base.defaultVersion) {
+      return base;
+    }
+    return {
+      defaultVersion: forced,
+      versions: [forced],
+      catalogsByVersion: base.catalogsByVersion[forced]
+        ? {[forced]: base.catalogsByVersion[forced]}
+        : {},
+      announcedCatalogCount: base.announcedCatalogCount,
+    };
+  });
 }
 
 class MockAppConfigProvider {
@@ -893,6 +926,52 @@ describe('MonacoEditor component', () => {
 
       sub.unsubscribe();
     });
+
+    it('excludes PROTOCOL_MARKER_OWNER markers and emits immediately when schema errors clear while a protocol marker is set', async () => {
+      vi.useFakeTimers();
+      fixture = TestBed.createComponent(MonacoEditor);
+      const markersSpy = vi.fn();
+      fixture.componentInstance.markersChange.subscribe(markersSpy);
+      fixture.detectChanges();
+
+      await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+      await Promise.resolve();
+
+      const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
+        uris: readonly monaco.Uri[],
+      ) => void;
+
+      const schemaMarker = createMockMarker({
+        owner: 'json',
+        severity: 8,
+        message: 'Missing property "version".',
+        startLineNumber: 2,
+        startColumn: 3,
+      });
+      const protocolMarker = createMockMarker({
+        owner: PROTOCOL_MARKER_OWNER,
+        severity: 8,
+        message: 'This renderer does not support A2UI v0.9.',
+        startLineNumber: 3,
+        startColumn: 5,
+      });
+
+      // Schema error + protocol marker arrive together -> debounced behind 3000ms, excluding protocol marker
+      mockGetModelMarkers.mockReturnValue([schemaMarker, protocolMarker]);
+      markerListener([layoutUri]);
+      vi.advanceTimersByTime(1500);
+      expect(markersSpy).not.toHaveBeenCalled();
+
+      // Schema error clears while protocol marker remains -> immediate emission of [] without waiting 3000ms
+      mockGetModelMarkers.mockReturnValue([protocolMarker]);
+      markerListener([layoutUri]);
+      expect(markersSpy).toHaveBeenCalledTimes(1);
+      expect(markersSpy).toHaveBeenCalledWith([]);
+
+      // Advancing past original debounce timer does not emit the protocol marker
+      vi.advanceTimersByTime(3000);
+      expect(markersSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('configures schemaValidation as error in jsonDefaults and supports gallery-example schemaMode and ariaLabel', async () => {
@@ -1299,6 +1378,157 @@ describe('MonacoEditor component', () => {
       ).mockReturnValueOnce(null);
       fixture.componentInstance.resetEditor('{"fallback": true}');
       expect(mockEditorSetValue).toHaveBeenCalledWith('{"fallback": true}');
+    });
+  });
+
+  describe('per-draft protocolVersion, protocolCatalog, and protocolProblem', () => {
+    const v10Catalog: Catalog = {
+      $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+      catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+      protocolVersion: '1.0',
+      components: {Text: {type: 'object'}},
+    };
+    const v09ComposerCatalog: Catalog = {
+      $id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      protocolVersion: '0.9',
+      components: {ComposerText: {type: 'object'}},
+    };
+    const v09NpmCatalog: Catalog = {
+      $id: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+      catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+      protocolVersion: '0.9',
+      components: {NpmText: {type: 'object'}},
+    };
+
+    it('uses protocolVersion and protocolCatalog inputs on a two-version support, falling back to default when null', async () => {
+      fixture = TestBed.createComponent(MonacoEditor);
+      const catalogService = TestBed.inject(CatalogManagement) as unknown as MockCatalogManagement;
+      catalogService.protocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [v10Catalog],
+          'v0.9': [v09ComposerCatalog, v09NpmCatalog],
+        },
+        announcedCatalogCount: 3,
+      });
+
+      fixture.componentRef.setInput('protocolVersion', 'v0.9');
+      fixture.componentRef.setInput('protocolCatalog', null);
+      fixture.detectChanges();
+
+      await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      let lastCall = mockSetDiagnosticsOptions.mock.calls.at(-1)?.[0] as {
+        schemas: Array<{uri: string; schema: Record<string, unknown>}>;
+      };
+      expect(lastCall.schemas.map(s => s.uri)).toContain(
+        'https://a2ui.org/specification/v0_9/common_types.json',
+      );
+      expect(lastCall.schemas.map(s => s.uri)).toContain(v09ComposerCatalog.$id);
+      expect(lastCall.schemas.map(s => s.uri)).not.toContain(v09NpmCatalog.$id);
+      const v09LayoutSchema = lastCall.schemas.find(s => s.uri === 'a2ui-catalog-schema')
+        ?.schema as
+        {items?: {properties?: Record<string, unknown>; required?: string[]}} | undefined;
+      expect(v09LayoutSchema?.items?.properties?.['version']).toEqual({
+        type: 'string',
+        const: 'v0.9',
+      });
+      expect(v09LayoutSchema?.items?.required).toEqual(['version']);
+
+      // Selecting the npm-id v0.9 catalog builds the v0.9 schema from that catalog
+      fixture.componentRef.setInput('protocolCatalog', v09NpmCatalog);
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      lastCall = mockSetDiagnosticsOptions.mock.calls.at(-1)?.[0] as {
+        schemas: Array<{uri: string; schema: Record<string, unknown>}>;
+      };
+      expect(lastCall.schemas.map(s => s.uri)).toContain(v09NpmCatalog.$id);
+      expect(lastCall.schemas.map(s => s.uri)).not.toContain(v09ComposerCatalog.$id);
+
+      // Null protocolVersion falls back to the renderer default (v1.0)
+      fixture.componentRef.setInput('protocolVersion', null);
+      fixture.componentRef.setInput('protocolCatalog', null);
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      lastCall = mockSetDiagnosticsOptions.mock.calls.at(-1)?.[0] as {
+        schemas: Array<{uri: string; schema: Record<string, unknown>}>;
+      };
+      expect(lastCall.schemas.map(s => s.uri)).toContain(
+        'https://a2ui.org/specification/v1_0/common_types.json',
+      );
+    });
+
+    it('clears schemas and sets one PROTOCOL_MARKER_OWNER marker when protocolProblem is set, and clears it on reset', async () => {
+      const sampleText =
+        '[\n  {\n    "version": "v0.9",\n    "createSurface": {\n      "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"\n    }\n  }\n]';
+      const mockModelInstance = {
+        setValue: mockSetValue,
+        setEOL: mockSetEOL,
+        getValue: vi.fn(() => sampleText),
+        dispose: vi.fn(),
+      };
+      mockCreateModel.mockReturnValueOnce(mockModelInstance);
+
+      fixture = TestBed.createComponent(MonacoEditor);
+      const catalogService = TestBed.inject(CatalogManagement) as unknown as MockCatalogManagement;
+      catalogService.protocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [v10Catalog],
+          'v0.9': [v09ComposerCatalog, v09NpmCatalog],
+        },
+        announcedCatalogCount: 3,
+      });
+
+      fixture.componentRef.setInput('value', sampleText);
+      fixture.componentRef.setInput('protocolProblem', {
+        message: 'Catalog not provided.',
+        anchorText: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      fixture.detectChanges();
+
+      await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      let lastCall = mockSetDiagnosticsOptions.mock.calls.at(-1)?.[0] as {
+        schemas: Array<{uri: string; schema: Record<string, unknown>}>;
+      };
+      expect(lastCall.schemas).toEqual([]);
+
+      expect(mockSetModelMarkers).toHaveBeenCalledWith(mockModelInstance, PROTOCOL_MARKER_OWNER, [
+        expect.objectContaining({
+          severity: 8,
+          message: 'Catalog not provided.',
+          startLineNumber: 5,
+          startColumn: 20,
+        }),
+      ]);
+
+      mockSetModelMarkers.mockClear();
+      fixture.componentRef.setInput('protocolProblem', null);
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(mockSetModelMarkers).toHaveBeenCalledWith(
+        mockModelInstance,
+        PROTOCOL_MARKER_OWNER,
+        [],
+      );
+      lastCall = mockSetDiagnosticsOptions.mock.calls.at(-1)?.[0] as {
+        schemas: Array<{uri: string; schema: Record<string, unknown>}>;
+      };
+      expect(lastCall.schemas.length).toBeGreaterThan(0);
     });
   });
 });

@@ -25,6 +25,9 @@
   <a2ui-composer-monaco-editor
     [value]="layoutJson()"
     [readOnly]="isLocked()"
+    [protocolVersion]="editorProtocolVersion()"
+    [protocolCatalog]="editorProtocolCatalog()"
+    [protocolProblem]="editorProtocolProblem()"
     (valueChange)="onLayoutChange($event)"
     (markersChange)="onMarkersChange($event)"
     (userInteraction)="onUserInteraction()"

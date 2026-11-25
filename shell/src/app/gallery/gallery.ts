@@ -69,7 +69,7 @@ import {ErrorLogger, TaggedLogger} from '../debug/error-logger.service';
 import {GalleryLauncher} from './gallery-launcher';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
 import {MonacoEditor} from '../shared/monaco-editor/monaco-editor';
-import {validatePayloadProtocolVersion} from '../preview/protocol-version-mismatch';
+import {gatePayloadDispatch} from '../preview/payload-protocol-resolution';
 
 type PropertyPath = ReadonlyArray<string | number>;
 
@@ -696,7 +696,7 @@ export class Gallery implements OnInit, OnDestroy {
 
     effect(() => {
       this.catalogManagement.hasReceivedCatalogResponse();
-      this.catalogManagement.activeProtocolVersion();
+      this.catalogManagement.protocolSupport();
       this.validPayload();
       untracked(() => {
         this.dispatchSelectedComponentPayload();
@@ -717,20 +717,15 @@ export class Gallery implements OnInit, OnDestroy {
       return;
     }
 
-    if (!this.catalogManagement.hasReceivedCatalogResponse()) {
-      // Defer render until catalog discovery handshake settles
-      return;
-    }
-
-    const activeVersion = this.catalogManagement.activeProtocolVersion();
-
-    const validation = validatePayloadProtocolVersion(payload, activeVersion);
-    if (!validation.valid) {
-      this.errorLogger.error({
-        sourceTag: '[Gallery]',
-        code: 'PROTOCOL_VERSION_MISMATCH',
-        message: validation.message,
-      });
+    if (
+      !gatePayloadDispatch(
+        {payload},
+        this.catalogManagement.hasReceivedCatalogResponse(),
+        this.catalogManagement.protocolSupport(),
+        this.errorLogger,
+        '[Gallery]',
+      )
+    ) {
       return;
     }
 

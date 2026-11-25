@@ -20,10 +20,12 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
 import {describe, it, expect, vi, beforeEach, afterEach, type Mock} from 'vitest';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens/environment-tokens';
-import {signal, WritableSignal} from '@angular/core';
+import {computed, signal, WritableSignal} from '@angular/core';
 import {Subject} from 'rxjs';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import type {ProtocolSupport} from '../../storage/catalog-management/catalog-domain';
+import {createFakeCatalogManagement} from '../../storage/catalog-management/testing/catalog-management-fake';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
@@ -36,9 +38,24 @@ import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 
-const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() => {
+const {
+  createMock,
+  mockEditor,
+  mockModel,
+  mockRawOnDidChangeMarkers,
+  mockRawGetModelMarkers,
+  getLastCreatedModelUri,
+  setLastCreatedModelUri,
+  undoStack,
+  redoStack,
+} = vi.hoisted(() => {
   const undoStack: string[] = [];
   const redoStack: string[] = [];
+  let lastCreatedModelUri: unknown = null;
+  const mockRawOnDidChangeMarkers = vi.fn<
+    (listener: (uris: readonly unknown[]) => void) => {dispose: ReturnType<typeof vi.fn>}
+  >(() => ({dispose: vi.fn()}));
+  const mockRawGetModelMarkers = vi.fn<() => Partial<monaco.editor.IMarker>[]>(() => []);
 
   const mockModel = {
     getFullModelRange: vi.fn(() => ({
@@ -143,7 +160,19 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     },
   );
 
-  return {createMock: create, mockEditor, mockModel, undoStack, redoStack};
+  return {
+    createMock: create,
+    mockEditor,
+    mockModel,
+    mockRawOnDidChangeMarkers,
+    mockRawGetModelMarkers,
+    getLastCreatedModelUri: () => lastCreatedModelUri,
+    setLastCreatedModelUri: (uri: unknown) => {
+      lastCreatedModelUri = uri;
+    },
+    undoStack,
+    redoStack,
+  };
 });
 
 vi.mock('@monaco-editor/loader', () => {
@@ -158,17 +187,21 @@ vi.mock('@monaco-editor/loader', () => {
           defineTheme: vi.fn(),
           create: createMock,
           getModel: vi.fn(() => null),
-          onDidChangeMarkers: vi.fn(() => ({dispose: vi.fn()})),
-          createModel: vi.fn((value, language, uri) => ({
-            value,
-            language,
-            uri,
-            setValue: vi.fn(),
-            setEOL: vi.fn(),
-            dispose: vi.fn(),
-          })),
+          onDidChangeMarkers: mockRawOnDidChangeMarkers,
+          createModel: vi.fn((value, language, uri) => {
+            setLastCreatedModelUri(uri);
+            return {
+              value,
+              language,
+              uri,
+              setValue: vi.fn(),
+              setEOL: vi.fn(),
+              dispose: vi.fn(),
+            };
+          }),
           EndOfLineSequence: {LF: 0, CRLF: 1},
-          getModelMarkers: vi.fn(() => []),
+          getModelMarkers: mockRawGetModelMarkers,
+          setModelMarkers: vi.fn(),
         },
         languages: {
           json: {
@@ -305,6 +338,7 @@ describe('RawFrame JSON Source Editor View', () => {
   let mockHasReceivedCatalogResponse: WritableSignal<boolean>;
   let mockActiveProtocolVersion: WritableSignal<A2uiProtocolVersion>;
   let mockActiveCatalogs: WritableSignal<Catalog[]>;
+  let mockProtocolSupportOverride: WritableSignal<ProtocolSupport | null>;
   let stateSyncMock: MockStateSync;
   let chatStateMock: MockChatState;
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
@@ -323,6 +357,7 @@ describe('RawFrame JSON Source Editor View', () => {
     mockHasReceivedCatalogResponse = signal(true);
     mockActiveProtocolVersion = signal<A2uiProtocolVersion>('v0.9');
     mockActiveCatalogs = signal<Catalog[]>([]);
+    mockProtocolSupportOverride = signal<ProtocolSupport | null>(null);
     snackBarMock = {
       open: vi.fn().mockReturnValue({
         onAction: () => ({
@@ -363,6 +398,9 @@ describe('RawFrame JSON Source Editor View', () => {
     mockEditor.focus.mockClear();
     mockModel.getFullModelRange.mockClear();
     mockModel.setValue.mockClear();
+    mockRawOnDidChangeMarkers.mockClear();
+    mockRawGetModelMarkers.mockReset().mockReturnValue([]);
+    setLastCreatedModelUri(null);
     createMock.mockClear();
   });
 
@@ -389,12 +427,20 @@ describe('RawFrame JSON Source Editor View', () => {
         },
         {
           provide: CatalogManagement,
-          useValue: {
-            activeCatalog: mockActiveCatalog,
-            activeCatalogs: mockActiveCatalogs,
-            hasReceivedCatalogResponse: mockHasReceivedCatalogResponse,
-            activeProtocolVersion: mockActiveProtocolVersion,
-          },
+          useValue: (() => {
+            const baseFake = createFakeCatalogManagement({
+              activeCatalog: mockActiveCatalog,
+              activeCatalogs: mockActiveCatalogs,
+              hasReceivedCatalogResponse: mockHasReceivedCatalogResponse,
+              activeProtocolVersion: mockActiveProtocolVersion,
+            });
+            return {
+              ...baseFake,
+              protocolSupport: computed(
+                () => mockProtocolSupportOverride() ?? baseFake.protocolSupport(),
+              ),
+            };
+          })(),
         },
         {
           provide: AppConfigProvider,
@@ -1691,6 +1737,479 @@ describe('RawFrame JSON Source Editor View', () => {
       expect(errorLoggerMock.error).not.toHaveBeenCalledWith(
         expect.objectContaining({code: 'PROTOCOL_VERSION_MISMATCH'}),
       );
+    });
+
+    it('sends a v0.9 payload on a two-version renderer without error', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [{catalogId: 'https://a2ui.org/v1_0/basic.json', protocolVersion: '1.0'}],
+          'v0.9': [{catalogId: 'https://a2ui.org/v0_9/basic.json', protocolVersion: '0.9'}],
+        },
+        announcedCatalogCount: 2,
+      });
+
+      const {fixture} = await setup(false);
+      sendRenderA2UIMock.mockClear();
+      errorLoggerMock.error.mockClear();
+
+      const v09Payload = [
+        {
+          version: 'v0.9',
+          createSurface: {surfaceId: 's1', catalogId: 'https://a2ui.org/v0_9/basic.json'},
+        },
+      ];
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(v09Payload));
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+
+      expect(sendRenderA2UIMock).toHaveBeenCalledWith(v09Payload);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('blocks unsupported version with new PROTOCOL_VERSION_MISMATCH text and logs nothing sent', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0'],
+        catalogsByVersion: {
+          'v1.0': [{catalogId: 'https://a2ui.org/v1_0/basic.json', protocolVersion: '1.0'}],
+        },
+        announcedCatalogCount: 1,
+      });
+
+      const {fixture} = await setup(false);
+      sendRenderA2UIMock.mockClear();
+      errorLoggerMock.error.mockClear();
+
+      const v09Payload = [
+        {
+          version: 'v0.9',
+          createSurface: {surfaceId: 's1', catalogId: 'https://a2ui.org/v0_9/basic.json'},
+        },
+      ];
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(v09Payload));
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+      expect(errorLoggerMock.error).toHaveBeenCalledWith({
+        sourceTag: '[RawFrame]',
+        code: 'PROTOCOL_VERSION_MISMATCH',
+        message:
+          'This renderer does not support A2UI v0.9. Use an A2UI v1.0 payload ("version": "1.0") or select a renderer that supports v0.9.',
+      });
+    });
+
+    it('blocks unknown catalog on a multi-catalog renderer with UNSUPPORTED_CATALOG', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [{catalogId: 'https://a2ui.org/v1_0/basic.json', protocolVersion: '1.0'}],
+          'v0.9': [
+            {
+              catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+              protocolVersion: '0.9',
+            },
+            {
+              catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+              protocolVersion: '0.9',
+            },
+          ],
+        },
+        announcedCatalogCount: 3,
+      });
+
+      const {fixture} = await setup(false);
+      sendRenderA2UIMock.mockClear();
+      errorLoggerMock.error.mockClear();
+
+      const materialPayload = [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+          },
+        },
+      ];
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(materialPayload));
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+      expect(errorLoggerMock.error).toHaveBeenCalledWith({
+        sourceTag: '[RawFrame]',
+        code: 'UNSUPPORTED_CATALOG',
+        message:
+          'This renderer does not provide the catalog "https://a2ui.org/specification/v0_9/material_catalog.json" for A2UI v0.9. Catalogs it provides for v0.9: https://a2ui.org/specification/v0_9/basic_catalog.json, https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json.',
+      });
+    });
+
+    it('dispatches unknown catalog on a single-catalog renderer without UNSUPPORTED_CATALOG', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v0.9',
+        versions: ['v0.9'],
+        catalogsByVersion: {
+          'v0.9': [{catalogId: 'https://a2ui.org/slack/catalog.json', protocolVersion: '0.9'}],
+        },
+        announcedCatalogCount: 1,
+      });
+
+      const {fixture} = await setup(false);
+      sendRenderA2UIMock.mockClear();
+      errorLoggerMock.error.mockClear();
+
+      const foreignPayload = [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+          },
+        },
+      ];
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(foreignPayload));
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+
+      expect(sendRenderA2UIMock).toHaveBeenCalledWith(foreignPayload);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('forwards draft protocolVersion and protocolCatalog to MonacoEditor and ignores a2ui-protocol markers in Errors/snackbar', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      const v09ComposerCatalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        protocolVersion: '0.9',
+      };
+      const v09NpmCatalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+        protocolVersion: '0.9',
+      };
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [{catalogId: 'https://a2ui.org/v1_0/basic.json', protocolVersion: '1.0'}],
+          'v0.9': [v09ComposerCatalog, v09NpmCatalog],
+        },
+        announcedCatalogCount: 3,
+      });
+
+      const {fixture, component} = await setup(false);
+      const npmDraft = [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+          },
+        },
+      ];
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(npmDraft));
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      const editor = component.monacoEditor()!;
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(editor.protocolCatalog()).toEqual(v09NpmCatalog);
+      expect(editor.protocolProblem()).toBeNull();
+
+      // Unsupported catalog sets protocolProblem and ignores a2ui-protocol markers in notifySchemaErrors
+      snackBarMock.open.mockClear();
+      const materialDraft = [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+          },
+        },
+      ];
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(materialDraft));
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(editor.protocolProblem()).toEqual({
+        message:
+          'This renderer does not provide the catalog "https://a2ui.org/specification/v0_9/material_catalog.json" for A2UI v0.9. Catalogs it provides for v0.9: https://a2ui.org/specification/v0_9/basic_catalog.json, https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json.',
+        anchorText: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+
+      mockRawGetModelMarkers.mockReturnValue([
+        {
+          owner: 'a2ui-protocol',
+          severity: 8,
+          message: editor.protocolProblem()!.message,
+          startLineNumber: 1,
+          startColumn: 1,
+        },
+      ]);
+      const markerListener = mockRawOnDidChangeMarkers.mock.calls.at(-1)?.[0] as
+        ((uris: readonly unknown[]) => void) | undefined;
+      expect(markerListener).toBeDefined();
+      markerListener!([getLastCreatedModelUri()]);
+      vi.advanceTimersByTime(3100);
+      expect(snackBarMock.open).not.toHaveBeenCalled();
+    });
+
+    it('keeps RawFrame dispatch and Monaco editor protocol resolution synchronized across capability transitions (F4)', async () => {
+      const v09Catalog: Catalog = {
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        protocolVersion: '0.9',
+        components: {Text: {type: 'object'}},
+      };
+      const v10Catalog: Catalog = {
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        protocolVersion: '1.0',
+        components: {Text: {type: 'object'}},
+      };
+      mockActiveProtocolVersion.set('v1.0');
+      mockActiveCatalogs.set([v10Catalog]);
+      mockProtocolSupportOverride.set(null);
+      const {fixture, component} = await setup(false);
+      sendRenderA2UIMock.mockClear();
+
+      const v09Draft = [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+          },
+        },
+      ];
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(v09Draft));
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      const editor = component.monacoEditor()!;
+      expect(editor.protocolProblem()).not.toBeNull();
+      expect(sendRenderA2UIMock).not.toHaveBeenCalled();
+
+      // Upgrading renderer support resolves the same draft cleanly and dispatches once.
+      mockActiveCatalogs.set([v10Catalog, v09Catalog]);
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(editor.protocolProblem()).toBeNull();
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+      expect(sendRenderA2UIMock).toHaveBeenCalledWith(v09Draft);
+    });
+
+    it('does not arm the watchdog when hostCommunication.sendRenderA2UI returns false on editor edits', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      mockActiveProtocolVersion.set('v0.9');
+
+      const {fixture, harness} = await setup(false);
+      vi.mocked(TestBed.inject(HostCommunication).isRendererReady).mockReturnValue(true);
+      sendRenderA2UIMock.mockClear();
+      sendRenderA2UIMock.mockReturnValue(false);
+      errorLoggerMock.warn.mockClear();
+
+      await harness.setJsonText(
+        JSON.stringify([{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}]),
+      );
+      fixture.detectChanges();
+      vi.advanceTimersByTime(300);
+
+      expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(16000);
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
+    });
+
+    it('clears an already-armed watchdog when a synchronized layout send fails with false', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      mockActiveProtocolVersion.set('v0.9');
+
+      const {fixture, harness} = await setup(false);
+      vi.mocked(TestBed.inject(HostCommunication).isRendererReady).mockReturnValue(true);
+      sendRenderA2UIMock.mockReturnValue(true);
+      errorLoggerMock.warn.mockClear();
+
+      await harness.setJsonText(
+        JSON.stringify([{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}]),
+      );
+      fixture.detectChanges();
+      vi.advanceTimersByTime(300);
+
+      sendRenderA2UIMock.mockClear();
+      sendRenderA2UIMock.mockReturnValue(false);
+      mockActiveCatalog.set({title: 'Updated Catalog'});
+      fixture.detectChanges();
+
+      expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(16000);
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
+    });
+
+    it('preserves v0.9 editorProtocolVersion and catalog on temporarily unparseable JSON, clears on v1.0-only switch, and resets when cleared to empty', async () => {
+      mockHasReceivedCatalogResponse.set(true);
+      const v09Catalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        protocolVersion: '0.9',
+        components: {Text: {type: 'object'}},
+      };
+      const v09NpmCatalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+        protocolVersion: '0.9',
+        components: {Button: {type: 'object'}},
+      };
+      const v10Catalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        protocolVersion: '1.0',
+        components: {Text: {type: 'object'}},
+      };
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [v10Catalog],
+          'v0.9': [v09Catalog, v09NpmCatalog],
+        },
+        announcedCatalogCount: 3,
+      });
+
+      const {fixture, harness, component} = await setup(false);
+      const validV09 = JSON.stringify([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+          },
+        },
+      ]);
+      await harness.setJsonText(validV09);
+      fixture.detectChanges();
+
+      const editor = component.monacoEditor()!;
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(editor.protocolCatalog()).toEqual(v09NpmCatalog);
+
+      // (a) Broken JSON mid-edit keeps v0.9 and the targeted v0.9 catalog
+      await harness.setJsonText('[{"version": "v0.9", "createSurface": {');
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(editor.protocolCatalog()).toEqual(v09NpmCatalog);
+
+      // Even when "version" itself is temporarily broken, previous.version + matchingPrevCatalog hold
+      await harness.setJsonText('[{"vers');
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(editor.protocolCatalog()).toEqual(v09NpmCatalog);
+
+      // (b) Switching to a v1.0-only renderer clears the stale v0.9 version
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0'],
+        catalogsByVersion: {'v1.0': [v10Catalog]},
+        announcedCatalogCount: 1,
+      });
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBeNull();
+      expect(editor.protocolCatalog()).toBeNull();
+
+      // Restore dual-version and valid v0.9, break JSON again, then (c) clear to empty
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [v10Catalog],
+          'v0.9': [v09Catalog, v09NpmCatalog],
+        },
+        announcedCatalogCount: 3,
+      });
+      await harness.setJsonText(validV09);
+      fixture.detectChanges();
+      await harness.setJsonText('[{"version": "v0.9",');
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBe('v0.9');
+
+      await harness.setJsonText('   ');
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBe('v1.0');
+      expect(editor.protocolCatalog()).toEqual(v10Catalog);
+    });
+
+    it('switches to v0.9 primary catalog without v1.0 catalog bleed when broken v0.9 JSON is pasted over v1.0', async () => {
+      mockHasReceivedCatalogResponse.set(true);
+      const v09Catalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        protocolVersion: '0.9',
+        components: {Text: {type: 'object'}},
+      };
+      const v10Catalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        protocolVersion: '1.0',
+        components: {Text: {type: 'object'}},
+      };
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [v10Catalog],
+          'v0.9': [v09Catalog],
+        },
+        announcedCatalogCount: 2,
+      });
+
+      const {fixture, harness, component} = await setup(false);
+      await harness.setJsonText(
+        JSON.stringify([
+          {
+            version: '1.0',
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+            },
+          },
+        ]),
+      );
+      fixture.detectChanges();
+
+      const editor = component.monacoEditor()!;
+      expect(editor.protocolVersion()).toBe('v1.0');
+      expect(editor.protocolCatalog()).toEqual(v10Catalog);
+
+      await harness.setJsonText('[{"version": "v0.9", "createSurface": {');
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(editor.protocolCatalog()).toEqual(v09Catalog);
     });
   });
 });

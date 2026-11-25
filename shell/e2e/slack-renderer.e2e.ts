@@ -272,7 +272,9 @@ test.describe('Slack examples in the JSON editor', () => {
     await expect(page.locator('.errors-container .level-badge.error')).toHaveCount(0);
     await expectOnlyDevModeWarnings(page);
     await expect(page.locator('.errors-container')).not.toContainText('PROTOCOL_VERSION_MISMATCH');
-    await expect(page.locator('.errors-container')).not.toContainText('Payload protocol version');
+    await expect(page.locator('.errors-container')).not.toContainText(
+      'This renderer does not support A2UI',
+    );
 
     expect(unexpectedErrors).toEqual([]);
   });

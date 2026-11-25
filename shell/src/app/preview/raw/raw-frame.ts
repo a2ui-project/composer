@@ -16,7 +16,9 @@
 
 import {
   Component,
+  computed,
   inject,
+  linkedSignal,
   signal,
   DestroyRef,
   effect,
@@ -33,13 +35,24 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState} from '../../chat/chat-state/chat-state';
-import {isErrorOrWarningMarker, MonacoEditor} from '../../shared/monaco-editor/monaco-editor';
+import {
+  isErrorOrWarningMarker,
+  MonacoEditor,
+  type ProtocolProblem,
+} from '../../shared/monaco-editor/monaco-editor';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
-import {tryParseJsonArray} from '../../utils/json';
+import {type JsonParseResult, tryParseJsonArray} from '../../utils/json';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
-import {validatePayloadProtocolVersion} from '../protocol-version-mismatch';
+import {
+  gatePayloadDispatch,
+  type PayloadProtocolResolution,
+  resolvePayloadProtocol,
+  resolveStickyEditorProtocol,
+  type StickyEditorProtocol,
+  type StickyEditorProtocolInput,
+} from '../payload-protocol-resolution';
 import type {editor} from 'monaco-editor';
 
 export const IFRAME_UNRESPONSIVE_ERROR_PREFIX = 'IFRAME_UNRESPONSIVE_ERROR: ';
@@ -62,6 +75,82 @@ export class RawFrame {
   protected readonly layoutJson: WritableSignal<string>;
   /** Tracks if the current layout string fails to parse. */
   protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
+
+  private readonly parsedLayout = computed<{
+    isEmpty: boolean;
+    parseResult: JsonParseResult<unknown[]> | null;
+  }>(() => {
+    const value = this.layoutJson();
+    if (!value.trim()) {
+      return {isEmpty: true, parseResult: null};
+    }
+    return {isEmpty: false, parseResult: tryParseJsonArray(value)};
+  });
+
+  private readonly parsedDraft = computed<unknown[] | null>(() => {
+    const parsed = this.parsedLayout();
+    if (parsed.isEmpty) {
+      return [];
+    }
+    return parsed.parseResult?.success ? parsed.parseResult.data : null;
+  });
+
+  private hasValidJsonArraySyntax(): boolean {
+    return this.parsedLayout().parseResult?.success === true;
+  }
+
+  private readonly resolvedDraft = computed<{
+    payload: unknown[];
+    resolution: PayloadProtocolResolution;
+  } | null>(() => {
+    if (!this.catalogManagement.hasReceivedCatalogResponse()) {
+      return null;
+    }
+    const payload = this.parsedDraft();
+    if (payload === null) {
+      return null;
+    }
+    return {
+      payload,
+      resolution: resolvePayloadProtocol(payload, this.catalogManagement.protocolSupport()),
+    };
+  });
+
+  protected readonly payloadResolution = computed<PayloadProtocolResolution | null>(
+    () => this.resolvedDraft()?.resolution ?? null,
+  );
+
+  private readonly editorResolutionSource = computed<StickyEditorProtocolInput>(() => ({
+    hasCatalog: this.catalogManagement.hasReceivedCatalogResponse(),
+    support: this.catalogManagement.protocolSupport(),
+    resolution: this.payloadResolution(),
+    rawText: this.layoutJson(),
+    activeCatalog: this.catalogManagement.activeCatalog(),
+    activeCatalogs: this.catalogManagement.activeCatalogs(),
+  }));
+
+  private readonly lastSupportedEditorResolution = linkedSignal<
+    StickyEditorProtocolInput,
+    StickyEditorProtocol | null
+  >({
+    source: this.editorResolutionSource,
+    computation: (source, previous) => resolveStickyEditorProtocol(source, previous?.value ?? null),
+  });
+
+  protected readonly editorProtocolVersion = computed(
+    () => this.lastSupportedEditorResolution()?.version ?? null,
+  );
+
+  protected readonly editorProtocolCatalog = computed(
+    () => this.lastSupportedEditorResolution()?.catalog ?? null,
+  );
+
+  protected readonly editorProtocolProblem = computed<ProtocolProblem | null>(() => {
+    const resolution = this.payloadResolution();
+    return resolution?.status === 'unsupported'
+      ? {message: resolution.message, anchorText: resolution.anchor}
+      : null;
+  });
 
   readonly TEST_ONLY = {
     layoutJson: () => this.layoutJson,
@@ -155,7 +244,7 @@ export class RawFrame {
     effect(() => {
       const catalog = this.catalogManagement.activeCatalog();
       const hasCatalogResponse = this.catalogManagement.hasReceivedCatalogResponse();
-      this.catalogManagement.activeProtocolVersion();
+      this.catalogManagement.protocolSupport();
       if (catalog || hasCatalogResponse) {
         untracked(() => {
           this.renderSynchronizedCurrentLayout(false);
@@ -211,10 +300,8 @@ export class RawFrame {
                 this.cancelInvalidJsonTimer();
                 this.isJsonInvalid.set(false);
                 this.snackBar.dismiss();
-                if (this.sendValidatedRenderA2UI(payload)) {
+                if (this.sendValidatedRenderA2UI()) {
                   this.startWatchdog();
-                } else {
-                  this.clearWatchdog();
                 }
               } else {
                 this.clearWatchdog();
@@ -271,10 +358,8 @@ export class RawFrame {
           this.clearWatchdog();
           return;
         }
-        if (this.sendValidatedRenderA2UI(payload)) {
+        if (this.sendValidatedRenderA2UI()) {
           this.startWatchdog();
-        } else {
-          this.clearWatchdog();
         }
       });
   }
@@ -293,7 +378,7 @@ export class RawFrame {
   }
 
   protected onMarkersChange(markers: editor.IMarker[]): void {
-    const isSyntaxValid = tryParseJsonArray(this.layoutJson()).success;
+    const isSyntaxValid = this.hasValidJsonArraySyntax();
     const hasErrors = isSyntaxValid && markers.some(isErrorOrWarningMarker);
     if (hasErrors) {
       this.clearWatchdog();
@@ -373,7 +458,7 @@ export class RawFrame {
   }
 
   private notifySchemaErrors(markers: editor.IMarker[]): void {
-    if (this.isJsonInvalid() || !tryParseJsonArray(this.layoutJson()).success) {
+    if (this.isJsonInvalid() || !this.hasValidJsonArraySyntax()) {
       this.lastErrorSignature = null;
       return;
     }
@@ -421,7 +506,7 @@ export class RawFrame {
     try {
       const payload = this.parseLayoutString(currentLayout);
       if (payload !== null) {
-        this.sendValidatedRenderA2UI(payload);
+        this.sendValidatedRenderA2UI();
       }
     } catch (err) {
       if (!logErrors) {
@@ -447,11 +532,16 @@ export class RawFrame {
    * @return An array of parsed JSON objects (or empty array if input is empty).
    */
   private parseLayoutString(value: string): unknown[] | null {
-    const trimmed = value.trim();
-    if (!trimmed) {
+    const state =
+      value === this.layoutJson()
+        ? this.parsedLayout()
+        : !value.trim()
+          ? {isEmpty: true, parseResult: null}
+          : {isEmpty: false, parseResult: tryParseJsonArray(value)};
+    if (state.isEmpty) {
       return [];
     }
-    const parsed = tryParseJsonArray(trimmed);
+    const parsed = state.parseResult!;
     if (parsed.success) {
       return parsed.data;
     }
@@ -512,28 +602,38 @@ export class RawFrame {
     return undefined;
   }
 
-  private sendValidatedRenderA2UI(payload: unknown[]): boolean {
-    if (!this.catalogManagement.hasReceivedCatalogResponse()) {
+  private sendValidatedRenderA2UI(): boolean {
+    const hasReceived = this.catalogManagement.hasReceivedCatalogResponse();
+    if (!hasReceived) {
       console.debug(
         '[RawFrame] Deferring RENDER_A2UI dispatch until catalog discovery handshake settles.',
       );
-      return false;
-    }
-
-    const activeVersion = this.catalogManagement.activeProtocolVersion();
-
-    const validation = validatePayloadProtocolVersion(payload, activeVersion);
-    if (!validation.valid) {
       this.clearWatchdog();
-      this.errorLogger.error({
-        sourceTag: '[RawFrame]',
-        code: 'PROTOCOL_VERSION_MISMATCH',
-        message: validation.message,
-      });
       return false;
     }
 
-    this.hostCommunication.sendRenderA2UI(payload);
+    const resolved = this.resolvedDraft();
+    if (!resolved) {
+      this.clearWatchdog();
+      return false;
+    }
+
+    const resolution = gatePayloadDispatch(
+      {resolution: resolved.resolution},
+      hasReceived,
+      this.catalogManagement.protocolSupport(),
+      this.errorLogger,
+      '[RawFrame]',
+    );
+    if (!resolution) {
+      this.clearWatchdog();
+      return false;
+    }
+
+    if (this.hostCommunication.sendRenderA2UI(resolved.payload) === false) {
+      this.clearWatchdog();
+      return false;
+    }
     return true;
   }
 }

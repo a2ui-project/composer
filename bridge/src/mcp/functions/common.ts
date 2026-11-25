@@ -26,7 +26,12 @@
  * resolved.
  */
 
-import {A2uiExpressionError, type createFunctionImplementation} from '@a2ui/web_core/v0_9';
+import {
+  A2uiExpressionError,
+  DynamicStringSchema,
+  DynamicValueSchema,
+  type createFunctionImplementation,
+} from '@a2ui/web_core/v0_9';
 import {RE2JS} from 're2js';
 import {z} from 'zod/v3';
 
@@ -146,4 +151,62 @@ export function pattern(source: string, fn: string): ReturnType<typeof RE2JS.com
 export function overValue<T>(value: unknown, fn: (item: string) => T): T | T[] {
   const asText = (item: unknown) => String(item ?? '');
   return Array.isArray(value) ? value.map(item => fn(asText(item))) : fn(asText(value));
+}
+
+/**
+ * Wraps a strict v0.9 web_core Zod schema (`DynamicStringSchema` / `DynamicValueSchema`)
+ * with `z.any().transform(...)` carrying a `REF:#/$defs/...` description so JSON schema
+ * serialization emits `#/$defs/...` refs without recursive-schema warnings while runtime
+ * `parse()` preserves full web_core validation strictness.
+ */
+function wrapRefSchema(
+  target: {
+    safeParse(val: unknown):
+      | {success: true; data: unknown}
+      | {
+          success: false;
+          error: {
+            issues: ReadonlyArray<{message: string; path: ReadonlyArray<string | number | symbol>}>;
+          };
+        };
+  },
+  ref: string,
+  description: string,
+) {
+  return z
+    .any()
+    .transform((val, ctx) => {
+      const result = target.safeParse(val);
+      if (!result.success) {
+        for (const issue of result.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: issue.message,
+            path: issue.path.filter(
+              (segment): segment is string | number =>
+                typeof segment === 'string' || typeof segment === 'number',
+            ),
+          });
+        }
+        return z.NEVER;
+      }
+      return result.data;
+    })
+    .describe(`${ref}|${description}`);
+}
+
+/**
+ * Validates strictly as v0.9 `DynamicStringSchema` at runtime while serializing to
+ * `REF:#/$defs/DynamicString` without recursive schema warnings.
+ */
+export function dynamicStringParam(description: string) {
+  return wrapRefSchema(DynamicStringSchema, 'REF:#/$defs/DynamicString', description);
+}
+
+/**
+ * Validates strictly as v0.9 `DynamicValueSchema` at runtime while serializing to
+ * `REF:#/$defs/DynamicValue` without recursive schema warnings.
+ */
+export function dynamicValueParam(description: string) {
+  return wrapRefSchema(DynamicValueSchema, 'REF:#/$defs/DynamicValue', description);
 }

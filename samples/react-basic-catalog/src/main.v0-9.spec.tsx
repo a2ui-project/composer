@@ -1,0 +1,509 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {act} from 'react';
+import {createRoot, Root} from 'react-dom/client';
+import {App} from './App';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {useA2uiSandbox} from 'a2ui-bridge/react';
+import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
+import {basicCatalog} from '@a2ui/web_core/v0_9/basic_catalog';
+import {
+  COMPOSER_V09_BASIC_CATALOG_ID,
+  NPM_V09_BASIC_CATALOG_ID,
+} from '../../shared/v0-9/basic-catalog-id.js';
+
+describe('A2ui React Sandbox Integration Spec Tests (v0.9)', () => {
+  let container: HTMLDivElement | null = null;
+  let root: Root | null = null;
+  let originalParent: Window;
+
+  beforeEach(() => {
+    document.adoptedStyleSheets = document.adoptedStyleSheets || [];
+    originalParent = window.parent;
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: {
+        postMessage: vi.fn(),
+      },
+    });
+    container = document.createElement('div');
+    container.id = 'app-root';
+    document.body.appendChild(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root?.unmount();
+    });
+    container?.remove();
+    container = null;
+    root = null;
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: originalParent,
+    });
+    vi.restoreAllMocks();
+  });
+
+  it('attaches renderer and dispatches RENDERER_READY handshake upon mounting', async () => {
+    const postSpy = vi.spyOn(window.parent, 'postMessage');
+
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    // Verify that the linear ready handshake was sent instantly upon attachRenderer() call
+    expect(postSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+      }),
+      window.location.origin,
+    );
+  });
+
+  it('renders loading placeholder initially before blueprints arrive', async () => {
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    expect(container?.innerHTML).toContain('Waiting for RENDER_A2UI payloads...');
+  });
+
+  it('processes RENDER_A2UI layout array and recursive tree loads successfully', async () => {
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    // Simulate parent host returning layout blueprint
+    const payload = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'surf-1',
+          catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'surf-1',
+          components: [
+            {
+              id: 'root',
+              component: 'Column',
+              children: ['text-1', 'button-1'],
+            },
+            {
+              id: 'text-1',
+              component: 'Text',
+              text: '**Welcome React User**',
+            },
+            {
+              id: 'button-1',
+              component: 'Button',
+              child: 'button-text',
+              action: {
+                event: {
+                  name: 'TICKET_SUBMIT',
+                  context: {},
+                },
+              },
+            },
+            {
+              id: 'button-text',
+              component: 'Text',
+              text: 'Submit Ticket',
+            },
+          ],
+        },
+      },
+    ];
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload,
+          },
+        }),
+      );
+    });
+
+    // Wait for dynamic child widget layout element to paint and adopt stylesheets
+    await vi.waitFor(() => {
+      expect(container?.querySelector('strong')?.textContent).toBe('Welcome React User');
+      expect(container?.innerHTML).toContain('Submit Ticket');
+      expect(container?.querySelector('a2ui-basic-button')).not.toBeNull();
+      expect(container?.querySelector('button')).not.toBeNull();
+      expect(document.adoptedStyleSheets.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('renders a blank canvas when surface has no root component and renders once root is added', async () => {
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    // Step 1: Send createSurface without any root component (e.g., New Session)
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [
+              {
+                version: 'v0.9',
+                createSurface: {
+                  surfaceId: 'blank-surf',
+                  catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+                },
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(container?.innerHTML).not.toContain('Waiting for RENDER_A2UI payloads...');
+    expect(container?.innerHTML).not.toContain('[Loading root...]');
+
+    // Step 2: Stream in the root component on the existing surface
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [
+              {
+                version: 'v0.9',
+                updateComponents: {
+                  surfaceId: 'blank-surf',
+                  components: [
+                    {
+                      id: 'root',
+                      component: 'Text',
+                      text: 'Root Arrived',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    expect(container?.innerHTML).toContain('Root Arrived');
+  });
+
+  it('pipes user custom elements clicks telemetry actions upward to parent frame', async () => {
+    const postSpy = vi.spyOn(window.parent, 'postMessage');
+
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    const payload = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'surf-1',
+          catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'surf-1',
+          components: [
+            {
+              id: 'root',
+              component: 'Button',
+              child: 'buttonChild',
+              action: {
+                event: {
+                  name: 'PROXIED_CLICK',
+                  context: {},
+                },
+              },
+            },
+            {
+              id: 'buttonChild',
+              component: 'Text',
+              text: 'Click Proxy',
+            },
+          ],
+        },
+      },
+    ];
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload,
+          },
+        }),
+      );
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    const btn = container?.querySelector('button') as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+
+    // Trigger click inside JSX element dynamically
+    await act(async () => {
+      btn.click();
+    });
+
+    // Assert that dynamic SEND_TO_SERVER custom envelope message is routed back to parent host!
+    expect(postSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: expect.objectContaining({
+          version: 'v0.9',
+          action: expect.objectContaining({
+            name: 'PROXIED_CLICK',
+            sourceComponentId: 'root',
+          }),
+        }),
+      }),
+      window.location.origin,
+    );
+  });
+
+  it('announces both v0.9 basic catalog IDs in GET_CATALOG alongside v1.0', async () => {
+    const postSpy = vi.spyOn(window.parent, 'postMessage');
+
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.GET_CATALOG,
+          },
+        }),
+      );
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    const catalogCall = postSpy.mock.calls.find(
+      call => call[0]?.type === PreviewBridgeMessageType.A2UI_CATALOG,
+    );
+    const catalogs = (catalogCall?.[0]?.payload?.catalogs ?? []) as Array<{
+      catalogId?: string;
+      protocolVersion?: string;
+    }>;
+    const v09Ids = catalogs.filter(c => c.protocolVersion === '0.9').map(c => c.catalogId);
+    expect(v09Ids).toEqual([COMPOSER_V09_BASIC_CATALOG_ID, NPM_V09_BASIC_CATALOG_ID]);
+  });
+
+  it('renders a v0.9 payload referencing the published NPM basic catalog ID', async () => {
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    const payload = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'npm-v09-surf',
+          catalogId: NPM_V09_BASIC_CATALOG_ID,
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'npm-v09-surf',
+          components: [{id: 'root', component: 'Text', text: 'NPM v0.9 React'}],
+        },
+      },
+    ];
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {type: PreviewBridgeMessageType.RENDER_A2UI, payload},
+        }),
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(container?.textContent).toContain('NPM v0.9 React');
+      expect(container?.querySelector('.error-overlay')).toBeNull();
+    });
+  });
+
+  it('bypasses network fetch and immediately returns preloaded in-memory catalogJson option when provided', async () => {
+    const postSpy = vi.spyOn(window.parent, 'postMessage');
+    const fetchSpy = vi.spyOn(window, 'fetch');
+    const mockPreloadedCatalog = {
+      components: {
+        'preloaded-comp': {type: 'Text'},
+      },
+    };
+
+    // Helper app testing target preloaded hook parameters
+    function InMemoryPreloadedApp() {
+      const {surface} = useA2uiSandbox([basicCatalog as unknown as Catalog<ComponentApi>], {
+        catalogJson: mockPreloadedCatalog,
+      });
+      return <main className="sandbox-shell">{surface ? 'Ready' : 'Waiting...'}</main>;
+    }
+
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<InMemoryPreloadedApp />);
+      }
+    });
+
+    // Simulate GET_CATALOG request payload
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.GET_CATALOG,
+          },
+        }),
+      );
+    });
+
+    // Wait for the async handleGetCatalog to settle
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    // Verify fetch was NOT called
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // Verify bridge posted back A2UI_CATALOG with our preloaded in-memory catalog
+    expect(postSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: expect.objectContaining(mockPreloadedCatalog),
+      }),
+      window.location.origin,
+    );
+  });
+
+  it('renders error overlay with error-overlay class on debounced error', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    const invalidPayload = [
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'surf-err',
+          components: [
+            {
+              id: 'err-comp',
+              component: 'NonExistentComponentType',
+            },
+          ],
+        },
+      },
+    ];
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: invalidPayload,
+          },
+        }),
+      );
+    });
+
+    // Advance past the 350ms debounce window
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 400));
+    });
+
+    const overlay = container?.querySelector('.error-overlay') as HTMLElement;
+    expect(overlay).not.toBeNull();
+    expect(overlay.textContent).toContain('JSON Preview Error');
+    expect(overlay.classList.contains('error-overlay')).toBe(true);
+
+    const shell = container?.querySelector('.sandbox-shell') as HTMLElement;
+    // The host sizes the preview iframe to the height this guest reports, so
+    // viewport-coupled sizing on the surface host feeds the host's last
+    // decision back into the next measurement (SURFACE_RESIZE feedback loop).
+    expect(shell.style.minHeight).toBe('');
+    expect(shell.style.height).toBe('');
+  });
+});

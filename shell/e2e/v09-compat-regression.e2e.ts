@@ -442,10 +442,10 @@ test.describe('v0.9 Compatibility Regression Suite', () => {
     );
   });
 
-  test('switching between live v1.0 sample renderer and hermetic v0.9 renderer auto-swaps starter draft when unedited, preserves user-edited v0.9 draft, flags PROTOCOL_VERSION_MISMATCH on live v1.0, and recovers cleanly', async ({
+  test('switching between live dual-version Angular sample renderer and hermetic v0.9 renderer auto-swaps starter draft when unedited and renders user-edited v0.9 draft cleanly on both', async ({
     page,
   }) => {
-    // 1. Navigate to live v1.0 sample renderer on /workspace
+    // 1. Navigate to live Angular sample renderer on /workspace (defaults to v1.0)
     await page.goto(`/?renderer=${encodeURIComponent(RENDERER_URLS.angular)}`);
     await waitForMonacoEditor(page);
 
@@ -467,46 +467,24 @@ test.describe('v0.9 Compatibility Regression Suite', () => {
     const editedDraftCheck = await getMonacoContent(page);
     expect(editedDraftCheck).toContain('User Customised Car Booking');
 
-    // 4. Switch to live v1.0 sample renderer -> user-edited draft is preserved, but PROTOCOL_VERSION_MISMATCH is logged
+    // 4. Switch to Angular Basic -> user-edited v0.9 draft is preserved and renders live without PROTOCOL_VERSION_MISMATCH
     await switchRenderer(page, 'Angular Basic');
 
-    // User draft is preserved (not overwritten by v1.0 starter)
     const preservedDraft = await getMonacoContent(page);
     expect(preservedDraft).toContain('User Customised Car Booking');
     expect(preservedDraft).toContain('"version": "v0.9"');
 
-    // Immediate PROTOCOL_VERSION_MISMATCH error is logged without waiting for 15s watchdog
-    await expect
-      .poll(async () => {
-        return page.evaluate(() => {
-          const ng = (window as unknown as {ng?: {getComponent(el: Element): unknown}}).ng;
-          const shell = document.querySelector('a2ui-composer-shell');
-          const comp =
-            ng && shell
-              ? (ng.getComponent(shell) as {
-                  errorLogger?: {
-                    getHistory(): Array<{code?: string; message?: string; level?: string}>;
-                  };
-                })
-              : null;
-          const history = comp?.errorLogger?.getHistory() ?? [];
-          return history.some(
-            item =>
-              item.code === 'PROTOCOL_VERSION_MISMATCH' ||
-              item.message?.includes('PROTOCOL_VERSION_MISMATCH') ||
-              item.message?.includes('Protocol version mismatch'),
-          );
-        });
-      })
-      .toBe(true);
+    const angularIframe = previewFrame(page);
+    await expect(angularIframe.locator('a2ui-v09-text').first()).toContainText(
+      'User Customised Car Booking',
+    );
 
-    // 5. Clean recovery: switch back to v0.9 renderer
+    // 5. Switch back to Mock V09 -> draft stays preserved and renders without any mismatch
     await switchRenderer(page, 'Mock V09');
 
     const recoveredDraft = await getMonacoContent(page);
     expect(recoveredDraft).toContain('User Customised Car Booking');
 
-    // Verify v0.9 renderer receives the customised payload and no new PROTOCOL_VERSION_MISMATCH is logged
     const iframe = previewFrame(page);
     await expect(iframe.locator('body')).toBeVisible();
 
@@ -542,6 +520,6 @@ test.describe('v0.9 Compatibility Regression Suite', () => {
         item.message?.includes('PROTOCOL_VERSION_MISMATCH') ||
         item.message?.includes('Protocol version mismatch'),
     ).length;
-    expect(mismatchCount).toBe(1);
+    expect(mismatchCount).toBe(0);
   });
 });

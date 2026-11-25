@@ -16,21 +16,17 @@
 
 import '../../shared/basic-catalog.css';
 import {bootstrapLitSandbox} from 'a2ui-bridge/lit';
-import {createMcpFunctionsCatalog} from 'a2ui-bridge';
-import {basicCatalog, injectBasicCatalogStyles} from '@a2ui/web_core/catalogs/basic/v1';
 import {renderMarkdown} from '@a2ui/markdown-it';
 import {A2uiSurface} from '@a2ui/lit';
-import {attachCatalogSchema} from '../../shared/attach-catalog-schema.js';
 import {COMPONENT_USAGES} from '../../shared/usages.js';
 import {DEMOS} from '../../shared/demos';
+import {v10Catalogs} from './catalogs/v1-0-catalogs.js';
+import {v09Catalogs} from './catalogs/v0-9-catalogs.js';
 
 // Ensure the canonical @a2ui/lit surface component is registered
 void A2uiSurface;
 
-injectBasicCatalogStyles();
-attachCatalogSchema(basicCatalog, {title: 'Lit Basic Catalog'});
-
-export const AppRoot = bootstrapLitSandbox([basicCatalog, createMcpFunctionsCatalog()], {
+export const AppRoot = bootstrapLitSandbox([...v10Catalogs, ...v09Catalogs], {
   elementTagName: 'app-root',
   markdownRenderer: renderMarkdown,
   getComponentUsages: async () => COMPONENT_USAGES,

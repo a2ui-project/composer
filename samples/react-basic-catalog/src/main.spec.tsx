@@ -76,7 +76,7 @@ describe('A2ui React Sandbox Integration Spec Tests (v1.0 Parity)', () => {
     );
   });
 
-  it('registers multi-catalog handshake with v1.0 basicCatalog and McpFunctionsCatalog', async () => {
+  it('registers multi-catalog handshake with v1.0 basicCatalog and McpFunctionsCatalog first, plus v0.9 catalogs', async () => {
     const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
 
     await act(async () => {
@@ -92,12 +92,14 @@ describe('A2ui React Sandbox Integration Spec Tests (v1.0 Parity)', () => {
       protocolVersion?: string;
     }>;
     expect(catalogs).toBeDefined();
-    expect(catalogs).toHaveLength(2);
-    const [basic, mcp] = catalogs;
+    expect(catalogs).toHaveLength(4);
+    const [basic, mcp, v09Composer, v09Npm] = catalogs;
     expect(basic?.id).toBe('https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json');
     expect(basic?.protocolVersion).toBe('1.0');
     expect(mcp?.id).toBe(MCP_FUNCTIONS_CATALOG_ID);
     expect(mcp?.protocolVersion).toBe('1.0');
+    expect(v09Composer?.protocolVersion).toBe('0.9');
+    expect(v09Npm?.protocolVersion).toBe('0.9');
   });
 
   it('renders loading placeholder initially before blueprints arrive', async () => {
@@ -365,11 +367,13 @@ describe('A2ui React Sandbox Integration Spec Tests (v1.0 Parity)', () => {
     expect(catalogMsg).toBeDefined();
     expect(catalogMsg?.payload?.['protocolVersion']).toBe('1.0');
     const catalogsPayload = catalogMsg?.payload?.['catalogs'] as Array<Record<string, unknown>>;
-    expect(catalogsPayload).toHaveLength(2);
+    expect(catalogsPayload).toHaveLength(4);
     expect(catalogsPayload[0]?.['catalogId']).toBe(
       'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
     );
     expect(catalogsPayload[1]?.['catalogId']).toBe(MCP_FUNCTIONS_CATALOG_ID);
+    expect(catalogsPayload[2]?.['protocolVersion']).toBe('0.9');
+    expect(catalogsPayload[3]?.['protocolVersion']).toBe('0.9');
   });
 
   it('serves the full basic-catalog demo set', async () => {

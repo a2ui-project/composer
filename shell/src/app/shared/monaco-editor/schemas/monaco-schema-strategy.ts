@@ -34,6 +34,8 @@ export interface MonacoSchemaStrategyOptions {
 export interface MonacoSchemaStrategy {
   /** Protocol version supported by this strategy. */
   readonly protocolVersion: A2uiProtocolVersion;
+  /** Whether this strategy emits structural schemas after handshake settles with no catalogs. */
+  readonly allowsEmptyCatalogSchema: boolean;
 
   /**
    * Constructs Monaco JSON diagnostic schemas for the current catalog configuration.

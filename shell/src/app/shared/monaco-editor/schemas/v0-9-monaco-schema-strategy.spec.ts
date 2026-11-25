@@ -58,6 +58,8 @@ describe('V09MonacoSchemaStrategy', () => {
     expect(items['type']).toBe('object');
     const props = items['properties'] as Record<string, Record<string, unknown>>;
 
+    expect(props['version']).toEqual({type: 'string', const: 'v0.9'});
+    expect(items['required']).toEqual(['version']);
     expect(props['createSurface']).toBeDefined();
     expect(props['createSurface']['required']).toEqual(['surfaceId', 'catalogId']);
     expect(props['deleteSurface']).toBeDefined();

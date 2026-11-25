@@ -19,6 +19,7 @@ import {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/v1-0/common-types-schema';
 import {catalogSupportsMcp, McpServerConfig} from '../../mcp/mcp-client-manager.service';
 import {
+  buildPromptTrailingSuffix,
   PromptProtocolStrategy,
   PromptStrategyOptions,
   stripReturnTypeDeep,
@@ -52,6 +53,8 @@ const MINIFIED_COMMON_TYPES_SCHEMA = JSON.stringify(stripReturnTypeDeep(COMMON_T
 })
 export class V10PromptStrategy implements PromptProtocolStrategy {
   readonly protocolVersion = 'v1.0' as const;
+  readonly rendererSelectedInstruction =
+    'The renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a single complete createSurface message with inline components and dataModel.';
 
   /**
    * Constructs a system prompt enforcing A2UI v1.0 JSONL message formatting,
@@ -86,9 +89,11 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
       ? `\n\n## Custom User Instructions\n\n${customInstructionsText}`
       : '';
 
+    const trailingSuffix = buildPromptTrailingSuffix(this, options);
+
+    let promptBody: string;
     if (catalogs.length === 0) {
-      return (
-        `
+      promptBody = `
   # A2UI Generation Expert
 
   ## Role
@@ -96,26 +101,23 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
   requests—whether provided as text instructions, UI wireframes, screenshots,
   or mockup images—into valid A2UI 1.0 interactive user interfaces.
   ${mcpInstructions}
-      `.trimEnd() + customPromptSuffix
-      );
-    }
-
-    const serializedCatalogs =
-      catalogs.length === 1
-        ? this.serializeCatalogForPrompt(catalogs[0])
-        : JSON.stringify(catalogs.map(c => pruneCatalogForPrompt(stripReturnTypeDeep(c))));
-
-    return (
-      (
+      `;
+    } else {
+      const serializedCatalogs =
+        catalogs.length === 1
+          ? this.serializeCatalogForPrompt(catalogs[0])
+          : JSON.stringify(catalogs.map(c => pruneCatalogForPrompt(stripReturnTypeDeep(c))));
+      promptBody =
         this.generateSystemPrompt(
           serializedCatalogs,
           primaryCatalogId,
           mcpCatalogId,
           options.includeMultimodalGuidelines ?? false,
           primaryCatalog,
-        ) + mcpInstructions
-      ).trimEnd() + customPromptSuffix
-    );
+        ) + mcpInstructions;
+    }
+
+    return `${promptBody.trimEnd()}${customPromptSuffix}${trailingSuffix}`;
   }
 
   /**

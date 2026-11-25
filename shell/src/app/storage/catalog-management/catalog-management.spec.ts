@@ -1222,6 +1222,76 @@ describe('CatalogManagement', () => {
       warnSpy.mockRestore();
     });
 
+    it('exposes dual-version protocolSupport and announcedCatalogs while scoping activeCatalogs and collision checks to defaultVersion', async () => {
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
+      const v1Basic = {
+        $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        protocolVersion: '1.0',
+        components: {
+          Text: {type: 'object', description: 'v1.0 Text'},
+        },
+      };
+      const mcpV1 = {
+        $id: 'https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json',
+        catalogId: 'https://a2ui.org/composer/v1_0/catalogs/mcp-functions/catalog.json',
+        protocolVersion: '1.0',
+        functions: {
+          callMcpTool: {type: 'object'},
+        },
+      };
+      const v09Composer = {
+        $id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        protocolVersion: '0.9',
+        components: {
+          Text: {type: 'object', description: 'v0.9 Composer Text'},
+          LegacyCard: {type: 'object', description: 'v0.9 only component'},
+        },
+      };
+      const v09Npm = {
+        $id: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+        protocolVersion: '0.9',
+        components: {
+          Text: {type: 'object', description: 'v0.9 npm Text'},
+          LegacyCard: {type: 'object', description: 'v0.9 only component'},
+        },
+      };
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {
+          catalog: v1Basic,
+          catalogs: [v1Basic, mcpV1, v09Composer, v09Npm],
+        },
+        timestamp: 40105,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.activeCatalogs()).toEqual([v1Basic, mcpV1]);
+      expect(service.announcedCatalogs()).toEqual([v1Basic, mcpV1, v09Composer, v09Npm]);
+      expect(service.activeProtocolVersion()).toBe('v1.0');
+      expect(service.protocolSupport()).toEqual({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [v1Basic, mcpV1],
+          'v0.9': [v09Composer, v09Npm],
+        },
+        announcedCatalogCount: 4,
+      });
+
+      const merged = service.mergedActiveCatalog();
+      expect(merged?.components?.['Text']?.['description']).toBe('v1.0 Text');
+      expect(merged?.components?.['LegacyCard']).toBeUndefined();
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
     it('merges mixed array and map catalog functions with primary-wins precedence and collision warnings', async () => {
       const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
       const arrayCat = {
@@ -1738,6 +1808,363 @@ describe('CatalogManagement', () => {
         warnSpy.mockRestore();
         errorSpy.mockRestore();
       });
+    });
+
+    it('cancels stale watchdog without error when a secondary frame detaches after catalog receipt', async () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const win1 = {name: 'coordinator'} as unknown as Window;
+      const win2 = {name: 'evicted-card'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      // Initial coordinator handshake completes cleanly
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5201,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalogId: 'coordinator-cat', protocolVersion: '1.0'},
+        timestamp: 5202,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+
+      // Secondary card mounts, starts handshake, then unmounts before answering
+      registered.add(win2);
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5203,
+        sourceWindow: win2,
+      });
+      TestBed.tick();
+      expect(service.isHandshakeInProgress()).toBe(true);
+
+      registered.delete(win2);
+      vi.advanceTimersByTime(5000);
+
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(service.watchdogFired()).toBe(false);
+      expect(service.catalogError()).toBeNull();
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.handshakeState()).toBe('settled');
+      errorSpy.mockRestore();
+    });
+
+    it('still fires watchdog error if an unregistered initial frame times out before any catalog receipt', () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const win1 = {name: 'coordinator'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5301,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+
+      registered.delete(win1);
+      vi.advanceTimersByTime(5000);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+        }),
+      );
+      expect(service.watchdogFired()).toBe(true);
+      expect(service.catalogError()).toBe(
+        'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+      );
+      errorSpy.mockRestore();
+    });
+
+    it('fires watchdog error when catalog is established and handshake window is still registered', async () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const win1 = {name: 'coordinator'} as unknown as Window;
+      const win2 = {name: 'stalled-card'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5401,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalogId: 'coordinator-cat', protocolVersion: '1.0'},
+        timestamp: 5402,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      registered.add(win2);
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5403,
+        sourceWindow: win2,
+      });
+      TestBed.tick();
+
+      // win2 stays registered and never answers -> must still fire watchdog timeout.
+      vi.advanceTimersByTime(5000);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+        }),
+      );
+      expect(service.watchdogFired()).toBe(true);
+      expect(service.catalogError()).toBe(
+        'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+      );
+      errorSpy.mockRestore();
+    });
+
+    it('does not swallow watchdog error when a prior handshake failed and a subsequent frame detaches', async () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const win1 = {name: 'failed-win'} as unknown as Window;
+      const win2 = {name: 'detached-followup'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      // Initial handshake fails via malformed payload -> settleHandshakeError sets hasReceivedCatalogResponse = true
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5501,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: 'malformed',
+        timestamp: 5502,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.catalogError()).toBe('Invalid or malformed A2UI_CATALOG payload received.');
+      errorSpy.mockClear();
+
+      // Subsequent frame starts a fresh handshake (clearing _catalogError) and detaches before answering
+      registered.add(win2);
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5503,
+        sourceWindow: win2,
+      });
+      TestBed.tick();
+      registered.delete(win2);
+      vi.advanceTimersByTime(5000);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+        }),
+      );
+      expect(service.watchdogFired()).toBe(true);
+      expect(service.catalogError()).toBe(
+        'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+      );
+      errorSpy.mockRestore();
+    });
+
+    it('completes a subsequent RENDERER_READY to A2UI_CATALOG handshake normally after a silent detached clear', async () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const win1 = {name: 'coordinator'} as unknown as Window;
+      const win2 = {name: 'evicted-card'} as unknown as Window;
+      const win3 = {name: 'next-card'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5601,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalogId: 'coordinator-cat', protocolVersion: '1.0'},
+        timestamp: 5602,
+        sourceWindow: win1,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      // Silent clear after win2 detaches
+      registered.add(win2);
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5603,
+        sourceWindow: win2,
+      });
+      TestBed.tick();
+      registered.delete(win2);
+      vi.advanceTimersByTime(5000);
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(errorSpy).not.toHaveBeenCalled();
+
+      // Subsequent win3 completes a full handshake normally
+      registered.add(win3);
+      hostCommunicationMock.sendMessage.mockClear();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5604,
+        sourceWindow: win3,
+      });
+      TestBed.tick();
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.GET_CATALOG},
+        win3,
+      );
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalogId: 'cat-after-clear', protocolVersion: '1.0'},
+        timestamp: 5605,
+        sourceWindow: win3,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.activeCatalog()?.catalogId).toBe('cat-after-clear');
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.watchdogFired()).toBe(false);
+      expect(service.catalogError()).toBeNull();
+      errorSpy.mockRestore();
+    });
+
+    it('logs watchdog error after A -> B -> A renderer URL switches without a fresh live handshake', async () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const winA1 = {name: 'winA1'} as unknown as Window;
+      const winA2 = {name: 'winA2'} as unknown as Window;
+      const registered = new Set<Window>([winA1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      // Establish live catalog on URL A
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5701,
+        sourceWindow: winA1,
+      });
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalogId: 'cat-a', protocolVersion: '1.0'},
+        timestamp: 5702,
+        sourceWindow: winA1,
+      });
+      TestBed.tick();
+      await flushMicrotasks();
+
+      // Switch to URL B with no handshake outcome or watchdog read, then return to URL A
+      resolvedUrlSignal.set('http://localhost/renderer-b');
+      startupResolutionMock.getResolvedRendererUrl.mockReturnValue('http://localhost/renderer-b');
+      TestBed.tick();
+
+      resolvedUrlSignal.set('http://localhost/renderer');
+      startupResolutionMock.getResolvedRendererUrl.mockReturnValue('http://localhost/renderer');
+      TestBed.tick();
+
+      // On return to A, a frame announces RENDERER_READY and is unregistered before answering
+      registered.add(winA2);
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5703,
+        sourceWindow: winA2,
+      });
+      TestBed.tick();
+      registered.delete(winA2);
+      vi.advanceTimersByTime(5000);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+        }),
+      );
+      expect(service.watchdogFired()).toBe(true);
+      expect(service.catalogError()).toBe(
+        'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+      );
+      errorSpy.mockRestore();
+    });
+
+    it('logs watchdog error when catalog is hydrated only from IndexedDB cache and frame detaches', async () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const cachedCatalog = {
+        catalogId: 'cached-cat',
+        protocolVersion: '1.0',
+        title: 'Cached Title',
+        components: {Text: {type: 'object'}},
+      };
+      indexedDbStorageMock.getCatalogRecord.mockResolvedValue({
+        rendererUrl: 'http://localhost/cached-only',
+        catalogString: JSON.stringify(cachedCatalog),
+        checksumHash: 'cachedhash123',
+        lastAccessed: 1000,
+      });
+
+      resolvedUrlSignal.set('http://localhost/cached-only');
+      startupResolutionMock.getResolvedRendererUrl.mockReturnValue('http://localhost/cached-only');
+      TestBed.tick();
+      await flushMicrotasks();
+      TestBed.tick();
+      await flushMicrotasks();
+
+      expect(service.hasReceivedCatalogResponse()).toBe(true);
+      expect(service.activeCatalog()?.catalogId).toBe('cached-cat');
+
+      const winCached = {name: 'winCached'} as unknown as Window;
+      const registered = new Set<Window>([winCached]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 5801,
+        sourceWindow: winCached,
+      });
+      TestBed.tick();
+      registered.delete(winCached);
+      vi.advanceTimersByTime(5000);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+        }),
+      );
+      expect(service.watchdogFired()).toBe(true);
+      expect(service.catalogError()).toBe(
+        'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+      );
+      errorSpy.mockRestore();
     });
   });
 

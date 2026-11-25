@@ -18,7 +18,11 @@ import {describe, it, expect, beforeEach} from 'vitest';
 import {V10DraftStrategy} from './v1-0-draft-strategy';
 import {V09DraftStrategy} from './v0-9-draft-strategy';
 import {CAR_BOOKING, CAR_BOOKING_V1_0, BASIC_CATALOG_ID_V1_0} from './initial-draft';
-import {isUntouchedStarterDraft, isUntouchedBlankDraft} from './draft-protocol-strategy';
+import {
+  detectRawJsonDraftVersion,
+  isUntouchedStarterDraft,
+  isUntouchedBlankDraft,
+} from './draft-protocol-strategy';
 
 describe('V10DraftStrategy', () => {
   let strategy: V10DraftStrategy;
@@ -85,6 +89,16 @@ describe('V10DraftStrategy', () => {
       expect(isUntouchedBlankDraft(CAR_BOOKING)).toBe(false);
       expect(isUntouchedBlankDraft(CAR_BOOKING_V1_0)).toBe(false);
       expect(isUntouchedBlankDraft('[]')).toBe(false);
+    });
+
+    it('detectRawJsonDraftVersion extracts explicit v0.9 or v1.0 from malformed JSON text', () => {
+      expect(detectRawJsonDraftVersion('[{"version": "v0.9", {broken')).toBe('v0.9');
+      expect(detectRawJsonDraftVersion('[{"version": "0.9", {broken')).toBe('v0.9');
+      expect(detectRawJsonDraftVersion('[{"version": "1.0", {broken')).toBe('v1.0');
+      expect(detectRawJsonDraftVersion('[{"version": "v0.9"}, {"version": "1.0", {broken')).toBe(
+        'v1.0',
+      );
+      expect(detectRawJsonDraftVersion('[{"text": "Version 1.0", {broken')).toBeNull();
     });
   });
 

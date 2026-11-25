@@ -33,6 +33,10 @@ import {V09GalleryStrategy} from './protocol/v0-9-gallery-strategy';
 import {V10GalleryStrategy} from './protocol/v1-0-gallery-strategy';
 import {PreviewBridgeMessageType, type ComponentUsage, ThemePreference} from 'a2ui-bridge';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
+import {
+  resolveProtocolSupport,
+  type ProtocolSupport,
+} from '../storage/catalog-management/catalog-domain';
 import {CatalogSchemaResolver, ParsedProperty} from './schema/catalog-schema-resolver';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {Catalog, CatalogComponentSchema} from '../storage/models/catalog-storage.model';
@@ -180,6 +184,31 @@ class MockCatalogManagement {
   readonly activeProtocolVersion = signal<'v0.9' | 'v1.0'>('v0.9');
   readonly hasReceivedCatalogResponse = signal<boolean>(true);
   readonly catalogError = signal<string | null>(null);
+  readonly protocolSupportOverride = signal<ProtocolSupport | null>(null);
+  readonly protocolSupport = computed<ProtocolSupport>(() => {
+    const override = this.protocolSupportOverride();
+    if (override) {
+      return override;
+    }
+    const base = resolveProtocolSupport(
+      this.hasReceivedCatalogResponse(),
+      this.activeCatalogs(),
+      this.catalogError() !== null,
+      this.activeCatalog(),
+    );
+    const forced = this.activeProtocolVersion();
+    if (forced === base.defaultVersion) {
+      return base;
+    }
+    return {
+      defaultVersion: forced,
+      versions: [forced],
+      catalogsByVersion: base.catalogsByVersion[forced]
+        ? {[forced]: base.catalogsByVersion[forced]}
+        : {},
+      announcedCatalogCount: base.announcedCatalogCount,
+    };
+  });
   readonly mergedActiveCatalog = computed<Catalog | null>(() => {
     const primary = this.activeCatalog();
     const catalogs = this.activeCatalogs();
@@ -948,8 +977,86 @@ describe('Gallery Component', () => {
     expect(errorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         code: 'PROTOCOL_VERSION_MISMATCH',
+        message:
+          'This renderer does not support A2UI v0.9. Use an A2UI v1.0 payload ("version": "1.0") or select a renderer that supports v0.9.',
       }),
     );
+  });
+
+  it('dispatches v0.9 payload on two-version support, blocks unknown catalog on multi-catalog, and allows it on single-catalog', () => {
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
+    const v09ComposerCatalog = {
+      catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      protocolVersion: '0.9',
+      components: {Text: {type: 'object'}},
+    };
+    const v09NpmCatalog = {
+      catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+      protocolVersion: '0.9',
+      components: {Text: {type: 'object'}},
+    };
+    catalogManagementMock.activeProtocolVersion.set('v0.9');
+    catalogManagementMock.protocolSupportOverride.set({
+      defaultVersion: 'v1.0',
+      versions: ['v1.0', 'v0.9'],
+      catalogsByVersion: {
+        'v1.0': [
+          {
+            catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+            protocolVersion: '1.0',
+          },
+        ],
+        'v0.9': [v09ComposerCatalog, v09NpmCatalog],
+      },
+      announcedCatalogCount: 3,
+    });
+    catalogManagementMock.activeCatalog.set(v09ComposerCatalog);
+    catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Text', text: 'Hello'}],
+    });
+    fixture.detectChanges();
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+
+    // Unknown catalog on multi-catalog support logs UNSUPPORTED_CATALOG
+    hostCommunicationMock.sendRenderA2UI.mockClear();
+    catalogServiceMock.selectedComponentProvenance.set({
+      componentKey: 'MaterialText',
+      componentSchema: {type: 'object'},
+      catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      catalogTitle: 'Material',
+      catalog: {
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+        components: {MaterialText: {type: 'object'}},
+      },
+    });
+    catalogServiceMock.selectedComponentKey.set('MaterialText');
+    fixture.detectChanges();
+
+    expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTag: '[Gallery]',
+        code: 'UNSUPPORTED_CATALOG',
+      }),
+    );
+
+    // Single-catalog renderer accepts the foreign catalogId
+    errorSpy.mockClear();
+    catalogManagementMock.protocolSupportOverride.set({
+      defaultVersion: 'v0.9',
+      versions: ['v0.9'],
+      catalogsByVersion: {
+        'v0.9': [{catalogId: 'https://a2ui.org/slack/catalog.json', protocolVersion: '0.9'}],
+      },
+      announcedCatalogCount: 1,
+    });
+    fixture.detectChanges();
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('uses v1.0 protocol strategy and emits single createSurface message when activeProtocolVersion is v1.0', () => {

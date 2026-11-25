@@ -15,70 +15,31 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {validatePayloadProtocolVersion} from './protocol-version-mismatch';
+import {detectPayloadVersion, inspectPayloadVersion} from './protocol-version-mismatch';
 
-describe('validatePayloadProtocolVersion', () => {
-  it('returns valid for null, undefined, or empty payload', () => {
-    expect(validatePayloadProtocolVersion(null, 'v0.9')).toEqual({valid: true});
-    expect(validatePayloadProtocolVersion(undefined, 'v1.0')).toEqual({valid: true});
-    expect(validatePayloadProtocolVersion([], 'v1.0')).toEqual({valid: true});
+describe('detectPayloadVersion', () => {
+  it('returns null for null, undefined, or empty payload', () => {
+    expect(detectPayloadVersion(null)).toBeNull();
+    expect(detectPayloadVersion(undefined)).toBeNull();
+    expect(detectPayloadVersion([])).toBeNull();
   });
 
-  it('validates matching explicit versions', () => {
-    const v09Payload = [{version: 'v0.9', createSurface: {surfaceId: 's1'}}];
-    expect(validatePayloadProtocolVersion(v09Payload, 'v0.9')).toEqual({valid: true});
-
-    const v10Payload = [{version: 'v1.0', createSurface: {surfaceId: 's1'}}];
-    expect(validatePayloadProtocolVersion(v10Payload, 'v1.0')).toEqual({valid: true});
-
-    const v10Numeric = [{version: '1.0', createSurface: {surfaceId: 's1'}}];
-    expect(validatePayloadProtocolVersion(v10Numeric, 'v1.0')).toEqual({valid: true});
+  it('detects explicit versions v0.9, v1.0, and 1.0', () => {
+    expect(detectPayloadVersion([{version: 'v0.9', createSurface: {surfaceId: 's1'}}])).toBe(
+      'v0.9',
+    );
+    expect(detectPayloadVersion([{version: 'v1.0', createSurface: {surfaceId: 's1'}}])).toBe(
+      'v1.0',
+    );
+    expect(detectPayloadVersion([{version: '1.0', createSurface: {surfaceId: 's1'}}])).toBe('v1.0');
   });
 
-  it('permits unversioned minimal v0.9 test fixtures on v0.9 without false positives', () => {
-    const minimalFixture = [{createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
-    expect(validatePayloadProtocolVersion(minimalFixture, 'v0.9')).toEqual({valid: true});
+  it('returns null for unversioned minimal fixtures without structural markers', () => {
+    expect(detectPayloadVersion([{createSurface: {surfaceId: 's1', catalogId: 'c1'}}])).toBeNull();
   });
 
-  describe('mismatch detection with explicit version', () => {
-    it('detects v0.9 explicit payload when v1.0 is expected', () => {
-      const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1'}}];
-      const result = validatePayloadProtocolVersion(payload, 'v1.0');
-      expect(result.valid).toBe(false);
-      if (!result.valid) {
-        expect(result.code).toBe('PROTOCOL_VERSION_MISMATCH');
-        expect(result.detectedVersion).toBe('v0.9');
-        expect(result.expectedVersion).toBe('v1.0');
-        expect(result.message).toContain('v0.9');
-        expect(result.message).toContain('v1.0');
-      }
-    });
-
-    it('detects v1.0 explicit payload when v0.9 is expected', () => {
-      const payload = [{version: 'v1.0', createSurface: {surfaceId: 's1'}}];
-      const result = validatePayloadProtocolVersion(payload, 'v0.9');
-      expect(result.valid).toBe(false);
-      if (!result.valid) {
-        expect(result.code).toBe('PROTOCOL_VERSION_MISMATCH');
-        expect(result.detectedVersion).toBe('v1.0');
-        expect(result.expectedVersion).toBe('v0.9');
-      }
-    });
-
-    it('detects 1.0 explicit payload when v0.9 is expected', () => {
-      const payload = [{version: '1.0', createSurface: {surfaceId: 's1'}}];
-      const result = validatePayloadProtocolVersion(payload, 'v0.9');
-      expect(result.valid).toBe(false);
-      if (!result.valid) {
-        expect(result.code).toBe('PROTOCOL_VERSION_MISMATCH');
-        expect(result.detectedVersion).toBe('v1.0');
-        expect(result.expectedVersion).toBe('v0.9');
-      }
-    });
-  });
-
-  describe('mismatch detection with structural markers', () => {
-    it('detects v1.0 inline createSurface.components on v0.9 expected version', () => {
+  describe('structural marker detection', () => {
+    it('detects v1.0 inline createSurface.components', () => {
       const payload = [
         {
           createSurface: {
@@ -88,16 +49,10 @@ describe('validatePayloadProtocolVersion', () => {
           },
         },
       ];
-      const result = validatePayloadProtocolVersion(payload, 'v0.9');
-      expect(result.valid).toBe(false);
-      if (!result.valid) {
-        expect(result.code).toBe('PROTOCOL_VERSION_MISMATCH');
-        expect(result.detectedVersion).toBe('v1.0');
-        expect(result.expectedVersion).toBe('v0.9');
-      }
+      expect(detectPayloadVersion(payload)).toBe('v1.0');
     });
 
-    it('detects v1.0 inline createSurface.dataModel on v0.9 expected version', () => {
+    it('detects v1.0 inline createSurface.dataModel', () => {
       const payload = [
         {
           createSurface: {
@@ -107,33 +62,21 @@ describe('validatePayloadProtocolVersion', () => {
           },
         },
       ];
-      const result = validatePayloadProtocolVersion(payload, 'v0.9');
-      expect(result.valid).toBe(false);
-      if (!result.valid) {
-        expect(result.code).toBe('PROTOCOL_VERSION_MISMATCH');
-        expect(result.detectedVersion).toBe('v1.0');
-      }
+      expect(detectPayloadVersion(payload)).toBe('v1.0');
     });
 
-    it('detects v1.0 callRendererFunction on v0.9 expected version', () => {
-      const payload = [{callRendererFunction: {functionCallId: '1', callFunction: {call: 'test'}}}];
-      const result = validatePayloadProtocolVersion(payload, 'v0.9');
-      expect(result.valid).toBe(false);
-      if (!result.valid) {
-        expect(result.detectedVersion).toBe('v1.0');
-      }
+    it('detects v1.0 callRendererFunction and agentFunctionResponse', () => {
+      expect(
+        detectPayloadVersion([
+          {callRendererFunction: {functionCallId: '1', callFunction: {call: 'test'}}},
+        ]),
+      ).toBe('v1.0');
+      expect(
+        detectPayloadVersion([{agentFunctionResponse: {functionCallId: '1', value: 'ok'}}]),
+      ).toBe('v1.0');
     });
 
-    it('detects v1.0 agentFunctionResponse on v0.9 expected version', () => {
-      const payload = [{agentFunctionResponse: {functionCallId: '1', value: 'ok'}}];
-      const result = validatePayloadProtocolVersion(payload, 'v0.9');
-      expect(result.valid).toBe(false);
-      if (!result.valid) {
-        expect(result.detectedVersion).toBe('v1.0');
-      }
-    });
-
-    it('detects v1.0 @path / @call bindings on v0.9 expected version', () => {
+    it('detects v1.0 @path / @call bindings', () => {
       const payload = [
         {
           updateComponents: {
@@ -142,32 +85,20 @@ describe('validatePayloadProtocolVersion', () => {
           },
         },
       ];
-      const result = validatePayloadProtocolVersion(payload, 'v0.9');
-      expect(result.valid).toBe(false);
-      if (!result.valid) {
-        expect(result.detectedVersion).toBe('v1.0');
-      }
+      expect(detectPayloadVersion(payload)).toBe('v1.0');
     });
 
-    it('detects v0.9 beginRendering on v1.0 expected version', () => {
-      const payload = [{beginRendering: {surfaceId: 's1'}}];
-      const result = validatePayloadProtocolVersion(payload, 'v1.0');
-      expect(result.valid).toBe(false);
-      if (!result.valid) {
-        expect(result.detectedVersion).toBe('v0.9');
-      }
+    it('detects v0.9 beginRendering', () => {
+      expect(detectPayloadVersion([{beginRendering: {surfaceId: 's1'}}])).toBe('v0.9');
     });
 
-    it('detects v0.9 legacy theme in createSurface on v1.0 expected version', () => {
-      const payload = [{createSurface: {surfaceId: 's1', theme: 'dark'}}];
-      const result = validatePayloadProtocolVersion(payload, 'v1.0');
-      expect(result.valid).toBe(false);
-      if (!result.valid) {
-        expect(result.detectedVersion).toBe('v0.9');
-      }
+    it('detects v0.9 legacy theme in createSurface', () => {
+      expect(detectPayloadVersion([{createSurface: {surfaceId: 's1', theme: 'dark'}}])).toBe(
+        'v0.9',
+      );
     });
 
-    it('detects v0.9 { path } binding on v1.0 expected version', () => {
+    it('detects v0.9 { path } binding', () => {
       const payload = [
         {
           updateComponents: {
@@ -176,11 +107,7 @@ describe('validatePayloadProtocolVersion', () => {
           },
         },
       ];
-      const result = validatePayloadProtocolVersion(payload, 'v1.0');
-      expect(result.valid).toBe(false);
-      if (!result.valid) {
-        expect(result.detectedVersion).toBe('v0.9');
-      }
+      expect(detectPayloadVersion(payload)).toBe('v0.9');
     });
 
     it('does not treat objects with path and additional keys as v0.9 dynamic bindings', () => {
@@ -192,12 +119,11 @@ describe('validatePayloadProtocolVersion', () => {
           },
         },
       ];
-      const result = validatePayloadProtocolVersion(payload, 'v1.0');
-      expect(result.valid).toBe(true);
+      expect(detectPayloadVersion(payload)).toBeNull();
     });
 
     it('skips recursing into createSurface.dataModel and updateDataModel.value', () => {
-      const payload = [
+      const createSurfaceWithData = [
         {
           createSurface: {
             surfaceId: 's1',
@@ -207,6 +133,8 @@ describe('validatePayloadProtocolVersion', () => {
             },
           },
         },
+      ];
+      const updateDataModelOnly = [
         {
           updateDataModel: {
             surfaceId: 's1',
@@ -218,8 +146,9 @@ describe('validatePayloadProtocolVersion', () => {
           },
         },
       ];
-      const resultV1 = validatePayloadProtocolVersion(payload, 'v1.0');
-      expect(resultV1.valid).toBe(true);
+      // createSurface.dataModel itself is a v1.0 structural marker, not v0.9 from nested {path}.
+      expect(detectPayloadVersion(createSurfaceWithData)).toBe('v1.0');
+      expect(detectPayloadVersion(updateDataModelOnly)).toBeNull();
     });
 
     it('does not falsely flag standard v0.9 updateComponents with component: Text as v1.0', () => {
@@ -231,8 +160,100 @@ describe('validatePayloadProtocolVersion', () => {
           },
         },
       ];
-      const result = validatePayloadProtocolVersion(payload, 'v0.9');
-      expect(result.valid).toBe(true);
+      expect(detectPayloadVersion(payload)).toBeNull();
+    });
+
+    it('does not infer v0.9 from catalogId substrings without version or structural markers (R2)', () => {
+      expect(
+        detectPayloadVersion([
+          {
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+            },
+          },
+        ]),
+      ).toBeNull();
+      expect(
+        detectPayloadVersion([
+          {
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://example.com/v0.90/catalog.json',
+            },
+          },
+        ]),
+      ).toBeNull();
+      expect(
+        detectPayloadVersion([
+          {
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://example.com/migrated-from-v0.9/catalog.json',
+            },
+          },
+        ]),
+      ).toBeNull();
+      expect(
+        detectPayloadVersion([
+          {
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://a2ui.org/specification/v1_0/basic_catalog.json',
+            },
+          },
+        ]),
+      ).toBe('v1.0');
+    });
+  });
+
+  describe('inspectPayloadVersion', () => {
+    it('reports detected, mixed, and indeterminate payloads across all messages', () => {
+      expect(inspectPayloadVersion([{createSurface: {surfaceId: 's1', catalogId: 'c1'}}])).toEqual({
+        status: 'indeterminate',
+      });
+      expect(
+        inspectPayloadVersion([
+          {
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://example.com/migrated-from-v0.9/catalog.json',
+            },
+          },
+        ]),
+      ).toEqual({
+        status: 'indeterminate',
+      });
+      expect(
+        inspectPayloadVersion([
+          {
+            version: 'v0.9',
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+            },
+          },
+          {version: 'v1.0', updateComponents: {surfaceId: 's1', components: []}},
+        ]),
+      ).toEqual({
+        status: 'mixed',
+        anchor: 'v1.0',
+      });
+      expect(
+        inspectPayloadVersion([
+          {
+            version: 'v0.9',
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+            },
+          },
+        ]),
+      ).toEqual({
+        status: 'detected',
+        version: 'v0.9',
+        anchor: 'v0.9',
+      });
     });
   });
 });

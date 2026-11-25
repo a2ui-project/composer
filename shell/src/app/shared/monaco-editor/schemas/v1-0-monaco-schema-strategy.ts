@@ -34,6 +34,7 @@ const V1_0_COMMON_TYPES_URI = 'https://a2ui.org/specification/v1_0/common_types.
 })
 export class V10MonacoSchemaStrategy implements MonacoSchemaStrategy {
   readonly protocolVersion: A2uiProtocolVersion = 'v1.0';
+  readonly allowsEmptyCatalogSchema = true;
 
   /**
    * Recursively normalizes $ref targets, redirecting relative common types references

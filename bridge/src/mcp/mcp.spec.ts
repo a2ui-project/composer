@@ -30,6 +30,7 @@ import {
   A2UI_MIME_TYPE,
 } from '../index.js';
 import {resolveDynamicValueDeep} from './dynamic-value-strategy.js';
+import {CallMcpToolApi} from './functions/callMcpTool.js';
 import {withSettledArgs} from './functions/common.js';
 
 describe('MCP Bridge & Catalog Functions', () => {
@@ -383,6 +384,79 @@ describe('MCP Bridge & Catalog Functions', () => {
 
       await expect(callPromise).resolves.toEqual({ok: true});
       bridge.destroy();
+    });
+
+    it('serializes v0.9 createMcpCatalogFunctions catalogSchema without recursive reference warnings', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const functions = createMcpCatalogFunctions({processMessages: vi.fn()}, async () => null);
+        const catalog = new Catalog<ComponentApi>('test-mcp-v09', '0.9', [], functions);
+        const schema = catalog.catalogSchema;
+        expect(schema).toBeDefined();
+        const recursiveWarnings = warnSpy.mock.calls
+          .flat()
+          .filter(arg => typeof arg === 'string' && arg.includes('Recursive reference detected'));
+        expect(recursiveWarnings).toEqual([]);
+
+        const rawSchema = schema as {
+          functions?: {
+            callMcpTool?: {
+              properties?: {
+                args?: {
+                  properties?: {
+                    name?: {$ref?: string};
+                    arguments?: {additionalProperties?: {$ref?: string}};
+                  };
+                };
+              };
+            };
+          };
+          $defs?: Record<string, unknown>;
+        };
+        expect(rawSchema.functions?.callMcpTool?.properties?.args?.properties?.name?.$ref).toBe(
+          '#/$defs/DynamicString',
+        );
+        expect(rawSchema.$defs?.['DynamicString']).toBeDefined();
+        expect(
+          rawSchema.functions?.callMcpTool?.properties?.args?.properties?.arguments
+            ?.additionalProperties?.$ref,
+        ).toBe('#/$defs/DynamicValue');
+        expect(rawSchema.$defs?.['DynamicValue']).toBeDefined();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('preserves strict v0.9 runtime validation on CallMcpToolApi matching DynamicStringSchema and DynamicValueSchema', () => {
+      const schema = CallMcpToolApi.schema as unknown as {
+        safeParse(val: unknown): {success: boolean; data?: unknown};
+      };
+
+      expect(schema.safeParse({name: 'list_dir', arguments: {path: '/'}}).success).toBe(true);
+      expect(schema.safeParse({name: {path: '/tool'}, arguments: {q: {path: '/q'}}}).success).toBe(
+        true,
+      );
+
+      // Name that is an object neither a data binding nor a function call fails validation.
+      expect(schema.safeParse({name: {foo: 'bar'}}).success).toBe(false);
+
+      // null in v0.9 arguments fails validation.
+      expect(schema.safeParse({name: 'list_dir', arguments: {a: null}}).success).toBe(false);
+
+      // DataBindingSchema.strict() in web_core 0.15.0 rejects extra keys on bindings, while
+      // FunctionCallSchema strips unknown keys and keeps valid function calls.
+      expect(
+        schema.safeParse({name: 'list_dir', arguments: {a: {path: '/x', extra: 1}}}).success,
+      ).toBe(false);
+      const parsedFn = schema.safeParse({
+        name: 'list_dir',
+        arguments: {a: {call: 'upper', extra: 1}},
+      });
+      expect(parsedFn.success).toBe(true);
+      expect(parsedFn.data).toEqual({
+        name: 'list_dir',
+        arguments: {a: {call: 'upper', returnType: 'boolean'}},
+      });
     });
   });
 });

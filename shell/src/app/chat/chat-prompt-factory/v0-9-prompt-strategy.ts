@@ -18,7 +18,11 @@ import {Injectable} from '@angular/core';
 import {Catalog, CatalogJson, getCatalogId} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {McpServerConfig} from '../../mcp/mcp-client-manager.service';
-import {PromptProtocolStrategy, PromptStrategyOptions} from './prompt-protocol-strategy';
+import {
+  buildPromptTrailingSuffix,
+  PromptProtocolStrategy,
+  PromptStrategyOptions,
+} from './prompt-protocol-strategy';
 import {
   quoteCatalogValue,
   iconSupport,
@@ -42,6 +46,8 @@ const MINIFIED_COMMON_TYPES_SCHEMA = JSON.stringify(COMMON_TYPES_SCHEMA);
 })
 export class V09PromptStrategy implements PromptProtocolStrategy {
   readonly protocolVersion = 'v0.9' as const;
+  readonly rendererSelectedInstruction =
+    'The renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a complete createSurface/updateComponents/updateDataModel sequence.';
 
   buildSystemPrompt(options: PromptStrategyOptions): string {
     const catalog = options.activeCatalog ?? options.activeCatalogs?.[0] ?? null;
@@ -52,9 +58,10 @@ export class V09PromptStrategy implements PromptProtocolStrategy {
       ? `\n\n## Custom User Instructions\n\n${customInstructionsText}`
       : '';
 
-    if (!catalog) {
-      return (
-        `
+    const trailingSuffix = buildPromptTrailingSuffix(this, options);
+
+    const promptBody = !catalog
+      ? `
   # A2UI Generation Expert
 
   ## Role
@@ -62,18 +69,13 @@ export class V09PromptStrategy implements PromptProtocolStrategy {
   requests—whether provided as text instructions, UI wireframes, screenshots,
   or mockup images—into valid A2UI v0.9 interactive user interfaces.
   ${mcpInstructions}
-      `.trimEnd() + customPromptSuffix
-      );
-    }
-
-    return (
-      (
-        this.generateSystemPrompt(
+      `
+      : this.generateSystemPrompt(
           catalog as Catalog,
           options.includeMultimodalGuidelines ?? false,
-        ) + mcpInstructions
-      ).trimEnd() + customPromptSuffix
-    );
+        ) + mcpInstructions;
+
+    return `${promptBody.trimEnd()}${customPromptSuffix}${trailingSuffix}`;
   }
 
   buildMcpInstructions(activeServers: readonly McpServerConfig[]): string {
