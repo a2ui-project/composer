@@ -260,13 +260,18 @@ describe('A2ui React Sandbox Integration Spec Tests (v0.9)', () => {
             {
               id: 'root',
               component: 'Button',
-              child: 'Click Proxy',
+              child: 'buttonChild',
               action: {
                 event: {
                   name: 'PROXIED_CLICK',
                   context: {},
                 },
               },
+            },
+            {
+              id: 'buttonChild',
+              component: 'Text',
+              text: 'Click Proxy',
             },
           ],
         },
@@ -303,6 +308,7 @@ describe('A2ui React Sandbox Integration Spec Tests (v0.9)', () => {
       expect.objectContaining({
         type: PreviewBridgeMessageType.SEND_TO_SERVER,
         payload: expect.objectContaining({
+          version: 'v0.9',
           action: expect.objectContaining({
             name: 'PROXIED_CLICK',
             sourceComponentId: 'root',

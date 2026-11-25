@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {basicCatalog as v09BasicCatalog} from '@a2ui/lit/v0_9';
+import {basicCatalog as v09BasicCatalog} from '@a2ui/web_core/v0_9/basic_catalog';
 import type {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import {attachCatalogSchema} from '../../../shared/attach-catalog-schema.js';
 import {createDualIdV09BasicCatalogs} from '../../../shared/v0-9/basic-catalog-id.js';

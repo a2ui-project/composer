@@ -18,6 +18,8 @@
 import {describe, it, expect, beforeEach, afterEach, vi, onTestFinished} from 'vitest';
 import {AppRoot} from './main';
 import {a2uiBridge, PreviewBridgeMessageType} from 'a2ui-bridge';
+import {V09_SPEC_FUNCTIONS} from '@a2ui/web_core/v0_9/basic_catalog';
+import {v09Catalogs} from './catalogs/v0-9-catalogs.js';
 import {
   COMPOSER_V09_BASIC_CATALOG_ID,
   NPM_V09_BASIC_CATALOG_ID,
@@ -188,6 +190,22 @@ describe('AppRoot Lit Element (v0.9)', () => {
       COMPOSER_V09_BASIC_CATALOG_ID,
       NPM_V09_BASIC_CATALOG_ID,
     ]);
+  });
+
+  it('exposes theme definitions and web_core V09_SPEC_FUNCTIONS in v0.9 catalogSchema', () => {
+    const schema = (
+      v09Catalogs[0] as unknown as {
+        catalogSchema?: {
+          $defs?: Record<string, unknown>;
+          functions?: Record<string, unknown>;
+        };
+      }
+    ).catalogSchema;
+    expect(schema?.$defs).toBeDefined();
+    expect(schema?.$defs?.['theme']).toBeDefined();
+    expect(Object.keys(schema?.functions ?? {}).sort()).toEqual(
+      V09_SPEC_FUNCTIONS.map(fn => fn.name).sort(),
+    );
   });
 
   it('renders a v0.9 payload referencing the published NPM basic catalog ID', async () => {
