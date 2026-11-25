@@ -200,4 +200,22 @@ describe('createFakeCatalogManagement', () => {
       announcedCatalogCount: 1,
     });
   });
+
+  it('defaults announcedCatalogs to [activeCatalog()] when empty and activeProtocolVersion is overridden to v1.0', () => {
+    const unversioned: Catalog = {catalogId: 'cat-1', components: {Text: {type: 'object'}}};
+    const mock = createFakeCatalogManagement({
+      activeCatalog: signal<Catalog | null>(unversioned),
+      activeProtocolVersion: signal<'v0.9' | 'v1.0'>('v1.0'),
+    });
+
+    expect(mock.announcedCatalogs()).toEqual([unversioned]);
+    expect(mock.activeCatalogs()).toEqual([unversioned]);
+    expect(mock.activeCatalog()).toEqual(unversioned);
+    expect(mock.protocolSupport()).toEqual({
+      defaultVersion: 'v1.0',
+      versions: ['v1.0'],
+      catalogsByVersion: {'v1.0': [unversioned]},
+      announcedCatalogCount: 1,
+    });
+  });
 });

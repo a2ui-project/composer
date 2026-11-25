@@ -86,7 +86,14 @@ export class FakeCatalogManagement implements FakeCatalogManagementState {
     const rawPrimary = overrides?.activeCatalog ?? signal<Catalog | null>(null);
     const rawCatalogs =
       overrides?.announcedCatalogs ?? overrides?.activeCatalogs ?? signal<CatalogJson[]>([]);
-    this.announcedCatalogs = overrides?.announcedCatalogs ?? rawCatalogs;
+    this.announcedCatalogs = computed(() => {
+      const list = rawCatalogs();
+      if (list.length > 0) {
+        return list;
+      }
+      const primary = rawPrimary();
+      return primary ? [primary] : [];
+    });
     this.catalogError = overrides?.catalogError ?? signal<string | null>(null);
     this.isHandshakeInProgress = overrides?.isHandshakeInProgress ?? signal(false);
     this.watchdogFired = overrides?.watchdogFired ?? signal(false);
@@ -136,16 +143,13 @@ export class FakeCatalogManagement implements FakeCatalogManagementState {
     this.activeCatalogs = computed(() =>
       selectDefaultCatalogs(this.announcedCatalogs(), this.protocolSupport()),
     );
-    this.activeCatalog = computed(() => {
-      if (overrides?.activeCatalog && this.announcedCatalogs().length === 0) {
-        return rawPrimary();
-      }
-      return selectDefaultPrimaryCatalog(
+    this.activeCatalog = computed(() =>
+      selectDefaultPrimaryCatalog(
         rawPrimary(),
         this.activeCatalogs(),
         this.protocolSupport().defaultVersion,
-      );
-    });
+      ),
+    );
     this.activeCatalogTitle =
       overrides?.activeCatalogTitle ?? computed(() => this.activeCatalog()?.title || '');
     this.activeCatalogDescription =
