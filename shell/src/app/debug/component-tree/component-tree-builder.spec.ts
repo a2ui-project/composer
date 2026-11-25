@@ -426,4 +426,29 @@ describe('buildComponentTrees', () => {
     expect(tree.truncated).toBe(true);
     expect(tree.unreachable).toEqual([]);
   });
+
+  it('falls back to child/children for stub component entries without schema keywords', () => {
+    const stubCatalog: Catalog = {
+      catalogId: 'stub-catalog',
+      components: {
+        Column: {name: 'Column'},
+        Card: {name: 'Card'},
+        Text: {name: 'Text'},
+      },
+    };
+    const messages = surface([
+      {id: 'root', component: 'Column', children: ['card']},
+      {id: 'card', component: 'Card', child: 'title'},
+      {id: 'title', component: 'Text'},
+    ]);
+
+    const [tree] = buildComponentTrees(messages, stubCatalog);
+
+    expect(outline(tree.root)).toEqual([
+      'Column#root',
+      '  children:Card#card',
+      '    child:Text#title',
+    ]);
+    expect(tree.unreachable).toEqual([]);
+  });
 });

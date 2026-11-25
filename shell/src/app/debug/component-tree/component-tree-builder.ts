@@ -169,6 +169,13 @@ function collectSurfaces(messages: readonly unknown[]): Map<string, SurfaceState
   return surfaces;
 }
 
+const SCHEMA_STRUCTURE_KEYS = ['$ref', 'allOf', 'anyOf', 'oneOf', 'properties', 'items'] as const;
+
+function hasSchemaStructure(schema: unknown): boolean {
+  const record = asRecord(schema);
+  return record !== null && SCHEMA_STRUCTURE_KEYS.some(key => Object.hasOwn(record, key));
+}
+
 /** Discovers the reference slots of each component type from the catalog. */
 class ReferenceSchema {
   private readonly cache = new Map<string, readonly ReferenceSlot[]>();
@@ -178,7 +185,7 @@ class ReferenceSchema {
   slotsFor(type: string): readonly ReferenceSlot[] {
     const components = this.catalog?.components;
     const schema = components && Object.hasOwn(components, type) ? components[type] : undefined;
-    if (!schema) return FALLBACK_SLOTS;
+    if (!hasSchemaStructure(schema)) return FALLBACK_SLOTS;
     let slots = this.cache.get(type);
     if (!slots) {
       const discovered: ReferenceSlot[] = [];
