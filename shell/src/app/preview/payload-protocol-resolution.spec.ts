@@ -24,6 +24,7 @@ import {
   formatUnsupportedProtocolVersionMessage,
   gatePayloadDispatch,
   resolvePayloadProtocol,
+  resolveStickyEditorProtocol,
 } from './payload-protocol-resolution';
 
 const V10_BASIC_ID = 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json';
@@ -132,7 +133,10 @@ describe('resolvePayloadProtocol', () => {
       anchor: '1.0',
     });
     expect(formatUnsupportedProtocolVersionMessage('v1.0', ['v0.9'])).toBe(
-      'This renderer does not support A2UI v1.0. It supports v0.9. Change the payload\'s "version" or select a renderer that supports v1.0.',
+      'This renderer does not support A2UI v1.0. Use an A2UI v0.9 payload ("version": "v0.9") or select a renderer that supports v1.0.',
+    );
+    expect(formatUnsupportedProtocolVersionMessage('v0.9', ['v1.0', 'v0.9'])).toBe(
+      'This renderer does not support A2UI v0.9. Use an A2UI v1.0 ("version": "1.0") or v0.9 ("version": "v0.9") payload or select a renderer that supports v0.9.',
     );
   });
 
@@ -144,7 +148,7 @@ describe('resolvePayloadProtocol', () => {
       status: 'unsupported',
       code: 'PROTOCOL_VERSION_MISMATCH',
       message:
-        'This renderer does not support A2UI v0.9. It supports v1.0. Change the payload\'s "version" or select a renderer that supports v0.9.',
+        'This renderer does not support A2UI v0.9. Use an A2UI v1.0 payload ("version": "1.0") or select a renderer that supports v0.9.',
       anchor: 'v0.9',
     });
   });
@@ -155,7 +159,7 @@ describe('resolvePayloadProtocol', () => {
       status: 'unsupported',
       code: 'PROTOCOL_VERSION_MISMATCH',
       message:
-        'This renderer does not support A2UI v0.9. It supports v1.0. Change the payload\'s "version" or select a renderer that supports v0.9.',
+        'This renderer does not support A2UI v0.9. Use an A2UI v1.0 payload ("version": "1.0") or select a renderer that supports v0.9.',
       anchor: null,
     });
   });
@@ -361,6 +365,22 @@ describe('resolvePayloadProtocol', () => {
     });
   });
 
+  it('returns UNSUPPORTED_CATALOG when a later createSurface in a multi-surface payload names an unsupported catalogId', () => {
+    const payload = [
+      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: V09_COMPOSER_ID}},
+      {version: 'v0.9', createSurface: {surfaceId: 's2', catalogId: V09_MATERIAL_ID}},
+    ];
+    expect(resolvePayloadProtocol(payload, DUAL_SUPPORT)).toEqual({
+      status: 'unsupported',
+      code: 'UNSUPPORTED_CATALOG',
+      message: formatUnsupportedCatalogMessage(V09_MATERIAL_ID, 'v0.9', [
+        V09_COMPOSER_ID,
+        V09_NPM_ID,
+      ]),
+      anchor: V09_MATERIAL_ID,
+    });
+  });
+
   describe('gatePayloadDispatch', () => {
     it('defers silently while handshake is unsettled', () => {
       const errorLogger = {error: vi.fn()};
@@ -418,6 +438,104 @@ describe('resolvePayloadProtocol', () => {
 
       expect(result).toBe(preResolved);
       expect(errorLogger.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resolveStickyEditorProtocol', () => {
+    it('returns null before catalog receipt or on unsupported parsed payloads', () => {
+      const supportedPrev = {version: 'v0.9' as const, catalog: V09_NPM};
+      expect(
+        resolveStickyEditorProtocol(
+          {
+            hasCatalog: false,
+            support: DUAL_SUPPORT,
+            resolution: null,
+            rawText: '[{"version": "v0.9"',
+            activeCatalog: V10_BASIC,
+            activeCatalogs: [V10_BASIC],
+          },
+          supportedPrev,
+        ),
+      ).toBeNull();
+
+      const unsupported = resolvePayloadProtocol(
+        [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: V09_COMPOSER_ID}}],
+        V10_ONLY_SUPPORT,
+      );
+      expect(
+        resolveStickyEditorProtocol(
+          {
+            hasCatalog: true,
+            support: V10_ONLY_SUPPORT,
+            resolution: unsupported,
+            rawText: '[]',
+            activeCatalog: V10_BASIC,
+            activeCatalogs: [V10_BASIC],
+          },
+          supportedPrev,
+        ),
+      ).toBeNull();
+    });
+
+    it('preserves previous version and matching catalog on broken JSON, switches on detected version, and resets on empty resolution', () => {
+      const prevV09Npm = {version: 'v0.9' as const, catalog: V09_NPM};
+      expect(
+        resolveStickyEditorProtocol(
+          {
+            hasCatalog: true,
+            support: DUAL_SUPPORT,
+            resolution: null,
+            rawText: '[{"vers',
+            activeCatalog: V10_BASIC,
+            activeCatalogs: [V10_BASIC],
+          },
+          prevV09Npm,
+        ),
+      ).toEqual(prevV09Npm);
+
+      expect(
+        resolveStickyEditorProtocol(
+          {
+            hasCatalog: true,
+            support: V10_ONLY_SUPPORT,
+            resolution: null,
+            rawText: '[{"vers',
+            activeCatalog: V10_BASIC,
+            activeCatalogs: [V10_BASIC],
+          },
+          prevV09Npm,
+        ),
+      ).toBeNull();
+
+      const prevV10 = {version: 'v1.0' as const, catalog: V10_BASIC};
+      expect(
+        resolveStickyEditorProtocol(
+          {
+            hasCatalog: true,
+            support: DUAL_SUPPORT,
+            resolution: null,
+            rawText: '[{"version": "v0.9", "createSurface": {',
+            activeCatalog: V10_BASIC,
+            activeCatalogs: [V10_BASIC],
+          },
+          prevV10,
+        ),
+      ).toEqual({version: 'v0.9', catalog: V09_COMPOSER});
+
+      const emptyResolution = resolvePayloadProtocol([], DUAL_SUPPORT);
+      expect(
+        resolveStickyEditorProtocol(
+          {
+            hasCatalog: true,
+            support: DUAL_SUPPORT,
+            resolution: emptyResolution,
+            rawText: '   ',
+            activeCatalog: V10_BASIC,
+            activeCatalogs: [V10_BASIC],
+          },
+          prevV09Npm,
+        ),
+      ).toEqual({version: 'v1.0', catalog: V10_BASIC});
     });
   });
 });

@@ -48,7 +48,7 @@ export class V09MonacoSchemaStrategy implements MonacoSchemaStrategy {
       items: {
         type: 'object',
         properties: {
-          version: {type: 'string'},
+          version: {type: 'string', const: 'v0.9'},
           createSurface: {
             type: 'object',
             properties: {
@@ -88,6 +88,7 @@ export class V09MonacoSchemaStrategy implements MonacoSchemaStrategy {
             required: ['surfaceId'],
           },
         },
+        required: ['version'],
         additionalProperties: false,
       },
     };

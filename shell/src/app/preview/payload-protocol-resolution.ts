@@ -15,8 +15,12 @@
  */
 
 import type {A2uiProtocolVersion} from 'a2ui-bridge';
-import type {ProtocolSupport} from '../storage/catalog-management/catalog-domain';
+import {
+  type ProtocolSupport,
+  selectCatalogsForVersion,
+} from '../storage/catalog-management/catalog-domain';
 import {getCatalogId, type Catalog} from '../storage/models/catalog-storage.model';
+import {detectRawJsonDraftVersion} from '../chat/chat-service/draft-protocol-strategy';
 import {inspectPayloadVersion} from './protocol-version-mismatch';
 
 /** Error codes emitted when a payload cannot be dispatched to the active renderer. */
@@ -45,12 +49,28 @@ export interface PayloadErrorSink {
   error(entry: {sourceTag: string; code: PayloadResolutionErrorCode; message: string}): void;
 }
 
+const WIRE_VERSION_BY_PROTOCOL: Record<A2uiProtocolVersion, string> = {
+  'v0.9': 'v0.9',
+  'v1.0': '1.0',
+};
+
 /** Formats the error message when a payload targets a protocol version the renderer does not support. */
 export function formatUnsupportedProtocolVersionMessage(
   payloadVersion: A2uiProtocolVersion,
   supportedVersions: readonly A2uiProtocolVersion[],
 ): string {
-  return `This renderer does not support A2UI ${payloadVersion}. It supports ${supportedVersions.join(', ')}. Change the payload's "version" or select a renderer that supports ${payloadVersion}.`;
+  if (supportedVersions.length === 1) {
+    const supported = supportedVersions[0];
+    const wire = WIRE_VERSION_BY_PROTOCOL[supported];
+    return `This renderer does not support A2UI ${payloadVersion}. Use an A2UI ${supported} payload ("version": "${wire}") or select a renderer that supports ${payloadVersion}.`;
+  }
+  if (supportedVersions.length > 1) {
+    const supportedList = supportedVersions
+      .map(v => `${v} ("version": "${WIRE_VERSION_BY_PROTOCOL[v]}")`)
+      .join(' or ');
+    return `This renderer does not support A2UI ${payloadVersion}. Use an A2UI ${supportedList} payload or select a renderer that supports ${payloadVersion}.`;
+  }
+  return `This renderer does not support A2UI ${payloadVersion}. Select a renderer that supports ${payloadVersion}.`;
 }
 
 /** Formats the error message when one payload mixes v0.9 and v1.0 messages. */
@@ -101,29 +121,97 @@ export function resolvePayloadProtocol(
     };
   }
 
-  const requestedCatalogId = findRequestedCatalogId(messages);
+  const requestedCatalogIds = findRequestedCatalogIds(messages);
+  const primaryCatalogId = requestedCatalogIds[0] ?? null;
   const versionFromCatalog =
-    detectedVersion === null && requestedCatalogId !== null
-      ? findVersionForCatalogId(support, requestedCatalogId)
+    detectedVersion === null
+      ? requestedCatalogIds.reduce<A2uiProtocolVersion | null>(
+          (found, id) => found ?? findVersionForCatalogId(support, id),
+          null,
+        )
       : null;
   const version = detectedVersion ?? versionFromCatalog ?? support.defaultVersion;
   const versionCatalogs = support.catalogsByVersion[version] ?? [];
 
-  if (support.announcedCatalogCount > 1 && requestedCatalogId !== null) {
+  if (support.announcedCatalogCount > 1 && requestedCatalogIds.length > 0) {
     const providedIds = versionCatalogs
       .map(c => getCatalogId(c))
       .filter((id): id is string => typeof id === 'string' && id.length > 0);
-    if (providedIds.length > 0 && !providedIds.includes(requestedCatalogId)) {
-      return {
-        status: 'unsupported',
-        code: 'UNSUPPORTED_CATALOG',
-        message: formatUnsupportedCatalogMessage(requestedCatalogId, version, providedIds),
-        anchor: requestedCatalogId,
-      };
+    if (providedIds.length > 0) {
+      const unsupportedCatalogId = requestedCatalogIds.find(id => !providedIds.includes(id));
+      if (unsupportedCatalogId !== undefined) {
+        return {
+          status: 'unsupported',
+          code: 'UNSUPPORTED_CATALOG',
+          message: formatUnsupportedCatalogMessage(unsupportedCatalogId, version, providedIds),
+          anchor: unsupportedCatalogId,
+        };
+      }
     }
   }
 
-  return supportedResult(version, support, requestedCatalogId);
+  return supportedResult(version, support, primaryCatalogId);
+}
+
+/** Sticky editor protocol version and catalog tracked across transient invalid-JSON edits. */
+export interface StickyEditorProtocol {
+  readonly version: A2uiProtocolVersion;
+  readonly catalog: Catalog | null;
+}
+
+/** Reactive inputs required to resolve the sticky editor protocol version and catalog. */
+export interface StickyEditorProtocolInput {
+  readonly hasCatalog: boolean;
+  readonly support: ProtocolSupport;
+  readonly resolution: PayloadProtocolResolution | null;
+  readonly rawText: string;
+  readonly activeCatalog: Catalog | null;
+  readonly activeCatalogs: readonly Catalog[];
+}
+
+/**
+ * Resolves the editor schema's protocol version and catalog across draft edits.
+ *
+ * Empty text parses as `[]`, yielding a non-null `resolution` for `support.defaultVersion` so
+ * intentionally clearing the editor resets to the renderer's default version. Unparseable JSON
+ * yields `resolution === null` and keeps the detected or previously supported version/catalog so
+ * Monaco does not flash another version's schema errors mid-edit, unless `support` drops it.
+ */
+export function resolveStickyEditorProtocol(
+  input: StickyEditorProtocolInput,
+  previous: StickyEditorProtocol | null,
+): StickyEditorProtocol | null {
+  if (!input.hasCatalog) {
+    return null;
+  }
+  if (input.resolution) {
+    return input.resolution.status === 'supported'
+      ? {version: input.resolution.version, catalog: input.resolution.catalog}
+      : null;
+  }
+  const detected = detectRawJsonDraftVersion(input.rawText);
+  const version =
+    detected && input.support.versions.includes(detected)
+      ? detected
+      : previous && input.support.versions.includes(previous.version)
+        ? previous.version
+        : null;
+  if (!version) {
+    return null;
+  }
+  const versionCatalogs = input.support.catalogsByVersion[version] ?? [];
+  const prevCatalogId = previous?.catalog ? getCatalogId(previous.catalog) : undefined;
+  const matchingPrevCatalog =
+    previous?.version === version && previous.catalog
+      ? (versionCatalogs.find(
+          c => c === previous.catalog || (prevCatalogId && getCatalogId(c) === prevCatalogId),
+        ) ?? null)
+      : null;
+  const catalog =
+    matchingPrevCatalog ??
+    selectCatalogsForVersion(input.support, version, input.activeCatalog, input.activeCatalogs)
+      .primary;
+  return {version, catalog};
 }
 
 /**
@@ -187,7 +275,8 @@ function findVersionForCatalogId(
   return null;
 }
 
-function findRequestedCatalogId(messages: readonly unknown[]): string | null {
+function findRequestedCatalogIds(messages: readonly unknown[]): string[] {
+  const ids: string[] = [];
   for (const item of messages) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       continue;
@@ -198,8 +287,8 @@ function findRequestedCatalogId(messages: readonly unknown[]): string | null {
     }
     const catalogId = (cs as Record<string, unknown>)['catalogId'];
     if (typeof catalogId === 'string' && catalogId.length > 0) {
-      return catalogId;
+      ids.push(catalogId);
     }
   }
-  return null;
+  return ids;
 }

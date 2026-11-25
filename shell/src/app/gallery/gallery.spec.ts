@@ -978,7 +978,7 @@ describe('Gallery Component', () => {
       expect.objectContaining({
         code: 'PROTOCOL_VERSION_MISMATCH',
         message:
-          'This renderer does not support A2UI v0.9. It supports v1.0. Change the payload\'s "version" or select a renderer that supports v0.9.',
+          'This renderer does not support A2UI v0.9. Use an A2UI v1.0 payload ("version": "1.0") or select a renderer that supports v0.9.',
       }),
     );
   });

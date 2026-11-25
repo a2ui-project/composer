@@ -18,6 +18,7 @@ import {
   Component,
   computed,
   inject,
+  linkedSignal,
   signal,
   DestroyRef,
   effect,
@@ -37,7 +38,6 @@ import {ChatState} from '../../chat/chat-state/chat-state';
 import {
   isErrorOrWarningMarker,
   MonacoEditor,
-  PROTOCOL_MARKER_OWNER,
   type ProtocolProblem,
 } from '../../shared/monaco-editor/monaco-editor';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
@@ -49,6 +49,9 @@ import {
   gatePayloadDispatch,
   type PayloadProtocolResolution,
   resolvePayloadProtocol,
+  resolveStickyEditorProtocol,
+  type StickyEditorProtocol,
+  type StickyEditorProtocolInput,
 } from '../payload-protocol-resolution';
 import type {editor} from 'monaco-editor';
 
@@ -117,15 +120,30 @@ export class RawFrame {
     () => this.resolvedDraft()?.resolution ?? null,
   );
 
-  protected readonly editorProtocolVersion = computed(() => {
-    const resolution = this.payloadResolution();
-    return resolution?.status === 'supported' ? resolution.version : null;
+  private readonly editorResolutionSource = computed<StickyEditorProtocolInput>(() => ({
+    hasCatalog: this.catalogManagement.hasReceivedCatalogResponse(),
+    support: this.catalogManagement.protocolSupport(),
+    resolution: this.payloadResolution(),
+    rawText: this.layoutJson(),
+    activeCatalog: this.catalogManagement.activeCatalog(),
+    activeCatalogs: this.catalogManagement.activeCatalogs(),
+  }));
+
+  private readonly lastSupportedEditorResolution = linkedSignal<
+    StickyEditorProtocolInput,
+    StickyEditorProtocol | null
+  >({
+    source: this.editorResolutionSource,
+    computation: (source, previous) => resolveStickyEditorProtocol(source, previous?.value ?? null),
   });
 
-  protected readonly editorProtocolCatalog = computed(() => {
-    const resolution = this.payloadResolution();
-    return resolution?.status === 'supported' ? resolution.catalog : null;
-  });
+  protected readonly editorProtocolVersion = computed(
+    () => this.lastSupportedEditorResolution()?.version ?? null,
+  );
+
+  protected readonly editorProtocolCatalog = computed(
+    () => this.lastSupportedEditorResolution()?.catalog ?? null,
+  );
 
   protected readonly editorProtocolProblem = computed<ProtocolProblem | null>(() => {
     const resolution = this.payloadResolution();
@@ -361,8 +379,7 @@ export class RawFrame {
 
   protected onMarkersChange(markers: editor.IMarker[]): void {
     const isSyntaxValid = this.hasValidJsonArraySyntax();
-    const schemaMarkers = markers.filter(m => m.owner !== PROTOCOL_MARKER_OWNER);
-    const hasErrors = isSyntaxValid && schemaMarkers.some(isErrorOrWarningMarker);
+    const hasErrors = isSyntaxValid && markers.some(isErrorOrWarningMarker);
     if (hasErrors) {
       this.clearWatchdog();
       this.hasActiveSchemaErrors = true;
@@ -370,7 +387,7 @@ export class RawFrame {
       this.hasActiveSchemaErrors = false;
     }
     if (isSyntaxValid) {
-      this.markerSubject.next(schemaMarkers);
+      this.markerSubject.next(markers);
     } else {
       this.lastErrorSignature = null;
       if (this.lastSyntaxError?.line === undefined) {
@@ -445,9 +462,7 @@ export class RawFrame {
       this.lastErrorSignature = null;
       return;
     }
-    const errorMarkers = markers.filter(
-      m => m.owner !== PROTOCOL_MARKER_OWNER && isErrorOrWarningMarker(m),
-    );
+    const errorMarkers = markers.filter(isErrorOrWarningMarker);
     if (errorMarkers.length === 0) {
       this.lastErrorSignature = null;
       return;
@@ -615,7 +630,10 @@ export class RawFrame {
       return false;
     }
 
-    this.hostCommunication.sendRenderA2UI(resolved.payload);
+    if (this.hostCommunication.sendRenderA2UI(resolved.payload) === false) {
+      this.clearWatchdog();
+      return false;
+    }
     return true;
   }
 }

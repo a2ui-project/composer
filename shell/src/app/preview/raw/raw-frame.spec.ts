@@ -38,9 +38,24 @@ import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 
-const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() => {
+const {
+  createMock,
+  mockEditor,
+  mockModel,
+  mockRawOnDidChangeMarkers,
+  mockRawGetModelMarkers,
+  getLastCreatedModelUri,
+  setLastCreatedModelUri,
+  undoStack,
+  redoStack,
+} = vi.hoisted(() => {
   const undoStack: string[] = [];
   const redoStack: string[] = [];
+  let lastCreatedModelUri: unknown = null;
+  const mockRawOnDidChangeMarkers = vi.fn<
+    (listener: (uris: readonly unknown[]) => void) => {dispose: ReturnType<typeof vi.fn>}
+  >(() => ({dispose: vi.fn()}));
+  const mockRawGetModelMarkers = vi.fn<() => Partial<monaco.editor.IMarker>[]>(() => []);
 
   const mockModel = {
     getFullModelRange: vi.fn(() => ({
@@ -145,7 +160,19 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     },
   );
 
-  return {createMock: create, mockEditor, mockModel, undoStack, redoStack};
+  return {
+    createMock: create,
+    mockEditor,
+    mockModel,
+    mockRawOnDidChangeMarkers,
+    mockRawGetModelMarkers,
+    getLastCreatedModelUri: () => lastCreatedModelUri,
+    setLastCreatedModelUri: (uri: unknown) => {
+      lastCreatedModelUri = uri;
+    },
+    undoStack,
+    redoStack,
+  };
 });
 
 vi.mock('@monaco-editor/loader', () => {
@@ -160,17 +187,20 @@ vi.mock('@monaco-editor/loader', () => {
           defineTheme: vi.fn(),
           create: createMock,
           getModel: vi.fn(() => null),
-          onDidChangeMarkers: vi.fn(() => ({dispose: vi.fn()})),
-          createModel: vi.fn((value, language, uri) => ({
-            value,
-            language,
-            uri,
-            setValue: vi.fn(),
-            setEOL: vi.fn(),
-            dispose: vi.fn(),
-          })),
+          onDidChangeMarkers: mockRawOnDidChangeMarkers,
+          createModel: vi.fn((value, language, uri) => {
+            setLastCreatedModelUri(uri);
+            return {
+              value,
+              language,
+              uri,
+              setValue: vi.fn(),
+              setEOL: vi.fn(),
+              dispose: vi.fn(),
+            };
+          }),
           EndOfLineSequence: {LF: 0, CRLF: 1},
-          getModelMarkers: vi.fn(() => []),
+          getModelMarkers: mockRawGetModelMarkers,
           setModelMarkers: vi.fn(),
         },
         languages: {
@@ -368,6 +398,9 @@ describe('RawFrame JSON Source Editor View', () => {
     mockEditor.focus.mockClear();
     mockModel.getFullModelRange.mockClear();
     mockModel.setValue.mockClear();
+    mockRawOnDidChangeMarkers.mockClear();
+    mockRawGetModelMarkers.mockReset().mockReturnValue([]);
+    setLastCreatedModelUri(null);
     createMock.mockClear();
   });
 
@@ -1770,7 +1803,7 @@ describe('RawFrame JSON Source Editor View', () => {
         sourceTag: '[RawFrame]',
         code: 'PROTOCOL_VERSION_MISMATCH',
         message:
-          'This renderer does not support A2UI v0.9. It supports v1.0. Change the payload\'s "version" or select a renderer that supports v0.9.',
+          'This renderer does not support A2UI v0.9. Use an A2UI v1.0 payload ("version": "1.0") or select a renderer that supports v0.9.',
       });
     });
 
@@ -1924,15 +1957,20 @@ describe('RawFrame JSON Source Editor View', () => {
         anchorText: 'https://a2ui.org/specification/v0_9/material_catalog.json',
       });
 
-      component.TEST_ONLY.notifySchemaErrors([
+      mockRawGetModelMarkers.mockReturnValue([
         {
           owner: 'a2ui-protocol',
           severity: 8,
           message: editor.protocolProblem()!.message,
           startLineNumber: 1,
           startColumn: 1,
-        } as unknown as monaco.editor.IMarker,
+        },
       ]);
+      const markerListener = mockRawOnDidChangeMarkers.mock.calls.at(-1)?.[0] as
+        ((uris: readonly unknown[]) => void) | undefined;
+      expect(markerListener).toBeDefined();
+      markerListener!([getLastCreatedModelUri()]);
+      vi.advanceTimersByTime(3100);
       expect(snackBarMock.open).not.toHaveBeenCalled();
     });
 
@@ -1982,6 +2020,196 @@ describe('RawFrame JSON Source Editor View', () => {
       expect(editor.protocolVersion()).toBe('v0.9');
       expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
       expect(sendRenderA2UIMock).toHaveBeenCalledWith(v09Draft);
+    });
+
+    it('does not arm the watchdog when hostCommunication.sendRenderA2UI returns false on editor edits', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      mockActiveProtocolVersion.set('v0.9');
+
+      const {fixture, harness} = await setup(false);
+      vi.mocked(TestBed.inject(HostCommunication).isRendererReady).mockReturnValue(true);
+      sendRenderA2UIMock.mockClear();
+      sendRenderA2UIMock.mockReturnValue(false);
+      errorLoggerMock.warn.mockClear();
+
+      await harness.setJsonText(
+        JSON.stringify([{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}]),
+      );
+      fixture.detectChanges();
+      vi.advanceTimersByTime(300);
+
+      expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(16000);
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
+    });
+
+    it('clears an already-armed watchdog when a synchronized layout send fails with false', async () => {
+      vi.useFakeTimers();
+      mockHasReceivedCatalogResponse.set(true);
+      mockActiveProtocolVersion.set('v0.9');
+
+      const {fixture, harness} = await setup(false);
+      vi.mocked(TestBed.inject(HostCommunication).isRendererReady).mockReturnValue(true);
+      sendRenderA2UIMock.mockReturnValue(true);
+      errorLoggerMock.warn.mockClear();
+
+      await harness.setJsonText(
+        JSON.stringify([{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}]),
+      );
+      fixture.detectChanges();
+      vi.advanceTimersByTime(300);
+
+      sendRenderA2UIMock.mockClear();
+      sendRenderA2UIMock.mockReturnValue(false);
+      mockActiveCatalog.set({title: 'Updated Catalog'});
+      fixture.detectChanges();
+
+      expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(16000);
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
+    });
+
+    it('preserves v0.9 editorProtocolVersion and catalog on temporarily unparseable JSON, clears on v1.0-only switch, and resets when cleared to empty', async () => {
+      mockHasReceivedCatalogResponse.set(true);
+      const v09Catalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        protocolVersion: '0.9',
+        components: {Text: {type: 'object'}},
+      };
+      const v09NpmCatalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+        protocolVersion: '0.9',
+        components: {Button: {type: 'object'}},
+      };
+      const v10Catalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        protocolVersion: '1.0',
+        components: {Text: {type: 'object'}},
+      };
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [v10Catalog],
+          'v0.9': [v09Catalog, v09NpmCatalog],
+        },
+        announcedCatalogCount: 3,
+      });
+
+      const {fixture, harness, component} = await setup(false);
+      const validV09 = JSON.stringify([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+          },
+        },
+      ]);
+      await harness.setJsonText(validV09);
+      fixture.detectChanges();
+
+      const editor = component.monacoEditor()!;
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(editor.protocolCatalog()).toEqual(v09NpmCatalog);
+
+      // (a) Broken JSON mid-edit keeps v0.9 and the targeted v0.9 catalog
+      await harness.setJsonText('[{"version": "v0.9", "createSurface": {');
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(editor.protocolCatalog()).toEqual(v09NpmCatalog);
+
+      // Even when "version" itself is temporarily broken, previous.version + matchingPrevCatalog hold
+      await harness.setJsonText('[{"vers');
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(editor.protocolCatalog()).toEqual(v09NpmCatalog);
+
+      // (b) Switching to a v1.0-only renderer clears the stale v0.9 version
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0'],
+        catalogsByVersion: {'v1.0': [v10Catalog]},
+        announcedCatalogCount: 1,
+      });
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBeNull();
+      expect(editor.protocolCatalog()).toBeNull();
+
+      // Restore dual-version and valid v0.9, break JSON again, then (c) clear to empty
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [v10Catalog],
+          'v0.9': [v09Catalog, v09NpmCatalog],
+        },
+        announcedCatalogCount: 3,
+      });
+      await harness.setJsonText(validV09);
+      fixture.detectChanges();
+      await harness.setJsonText('[{"version": "v0.9",');
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBe('v0.9');
+
+      await harness.setJsonText('   ');
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBe('v1.0');
+      expect(editor.protocolCatalog()).toEqual(v10Catalog);
+    });
+
+    it('switches to v0.9 primary catalog without v1.0 catalog bleed when broken v0.9 JSON is pasted over v1.0', async () => {
+      mockHasReceivedCatalogResponse.set(true);
+      const v09Catalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        protocolVersion: '0.9',
+        components: {Text: {type: 'object'}},
+      };
+      const v10Catalog: Catalog = {
+        $id: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+        protocolVersion: '1.0',
+        components: {Text: {type: 'object'}},
+      };
+      mockProtocolSupportOverride.set({
+        defaultVersion: 'v1.0',
+        versions: ['v1.0', 'v0.9'],
+        catalogsByVersion: {
+          'v1.0': [v10Catalog],
+          'v0.9': [v09Catalog],
+        },
+        announcedCatalogCount: 2,
+      });
+
+      const {fixture, harness, component} = await setup(false);
+      await harness.setJsonText(
+        JSON.stringify([
+          {
+            version: '1.0',
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json',
+            },
+          },
+        ]),
+      );
+      fixture.detectChanges();
+
+      const editor = component.monacoEditor()!;
+      expect(editor.protocolVersion()).toBe('v1.0');
+      expect(editor.protocolCatalog()).toEqual(v10Catalog);
+
+      await harness.setJsonText('[{"version": "v0.9", "createSurface": {');
+      fixture.detectChanges();
+      expect(editor.protocolVersion()).toBe('v0.9');
+      expect(editor.protocolCatalog()).toEqual(v09Catalog);
     });
   });
 });

@@ -926,6 +926,52 @@ describe('MonacoEditor component', () => {
 
       sub.unsubscribe();
     });
+
+    it('excludes PROTOCOL_MARKER_OWNER markers and emits immediately when schema errors clear while a protocol marker is set', async () => {
+      vi.useFakeTimers();
+      fixture = TestBed.createComponent(MonacoEditor);
+      const markersSpy = vi.fn();
+      fixture.componentInstance.markersChange.subscribe(markersSpy);
+      fixture.detectChanges();
+
+      await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+      await Promise.resolve();
+
+      const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
+        uris: readonly monaco.Uri[],
+      ) => void;
+
+      const schemaMarker = createMockMarker({
+        owner: 'json',
+        severity: 8,
+        message: 'Missing property "version".',
+        startLineNumber: 2,
+        startColumn: 3,
+      });
+      const protocolMarker = createMockMarker({
+        owner: PROTOCOL_MARKER_OWNER,
+        severity: 8,
+        message: 'This renderer does not support A2UI v0.9.',
+        startLineNumber: 3,
+        startColumn: 5,
+      });
+
+      // Schema error + protocol marker arrive together -> debounced behind 3000ms, excluding protocol marker
+      mockGetModelMarkers.mockReturnValue([schemaMarker, protocolMarker]);
+      markerListener([layoutUri]);
+      vi.advanceTimersByTime(1500);
+      expect(markersSpy).not.toHaveBeenCalled();
+
+      // Schema error clears while protocol marker remains -> immediate emission of [] without waiting 3000ms
+      mockGetModelMarkers.mockReturnValue([protocolMarker]);
+      markerListener([layoutUri]);
+      expect(markersSpy).toHaveBeenCalledTimes(1);
+      expect(markersSpy).toHaveBeenCalledWith([]);
+
+      // Advancing past original debounce timer does not emit the protocol marker
+      vi.advanceTimersByTime(3000);
+      expect(markersSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('configures schemaValidation as error in jsonDefaults and supports gallery-example schemaMode and ariaLabel', async () => {
@@ -1384,6 +1430,14 @@ describe('MonacoEditor component', () => {
       );
       expect(lastCall.schemas.map(s => s.uri)).toContain(v09ComposerCatalog.$id);
       expect(lastCall.schemas.map(s => s.uri)).not.toContain(v09NpmCatalog.$id);
+      const v09LayoutSchema = lastCall.schemas.find(s => s.uri === 'a2ui-catalog-schema')
+        ?.schema as
+        {items?: {properties?: Record<string, unknown>; required?: string[]}} | undefined;
+      expect(v09LayoutSchema?.items?.properties?.['version']).toEqual({
+        type: 'string',
+        const: 'v0.9',
+      });
+      expect(v09LayoutSchema?.items?.required).toEqual(['version']);
 
       // Selecting the npm-id v0.9 catalog builds the v0.9 schema from that catalog
       fixture.componentRef.setInput('protocolCatalog', v09NpmCatalog);

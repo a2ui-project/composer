@@ -693,7 +693,9 @@ export class MonacoEditor {
         const markersDisposable = monacoInstance.editor.onDidChangeMarkers(
           (uris: readonly monaco.Uri[]) => {
             if (uris.some(u => u?.toString() === modelUri.toString())) {
-              const markers = monacoInstance.editor.getModelMarkers({resource: modelUri});
+              const markers = monacoInstance.editor
+                .getModelMarkers({resource: modelUri})
+                .filter((m: monaco.editor.IMarker) => m.owner !== PROTOCOL_MARKER_OWNER);
               const currentSignature = markers
                 .map(
                   (m: monaco.editor.IMarker) =>

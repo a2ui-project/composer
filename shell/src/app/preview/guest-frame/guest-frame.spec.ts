@@ -1260,7 +1260,7 @@ describe('GuestFrame', () => {
           sourceTag: '[GuestFrame]',
           code: 'PROTOCOL_VERSION_MISMATCH',
           message:
-            'This renderer does not support A2UI v1.0. It supports v0.9. Change the payload\'s "version" or select a renderer that supports v1.0.',
+            'This renderer does not support A2UI v1.0. Use an A2UI v0.9 payload ("version": "v0.9") or select a renderer that supports v1.0.',
         }),
       );
 
