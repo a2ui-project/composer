@@ -482,7 +482,6 @@ test.describe('Dual-version v0.9 and v1.0 basic renderers', () => {
         }),
       });
     await page.route('**/config.json', handleConfig);
-    await page.route('**/renderers.json', handleConfig);
     await page.route(
       url => url.href === singleCatalogUrl || url.href.startsWith(singleCatalogUrl),
       (route: Route) => route.fulfill({contentType: 'text/html', body: html}),
@@ -583,7 +582,7 @@ test.describe('Dual-version v0.9 and v1.0 basic renderers', () => {
       localStorage.setItem('a2ui_composer_force_3p', 'true');
       localStorage.removeItem('a2ui_composer_force_1p');
     });
-    await page.route('**/assets/composer.config.json', (route: Route) =>
+    await page.route('**/config.json', (route: Route) =>
       route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
@@ -594,7 +593,7 @@ test.describe('Dual-version v0.9 and v1.0 basic renderers', () => {
             },
           },
           apiKeys: {
-            fake: {
+            default: {
               apiKey: FAKE_GEMINI_API_KEY,
               displayName: 'Test Key',
             },
@@ -604,22 +603,6 @@ test.describe('Dual-version v0.9 and v1.0 basic renderers', () => {
     );
 
     await page.goto('/');
-    await waitForMonacoEditor(page);
-    await waitForHandshakeReady(page);
-
-    // Select the fake API key so chat submits through the intercepted Gemini endpoint.
-    await page.getByRole('link', {name: 'Settings'}).click();
-    await page.getByRole('button', {name: 'Add Gemini API key'}).click();
-    const apiKeyDialog = page.getByRole('dialog', {name: 'Add Gemini API Key'});
-    await expect(apiKeyDialog).toBeVisible();
-    await apiKeyDialog.getByLabel('Name', {exact: true}).fill('E2E fake Gemini key');
-    await apiKeyDialog.getByLabel('API Key', {exact: true}).fill(FAKE_GEMINI_API_KEY);
-    await apiKeyDialog.getByRole('button', {name: 'Add', exact: true}).click();
-    await expect(apiKeyDialog).toBeHidden();
-    await expect
-      .poll(() => page.evaluate(() => localStorage.getItem('a2ui_composer_selected_api_key')))
-      .toMatch(/^custom-\d+$/);
-    await page.getByRole('link', {name: 'Composer Workspace'}).click();
     await waitForMonacoEditor(page);
     await waitForHandshakeReady(page);
 
@@ -773,7 +756,6 @@ test.describe('Dual-version v0.9 and v1.0 basic renderers', () => {
         }),
       });
     await page.route('**/config.json', handleConfig);
-    await page.route('**/renderers.json', handleConfig);
     await page.route(
       url => url.href === v10StubUrl || url.href.startsWith(v10StubUrl),
       (route: Route) => route.fulfill({contentType: 'text/html', body: html}),
@@ -852,7 +834,7 @@ test.describe('Dual-version v0.9 and v1.0 basic renderers', () => {
             },
           },
           apiKeys: {
-            fake: {
+            default: {
               apiKey: FAKE_GEMINI_API_KEY,
               displayName: 'Test Key',
             },
@@ -860,7 +842,6 @@ test.describe('Dual-version v0.9 and v1.0 basic renderers', () => {
         }),
       });
     await page.route('**/config.json', handleConfig);
-    await page.route('**/renderers.json', handleConfig);
     await page.route(
       url => url.href === v10StubUrl || url.href.startsWith(v10StubUrl),
       (route: Route) => route.fulfill({contentType: 'text/html', body: html}),
@@ -874,18 +855,6 @@ test.describe('Dual-version v0.9 and v1.0 basic renderers', () => {
     });
     await installGeminiFixture(page);
     await page.goto('/');
-    await waitForMonacoEditor(page);
-    await waitForHandshakeReady(page);
-
-    await page.getByRole('link', {name: 'Settings'}).click();
-    await page.getByRole('button', {name: 'Add Gemini API key'}).click();
-    const apiKeyDialog = page.getByRole('dialog', {name: 'Add Gemini API Key'});
-    await expect(apiKeyDialog).toBeVisible();
-    await apiKeyDialog.getByLabel('Name', {exact: true}).fill('E2E fake Gemini key');
-    await apiKeyDialog.getByLabel('API Key', {exact: true}).fill(FAKE_GEMINI_API_KEY);
-    await apiKeyDialog.getByRole('button', {name: 'Add', exact: true}).click();
-    await expect(apiKeyDialog).toBeHidden();
-    await page.getByRole('link', {name: 'Composer Workspace'}).click();
     await waitForMonacoEditor(page);
     await waitForHandshakeReady(page);
 
