@@ -494,11 +494,6 @@ export class ComposerDockview {
         this.componentTreeInstance()?.updateSelectedComponent(updatedComponent);
         this.lastPropertyEdit.set({draft: this.stateSync.activeDraft()});
       }),
-      outputBinding<string>('statusMessage', message => {
-        if (message) {
-          this.logger.warn(message);
-        }
-      }),
     ];
   }
 
