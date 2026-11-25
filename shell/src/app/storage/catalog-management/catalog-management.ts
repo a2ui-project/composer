@@ -24,6 +24,7 @@ import {
   linkedSignal,
   resource,
   effect,
+  untracked,
 } from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {
@@ -109,13 +110,9 @@ export class CatalogManagement {
     }
   }
 
-  private resetHandshakeWatchdog(options?: {settle?: boolean}): void {
+  private resetHandshakeWatchdog(): void {
     this.clearWatchdogTimer();
     this.handshakeWindow = null;
-    if (options?.settle) {
-      this._isHandshakeInProgress.set(false);
-      this._handshakeState.set('settled');
-    }
   }
 
   /**
@@ -370,8 +367,9 @@ export class CatalogManagement {
    * neither `settleHandshakeError()` nor IndexedDB cache hydration marks a catalog
    * established here, and `syncResolutionGeneration()` resets it eagerly to `false` on every
    * resolved-URL change (so A -> B -> A switches cannot preserve a stale `true`). Only after
-   * a live `A2UI_CATALOG` response succeeds for the current URL may an unregistered secondary
-   * frame's watchdog expire silently.
+   * a live `A2UI_CATALOG` response succeeds for the current URL is a handshake cancelled
+   * silently when its frame is unregistered, or skipped for a frame that is already
+   * unregistered; otherwise the watchdog reports the missing catalog.
    */
   private readonly _hasEstablishedLiveCatalog = signal<boolean>(false);
 
@@ -495,10 +493,63 @@ export class CatalogManagement {
         }),
       )
       .subscribe();
+
+    // Not routed through the concatMap above: a cancellation must not wait
+    // behind an asynchronous catalog commit.
+    this.hostCommunication.windowUnregistered$
+      .pipe(takeUntilDestroyed())
+      .subscribe((unregisteredWindow: Window) => {
+        // The emission can originate in an effect cleanup; keep the signal
+        // reads and writes below out of any reactive context.
+        untracked(() => {
+          this.handleWindowUnregistered(unregisteredWindow);
+        });
+      });
+  }
+
+  /**
+   * Whether a live `A2UI_CATALOG` handshake succeeded for the renderer URL
+   * that is current right now, even if no effect has observed a URL change yet.
+   */
+  private hasLiveCatalogForCurrentUrl(): boolean {
+    this.syncResolutionGeneration();
+    return this._hasEstablishedLiveCatalog();
+  }
+
+  /**
+   * Ends the handshake that is waiting on `unregisteredWindow`, which can no
+   * longer answer. Only done when a live catalog is already established, so
+   * that nothing is left waiting on the outcome; otherwise the watchdog keeps
+   * running and reports the missing catalog.
+   */
+  private handleWindowUnregistered(unregisteredWindow: Window): void {
+    if (this.handshakeWindow !== unregisteredWindow) {
+      return;
+    }
+    if (!this._isHandshakeInProgress()) {
+      return;
+    }
+    if (!this.hasLiveCatalogForCurrentUrl()) {
+      return;
+    }
+    this.resetHandshakeWatchdog();
+    this._isHandshakeInProgress.set(false);
+    this._handshakeState.set('settled');
   }
 
   private handleRendererReady(envelope: MessageEnvelope) {
     const incomingWindow = envelope.sourceWindow ?? null;
+    // The announcement can wait in the concatMap behind an asynchronous
+    // catalog commit. If its frame was unregistered meanwhile, that
+    // notification has already passed and found no handshake to cancel, so a
+    // handshake started now could only time out.
+    if (
+      incomingWindow !== null &&
+      !this.hostCommunication.isRegisteredWindow(incomingWindow) &&
+      this.hasLiveCatalogForCurrentUrl()
+    ) {
+      return of(null);
+    }
     if (this._isHandshakeInProgress()) {
       const priorWindowDetached =
         this.handshakeWindow !== null &&
@@ -533,18 +584,6 @@ export class CatalogManagement {
     this.handshakeWindow = incomingWindow;
     this.watchdogTimerId = setTimeout(() => {
       if (this.watchdogTimerId === null) {
-        return;
-      }
-      // TODO(follow-up): Root-cause fix is cancelling the handshake on
-      // HostCommunication.unregisterIframe rather than checking registration when the
-      // 5s timer fires. Keep error reporting intact if no live catalog was established
-      // (including cache-only or prior failed handshakes) or the window is registered.
-      if (
-        this._hasEstablishedLiveCatalog() &&
-        this.handshakeWindow !== null &&
-        !this.hostCommunication.isRegisteredWindow(this.handshakeWindow)
-      ) {
-        this.resetHandshakeWatchdog({settle: true});
         return;
       }
       this._watchdogFired.set(true);

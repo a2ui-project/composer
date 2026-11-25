@@ -35,6 +35,7 @@ describe('CatalogManagement', () => {
   let hostCommunicationMock: {
     latestEnvelope: WritableSignal<MessageEnvelope | null>;
     messageStream$: Subject<MessageEnvelope>;
+    windowUnregistered$: Subject<Window>;
     sendMessage: ReturnType<typeof vi.fn>;
     isRegisteredWindow: ReturnType<typeof vi.fn>;
   };
@@ -56,6 +57,7 @@ describe('CatalogManagement', () => {
     hostCommunicationMock = {
       latestEnvelope: signal<MessageEnvelope | null>(null),
       messageStream$: new Subject<MessageEnvelope>(),
+      windowUnregistered$: new Subject<Window>(),
       sendMessage: vi.fn(),
       isRegisteredWindow: vi.fn().mockReturnValue(true),
     };
@@ -104,6 +106,45 @@ describe('CatalogManagement', () => {
     for (let i = 0; i < count; i++) {
       await Promise.resolve();
     }
+  }
+
+  /**
+   * Unregisters `target` the way HostCommunication.unregisterIframe does: the
+   * window leaves the registry first, then the notification is emitted.
+   */
+  function unregisterWindow(registered: Set<Window>, target: Window): void {
+    registered.delete(target);
+    hostCommunicationMock.windowUnregistered$.next(target);
+  }
+
+  /** Completes a live RENDERER_READY to A2UI_CATALOG handshake from `source`. */
+  async function establishLiveCatalog(source: Window, catalogId: string): Promise<void> {
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: 1,
+      sourceWindow: source,
+    });
+    TestBed.tick();
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      origin: 'http://localhost',
+      payload: {catalogId, protocolVersion: '1.0'},
+      timestamp: 2,
+      sourceWindow: source,
+    });
+    TestBed.tick();
+    await flushMicrotasks();
+  }
+
+  function announceRendererReady(source: Window): void {
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: 3,
+      sourceWindow: source,
+    });
+    TestBed.tick();
   }
 
   it('initializes successfully with handshake not in progress', () => {
@@ -1810,83 +1851,6 @@ describe('CatalogManagement', () => {
       });
     });
 
-    it('cancels stale watchdog without error when a secondary frame detaches after catalog receipt', async () => {
-      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
-      const win1 = {name: 'coordinator'} as unknown as Window;
-      const win2 = {name: 'evicted-card'} as unknown as Window;
-      const registered = new Set<Window>([win1]);
-      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
-
-      // Initial coordinator handshake completes cleanly
-      hostCommunicationMock.messageStream$.next({
-        type: PreviewBridgeMessageType.RENDERER_READY,
-        origin: 'http://localhost',
-        timestamp: 5201,
-        sourceWindow: win1,
-      });
-      TestBed.tick();
-      hostCommunicationMock.messageStream$.next({
-        type: PreviewBridgeMessageType.A2UI_CATALOG,
-        origin: 'http://localhost',
-        payload: {catalogId: 'coordinator-cat', protocolVersion: '1.0'},
-        timestamp: 5202,
-        sourceWindow: win1,
-      });
-      TestBed.tick();
-      await flushMicrotasks();
-      expect(service.hasReceivedCatalogResponse()).toBe(true);
-
-      // Secondary card mounts, starts handshake, then unmounts before answering
-      registered.add(win2);
-      hostCommunicationMock.messageStream$.next({
-        type: PreviewBridgeMessageType.RENDERER_READY,
-        origin: 'http://localhost',
-        timestamp: 5203,
-        sourceWindow: win2,
-      });
-      TestBed.tick();
-      expect(service.isHandshakeInProgress()).toBe(true);
-
-      registered.delete(win2);
-      vi.advanceTimersByTime(5000);
-
-      expect(errorSpy).not.toHaveBeenCalled();
-      expect(service.watchdogFired()).toBe(false);
-      expect(service.catalogError()).toBeNull();
-      expect(service.isHandshakeInProgress()).toBe(false);
-      expect(service.handshakeState()).toBe('settled');
-      errorSpy.mockRestore();
-    });
-
-    it('still fires watchdog error if an unregistered initial frame times out before any catalog receipt', () => {
-      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
-      const win1 = {name: 'coordinator'} as unknown as Window;
-      const registered = new Set<Window>([win1]);
-      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
-
-      hostCommunicationMock.messageStream$.next({
-        type: PreviewBridgeMessageType.RENDERER_READY,
-        origin: 'http://localhost',
-        timestamp: 5301,
-        sourceWindow: win1,
-      });
-      TestBed.tick();
-
-      registered.delete(win1);
-      vi.advanceTimersByTime(5000);
-
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
-        }),
-      );
-      expect(service.watchdogFired()).toBe(true);
-      expect(service.catalogError()).toBe(
-        'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
-      );
-      errorSpy.mockRestore();
-    });
-
     it('fires watchdog error when catalog is established and handshake window is still registered', async () => {
       const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
       const win1 = {name: 'coordinator'} as unknown as Window;
@@ -1972,7 +1936,7 @@ describe('CatalogManagement', () => {
         sourceWindow: win2,
       });
       TestBed.tick();
-      registered.delete(win2);
+      unregisterWindow(registered, win2);
       vi.advanceTimersByTime(5000);
 
       expect(errorSpy).toHaveBeenCalledWith(
@@ -2021,7 +1985,7 @@ describe('CatalogManagement', () => {
         sourceWindow: win2,
       });
       TestBed.tick();
-      registered.delete(win2);
+      unregisterWindow(registered, win2);
       vi.advanceTimersByTime(5000);
       expect(service.isHandshakeInProgress()).toBe(false);
       expect(errorSpy).not.toHaveBeenCalled();
@@ -2101,7 +2065,7 @@ describe('CatalogManagement', () => {
         sourceWindow: winA2,
       });
       TestBed.tick();
-      registered.delete(winA2);
+      unregisterWindow(registered, winA2);
       vi.advanceTimersByTime(5000);
 
       expect(errorSpy).toHaveBeenCalledWith(
@@ -2152,7 +2116,7 @@ describe('CatalogManagement', () => {
         sourceWindow: winCached,
       });
       TestBed.tick();
-      registered.delete(winCached);
+      unregisterWindow(registered, winCached);
       vi.advanceTimersByTime(5000);
 
       expect(errorSpy).toHaveBeenCalledWith(
@@ -2165,6 +2129,220 @@ describe('CatalogManagement', () => {
         'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
       );
       errorSpy.mockRestore();
+    });
+
+    it('clears the handshake at once when its window is unregistered after a live catalog', async () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const win1 = {name: 'coordinator'} as unknown as Window;
+      const win2 = {name: 'evicted-card'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      await establishLiveCatalog(win1, 'coordinator-cat');
+      registered.add(win2);
+      announceRendererReady(win2);
+      expect(service.isHandshakeInProgress()).toBe(true);
+      expect(service.handshakeState()).toBe('in-progress');
+
+      unregisterWindow(registered, win2);
+
+      // No timer has advanced: the handshake ends with the unregistration.
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.handshakeState()).toBe('settled');
+      expect(service.catalogError()).toBeNull();
+      expect(service.watchdogFired()).toBe(false);
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(service.activeCatalog()?.catalogId).toBe('coordinator-cat');
+
+      vi.advanceTimersByTime(5000);
+
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.handshakeState()).toBe('settled');
+      expect(service.catalogError()).toBeNull();
+      expect(service.watchdogFired()).toBe(false);
+      expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it('keeps the handshake when a different window is unregistered', async () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const win1 = {name: 'coordinator'} as unknown as Window;
+      const win2 = {name: 'stalled-card'} as unknown as Window;
+      const win3 = {name: 'other-card'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      await establishLiveCatalog(win1, 'coordinator-cat');
+      registered.add(win2);
+      registered.add(win3);
+      announceRendererReady(win2);
+
+      unregisterWindow(registered, win3);
+
+      expect(service.isHandshakeInProgress()).toBe(true);
+      expect(service.handshakeState()).toBe('in-progress');
+      expect(errorSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(5000);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+        }),
+      );
+      expect(service.watchdogFired()).toBe(true);
+      errorSpy.mockRestore();
+    });
+
+    it('keeps the watchdog running when the handshake window is unregistered before any live catalog', () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const win1 = {name: 'coordinator'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      announceRendererReady(win1);
+
+      unregisterWindow(registered, win1);
+
+      expect(service.isHandshakeInProgress()).toBe(true);
+      expect(service.handshakeState()).toBe('in-progress');
+      expect(errorSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(4999);
+      expect(errorSpy).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+        }),
+      );
+      expect(service.watchdogFired()).toBe(true);
+      expect(service.catalogError()).toBe(
+        'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+      );
+      errorSpy.mockRestore();
+    });
+
+    it('does not count a live catalog from the previous renderer URL', async () => {
+      const win1 = {name: 'previous-renderer'} as unknown as Window;
+      const win2 = {name: 'next-renderer'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      await establishLiveCatalog(win1, 'previous-cat');
+
+      // The URL moves on, and the new frame announces and is unregistered
+      // before any effect has observed the change.
+      resolvedUrlSignal.set('http://localhost/renderer-next');
+      startupResolutionMock.getResolvedRendererUrl.mockReturnValue(
+        'http://localhost/renderer-next',
+      );
+
+      registered.add(win2);
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 4,
+        sourceWindow: win2,
+      });
+      expect(service.isHandshakeInProgress()).toBe(true);
+
+      unregisterWindow(registered, win2);
+
+      expect(service.isHandshakeInProgress()).toBe(true);
+      expect(service.handshakeState()).toBe('in-progress');
+    });
+
+    it('does not start a handshake for a RENDERER_READY whose window was unregistered while it was queued', async () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const win1 = {name: 'coordinator'} as unknown as Window;
+      const win2 = {name: 'evicted-card'} as unknown as Window;
+      const registered = new Set<Window>([win1]);
+      hostCommunicationMock.isRegisteredWindow.mockImplementation((w: Window) => registered.has(w));
+
+      await establishLiveCatalog(win1, 'coordinator-cat');
+      hostCommunicationMock.sendMessage.mockClear();
+
+      // A second catalog from win1 starts an asynchronous commit. win2 then
+      // announces and is unregistered while its announcement waits behind it.
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        payload: {catalogId: 'coordinator-cat-2', protocolVersion: '1.0'},
+        timestamp: 5,
+        sourceWindow: win1,
+      });
+      registered.add(win2);
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 6,
+        sourceWindow: win2,
+      });
+      unregisterWindow(registered, win2);
+      expect(hostCommunicationMock.sendMessage).not.toHaveBeenCalled();
+
+      await flushMicrotasks();
+      TestBed.tick();
+
+      expect(service.activeCatalog()?.catalogId).toBe('coordinator-cat-2');
+      expect(hostCommunicationMock.sendMessage).not.toHaveBeenCalled();
+      expect(service.isHandshakeInProgress()).toBe(false);
+      expect(service.handshakeState()).toBe('settled');
+
+      vi.advanceTimersByTime(5000);
+
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(service.watchdogFired()).toBe(false);
+      expect(service.catalogError()).toBeNull();
+      expect(service.isHandshakeInProgress()).toBe(false);
+      errorSpy.mockRestore();
+    });
+
+    it('still starts a handshake for an unregistered window when no live catalog exists', () => {
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
+      const win1 = {name: 'unregistered-first-frame'} as unknown as Window;
+      hostCommunicationMock.isRegisteredWindow.mockReturnValue(false);
+
+      announceRendererReady(win1);
+
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.GET_CATALOG},
+        win1,
+      );
+      expect(service.isHandshakeInProgress()).toBe(true);
+
+      vi.advanceTimersByTime(5000);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+        }),
+      );
+      errorSpy.mockRestore();
+    });
+
+    it('still starts a handshake for a RENDERER_READY without a source window after a live catalog', async () => {
+      const win1 = {name: 'coordinator'} as unknown as Window;
+      hostCommunicationMock.isRegisteredWindow.mockReturnValue(false);
+
+      await establishLiveCatalog(win1, 'coordinator-cat');
+      hostCommunicationMock.sendMessage.mockClear();
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 7,
+      });
+      TestBed.tick();
+
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith({
+        type: PreviewBridgeMessageType.GET_CATALOG,
+      });
+      expect(service.isHandshakeInProgress()).toBe(true);
     });
   });
 

@@ -166,6 +166,25 @@ export class HostCommunication implements OnDestroy {
   readonly sendToServer$: Observable<SendToServerEnvelope> =
     this.sendToServerSubject.asObservable();
 
+  private readonly windowUnregisteredSubject = new Subject<Window>();
+  /**
+   * Emits a guest window when its last registration is removed, so that work
+   * waiting on that frame can stop instead of timing out. By the time a
+   * subscriber runs, `isRegisteredWindow` already returns false for it. A
+   * window that stays registered through another target, a target that was
+   * never registered and a repeated unregistration do not emit. Clearing the
+   * registry with `registerIframe(null)` emits each window it held. Past
+   * emissions are not replayed to late subscribers.
+   *
+   * A window that is dropped because its element was registered again, or
+   * because the element's remembered window was replaced in place when a new
+   * document announced itself, does not emit either: the element is still
+   * registered. A handshake waiting on such a window is therefore not
+   * cancelled. If the new document does not announce RENDERER_READY within
+   * the watchdog period, the watchdog error is reported.
+   */
+  readonly windowUnregistered$: Observable<Window> = this.windowUnregisteredSubject.asObservable();
+
   /** Stream of incoming callAgentFunction invocations */
   readonly callAgentFunction$ = this.sendToServer$.pipe(
     filter(
@@ -708,6 +727,13 @@ export class HostCommunication implements OnDestroy {
     defaultTarget = DefaultTarget.REPLACE,
   ): void {
     if (!target) {
+      const unregisteredWindows = new Set<Window>(this.registeredWindows);
+      for (const iframe of this.registeredIframes) {
+        const iframeWindow = this.iframeWindows.get(iframe) ?? iframe.contentWindow;
+        if (iframeWindow) {
+          unregisteredWindows.add(iframeWindow);
+        }
+      }
       this.outboundMessageBuffer.length = 0;
       this.iframeElement = null;
       this.iframeWindow = null;
@@ -718,6 +744,9 @@ export class HostCommunication implements OnDestroy {
       this.readyWindows.clear();
       this.earlyMessageBuffer.length = 0;
       this.isRendererReadySignal.set(false);
+      for (const unregisteredWindow of unregisteredWindows) {
+        this.windowUnregisteredSubject.next(unregisteredWindow);
+      }
       return;
     }
 
@@ -775,8 +804,10 @@ export class HostCommunication implements OnDestroy {
     if (!target) return;
     let targetWindow: Window | null = null;
     let wasDefaultTarget = false;
+    let wasRegistered = false;
     if (this.isIframeElement(target)) {
       targetWindow = this.iframeWindows.get(target) ?? target.contentWindow;
+      wasRegistered = targetWindow !== null && this.isRegisteredWindow(targetWindow);
       this.iframeWindows.delete(target);
       this.registeredIframes.delete(target);
       if (this.iframeElement === target) {
@@ -792,6 +823,7 @@ export class HostCommunication implements OnDestroy {
     } else {
       // Target is a direct Window reference (e.g. external popout or window-only test target).
       targetWindow = target;
+      wasRegistered = this.isRegisteredWindow(target);
       this.registeredWindows.delete(target);
       if (this.iframeWindow === target) {
         wasDefaultTarget = true;
@@ -822,6 +854,10 @@ export class HostCommunication implements OnDestroy {
       if (this.isTargetReady(undefined)) {
         this.flushOutboundMessages();
       }
+    }
+    // Last, so that subscribers observe the registry in its final state.
+    if (targetWindow && wasRegistered && !this.isRegisteredWindow(targetWindow)) {
+      this.windowUnregisteredSubject.next(targetWindow);
     }
   }
 
@@ -954,6 +990,7 @@ export class HostCommunication implements OnDestroy {
     this.hasExplicitDefaultTarget = false;
     this.messageStreamSubject.complete();
     this.sendToServerSubject.complete();
+    this.windowUnregisteredSubject.complete();
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
     }

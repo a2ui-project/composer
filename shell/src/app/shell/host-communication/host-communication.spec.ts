@@ -1716,6 +1716,117 @@ describe('HostCommunication', () => {
       expect(service.isRendererReady()).toBe(false);
     });
 
+    it('emits the window on windowUnregistered$ once its iframe is unregistered', () => {
+      const frameWindow = {postMessage: vi.fn()} as unknown as Window;
+      const frame = {contentWindow: frameWindow} as unknown as HTMLIFrameElement;
+      const emitted: Window[] = [];
+      const registeredAtEmission: boolean[] = [];
+      const subscription = service.windowUnregistered$.subscribe(unregistered => {
+        emitted.push(unregistered);
+        registeredAtEmission.push(service.isRegisteredWindow(unregistered));
+      });
+
+      service.registerIframe(frame);
+      expect(emitted).toEqual([]);
+
+      service.unregisterIframe(frame);
+
+      expect(emitted).toEqual([frameWindow]);
+      expect(registeredAtEmission).toEqual([false]);
+      subscription.unsubscribe();
+    });
+
+    it('emits the remembered window for an iframe detached before unregisterIframe', () => {
+      const detachedWindow = {postMessage: vi.fn()} as unknown as Window;
+      const detachedIframe: {contentWindow: Window | null} = {contentWindow: detachedWindow};
+      const emitted: Window[] = [];
+      const subscription = service.windowUnregistered$.subscribe(unregistered => {
+        emitted.push(unregistered);
+      });
+
+      service.registerIframe(detachedIframe as unknown as HTMLIFrameElement);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: detachedWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      detachedIframe.contentWindow = null;
+      service.unregisterIframe(detachedIframe as unknown as HTMLIFrameElement);
+
+      expect(emitted).toEqual([detachedWindow]);
+      subscription.unsubscribe();
+    });
+
+    it('does not emit on windowUnregistered$ while another registration holds the window', () => {
+      const sharedWindow = {postMessage: vi.fn()} as unknown as Window;
+      const frame = {contentWindow: sharedWindow} as unknown as HTMLIFrameElement;
+      const emitted: Window[] = [];
+      const subscription = service.windowUnregistered$.subscribe(unregistered => {
+        emitted.push(unregistered);
+      });
+
+      service.registerIframe(frame);
+      service.registerIframe(sharedWindow);
+
+      service.unregisterIframe(sharedWindow);
+      expect(emitted).toEqual([]);
+      expect(service.isRegisteredWindow(sharedWindow)).toBe(true);
+
+      service.unregisterIframe(frame);
+      expect(emitted).toEqual([sharedWindow]);
+      subscription.unsubscribe();
+    });
+
+    it('does not emit on windowUnregistered$ for an unknown or already removed target', () => {
+      const unknownWindow = {postMessage: vi.fn()} as unknown as Window;
+      const unknownFrame = {
+        contentWindow: {postMessage: vi.fn()} as unknown as Window,
+      } as unknown as HTMLIFrameElement;
+      const frameWindow = {postMessage: vi.fn()} as unknown as Window;
+      const frame = {contentWindow: frameWindow} as unknown as HTMLIFrameElement;
+      const emitted: Window[] = [];
+      const subscription = service.windowUnregistered$.subscribe(unregistered => {
+        emitted.push(unregistered);
+      });
+
+      service.unregisterIframe(unknownWindow);
+      service.unregisterIframe(unknownFrame);
+      expect(emitted).toEqual([]);
+
+      service.registerIframe(frame);
+      service.unregisterIframe(frame);
+      service.unregisterIframe(frame);
+
+      expect(emitted).toEqual([frameWindow]);
+      subscription.unsubscribe();
+    });
+
+    it('emits every registered window on windowUnregistered$ when registerIframe(null) clears the registry', () => {
+      const frameWindow = {postMessage: vi.fn()} as unknown as Window;
+      const frame = {contentWindow: frameWindow} as unknown as HTMLIFrameElement;
+      const popoutWindow = {postMessage: vi.fn()} as unknown as Window;
+      const emitted: Window[] = [];
+      const registeredAtEmission: boolean[] = [];
+      const subscription = service.windowUnregistered$.subscribe(unregistered => {
+        emitted.push(unregistered);
+        registeredAtEmission.push(service.isRegisteredWindow(unregistered));
+      });
+
+      service.registerIframe(frame);
+      service.registerIframe(popoutWindow);
+      service.registerIframe(null);
+
+      expect(emitted).toHaveLength(2);
+      expect(emitted).toEqual(expect.arrayContaining([frameWindow, popoutWindow]));
+      expect(registeredAtEmission).toEqual([false, false]);
+
+      service.registerIframe(null);
+      expect(emitted).toHaveLength(2);
+      subscription.unsubscribe();
+    });
+
     it('queues an untargeted message while the default iframe is detached rather than dropping it', () => {
       const inlineWindow = {postMessage: vi.fn()} as unknown as Window;
       const inlineIframe = {contentWindow: inlineWindow} as unknown as HTMLIFrameElement;

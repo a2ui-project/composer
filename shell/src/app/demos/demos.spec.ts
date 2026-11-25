@@ -19,7 +19,7 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal} from '@angular/core';
 import {describe, it, expect, afterEach, beforeEach, vi} from 'vitest';
-import {ReplaySubject} from 'rxjs';
+import {ReplaySubject, Subject} from 'rxjs';
 import {Demos, MAX_MOUNTED_CARDS} from './demos';
 import {DemoCardHarness} from './test/demo-card.harness';
 import {DemosHarness} from './test/demos.harness';
@@ -46,8 +46,12 @@ class MockHostCommunication {
   getDefaultTargetWindow = vi.fn(() => null);
   registerIframe = vi.fn();
   unregisterIframe = vi.fn();
+  // The real service always has this. Every frame that announces here is a
+  // mounted DemoCard frame, which GuestFrame registers.
+  isRegisteredWindow = vi.fn((_targetWindow: Window): boolean => true);
   sendTheme = vi.fn();
   readonly messageStream$ = new ReplaySubject<unknown>(1);
+  readonly windowUnregistered$ = new Subject<Window>();
   readonly messageStream = signal(null);
 }
 
