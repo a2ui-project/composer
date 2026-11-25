@@ -2672,8 +2672,130 @@ I'll output bad JSON.
       expect(llmClientMock.chatStream).toHaveBeenCalledTimes(2);
       const [secondCallMessages] = llmClientMock.chatStream.mock.calls[1];
       expect(secondCallMessages[0].content).toContain('slack-v10-catalog');
+      expect(secondCallMessages[0].content).toContain(
+        'emit a single complete createSurface message with inline components and dataModel',
+      );
+      expect(secondCallMessages[0].content).not.toContain(
+        'createSurface/updateComponents/updateDataModel',
+      );
+      expect(secondCallMessages[0].content).not.toContain('IMPORTANT: Replace the current UI');
       expect(stateSyncMock.activeDraft()).toContain('SlackSection');
       expect(stateSyncMock.activeDraft()).not.toContain('Car Rental');
+    });
+
+    it('keeps edited v1.0 layout snapshot and uses v0.9 switch suffix when switching to a v0.9-only renderer (T5, T10)', async () => {
+      configureDualRenderer();
+      const editedV10Draft = JSON.stringify([
+        {
+          version: '1.0',
+          createSurface: {
+            surfaceId: 'edited-v10',
+            catalogId: v10Catalog['$id'],
+            components: [{id: 'root', component: 'Text', text: 'User Edited v1.0'}],
+          },
+        },
+      ]);
+      stateSyncMock.activeDraftSignal.set(editedV10Draft);
+      stateSyncMock.hasEditedDraft.mockReturnValue(true);
+      chatStateMock.setChatHistory([
+        {role: MessageRole.USER, content: editedV10Draft, isSnapshot: true},
+      ]);
+
+      const slackV09Catalog: CatalogJson = {
+        catalogId: 'slack-v09-catalog',
+        protocolVersion: '0.9',
+        components: {SlackSection: {type: 'object'}},
+      };
+      rendererSelection.selectRenderer.mockImplementation(async () => {
+        activeCatalogSignal.set(slackV09Catalog);
+        activeCatalogsSignal.set([slackV09Catalog]);
+        activeProtocolVersionSignal.set('v0.9');
+        configProviderMock.rendererUrl.set('samples/react-slack-catalog/');
+      });
+      const v09SlackPayload =
+        '{"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"slack-v09-catalog"}}\n' +
+        '{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"SlackSection"}]}}';
+      llmClientMock.chatStream = vi
+        .fn()
+        .mockResolvedValueOnce(toolStream())
+        .mockResolvedValueOnce({
+          contentStream: createMockStream([v09SlackPayload]),
+          complete: Promise.resolve(v09SlackPayload),
+        });
+
+      await service.submitPrompt('Send this to Slack');
+
+      expect(llmClientMock.chatStream).toHaveBeenCalledTimes(2);
+      const [secondCallMessages] = llmClientMock.chatStream.mock.calls[1];
+      expect(secondCallMessages[0].content).toContain('slack-v09-catalog');
+      expect(secondCallMessages[0].content).toContain(
+        'emit a complete createSurface/updateComponents/updateDataModel sequence',
+      );
+      expect(secondCallMessages[0].content).not.toContain('IMPORTANT: Replace the current UI');
+      expect(secondCallMessages.some(m => m.content === editedV10Draft)).toBe(true);
+    });
+
+    it('keeps local unsupported-version refusals visible in chatHistory while excluding them from later LLM requests', async () => {
+      configureV10OnlyRenderer();
+      await service.submitPrompt('Build a v0.9 form');
+
+      const v10Response =
+        '{"version":"1.0","createSurface":{"surfaceId":"main","catalogId":"https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json","components":[{"id":"root","component":"Text","text":"Hi"}]}}';
+      llmClientMock.chatStream = vi.fn(async () => ({
+        contentStream: createMockStream([v10Response]),
+        complete: Promise.resolve(v10Response),
+      }));
+
+      await service.submitPrompt('Build a login form');
+
+      expect(llmClientMock.chatStream).toHaveBeenCalledTimes(1);
+      const [nextMessages] = llmClientMock.chatStream.mock.calls[0];
+      expect(nextMessages.some(m => m.content === 'Build a v0.9 form')).toBe(false);
+      expect(nextMessages.some(m => m.content.includes('supports A2UI v1.0 only'))).toBe(false);
+      expect(nextMessages.some(m => m.content === 'Build a login form')).toBe(true);
+
+      const history = chatStateMock.chatHistory();
+      expect(history.some(m => m.content === 'Build a v0.9 form')).toBe(true);
+      expect(history.some(m => m.content.includes('supports A2UI v1.0 only'))).toBe(true);
+    });
+
+    it('excludes switchRenderer unsupported-version refusal pairs from later LLM requests while keeping them in chatHistory', async () => {
+      configureDualRenderer();
+      rendererSelection.selectRenderer.mockImplementation(async () => {
+        activeCatalogSignal.set(v10Catalog);
+        activeCatalogsSignal.set([v10Catalog]);
+        activeProtocolVersionSignal.set('v1.0');
+        configProviderMock.rendererUrl.set('samples/react-slack-catalog/');
+      });
+      const v10Response =
+        '{"version":"1.0","createSurface":{"surfaceId":"main","catalogId":"https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json","components":[{"id":"root","component":"Text","text":"Hi"}]}}';
+      llmClientMock.chatStream = vi
+        .fn()
+        .mockResolvedValueOnce(toolStream())
+        .mockResolvedValueOnce({
+          contentStream: createMockStream([v10Response]),
+          complete: Promise.resolve(v10Response),
+        });
+
+      await service.submitPrompt('Make a v0.9 card on the target renderer');
+      expect(llmClientMock.chatStream).toHaveBeenCalledTimes(1);
+      expect(
+        chatStateMock.chatHistory().some(m => m.content.includes('supports A2UI v1.0 only')),
+      ).toBe(true);
+
+      await service.submitPrompt('Build a login form');
+
+      expect(llmClientMock.chatStream).toHaveBeenCalledTimes(2);
+      const [followUpMessages] = llmClientMock.chatStream.mock.calls[1];
+      expect(
+        followUpMessages.some(m => m.content === 'Make a v0.9 card on the target renderer'),
+      ).toBe(false);
+      expect(followUpMessages.some(m => m.content.includes('supports A2UI v1.0 only'))).toBe(false);
+      expect(followUpMessages.some(m => m.content === 'Build a login form')).toBe(true);
+
+      const history = chatStateMock.chatHistory();
+      expect(history.some(m => m.content === 'Make a v0.9 card on the target renderer')).toBe(true);
+      expect(history.some(m => m.content.includes('supports A2UI v1.0 only'))).toBe(true);
     });
 
     it('validates and heals non-default v0.9 LLM output against v0.9 catalogs instead of default v1.0 catalogs (I3)', async () => {

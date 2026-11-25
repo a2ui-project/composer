@@ -19,7 +19,7 @@ import {Catalog, CatalogJson} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/v1-0/common-types-schema';
 import {catalogSupportsMcp, McpServerConfig} from '../../mcp/mcp-client-manager.service';
 import {
-  formatDraftReplacementInstruction,
+  buildPromptTrailingSuffix,
   PromptProtocolStrategy,
   PromptStrategyOptions,
   stripReturnTypeDeep,
@@ -53,6 +53,8 @@ const MINIFIED_COMMON_TYPES_SCHEMA = JSON.stringify(stripReturnTypeDeep(COMMON_T
 })
 export class V10PromptStrategy implements PromptProtocolStrategy {
   readonly protocolVersion = 'v1.0' as const;
+  readonly rendererSelectedInstruction =
+    'The renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a single complete createSurface message with inline components and dataModel.';
 
   /**
    * Constructs a system prompt enforcing A2UI v1.0 JSONL message formatting,
@@ -87,9 +89,7 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
       ? `\n\n## Custom User Instructions\n\n${customInstructionsText}`
       : '';
 
-    const replacementSuffix = options.replacesDraft
-      ? `\n\n${formatDraftReplacementInstruction(this.protocolVersion)}`
-      : '';
+    const trailingSuffix = buildPromptTrailingSuffix(this, options);
 
     let promptBody: string;
     if (catalogs.length === 0) {
@@ -117,7 +117,7 @@ export class V10PromptStrategy implements PromptProtocolStrategy {
         ) + mcpInstructions;
     }
 
-    return `${promptBody.trimEnd()}${customPromptSuffix}${replacementSuffix}`;
+    return `${promptBody.trimEnd()}${customPromptSuffix}${trailingSuffix}`;
   }
 
   /**

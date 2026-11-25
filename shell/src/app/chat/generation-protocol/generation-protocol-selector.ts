@@ -34,7 +34,7 @@ const DOTLESS_SHORTHAND = String.raw`(?:09|10)`;
 const KEYWORD_LEFT_BOUNDARY = String.raw`(?<![.$\w?&=-])`;
 const KEYWORD = String.raw`(?:a2ui|version|protocol|spec)`;
 const KEYWORD_SEPARATOR = String.raw`(?:\s*:\s*|\s+)`;
-const STANDALONE_LEFT_BOUNDARY = String.raw`(?<![.$\w])`;
+const STANDALONE_LEFT_BOUNDARY = String.raw`(?<![.$\w/=?&])(?<![a-zA-Z]-)`;
 const TRAILING_BOUNDARY = String.raw`(?!\w|\.\d)`;
 
 const KEYWORD_FORM = String.raw`${KEYWORD_LEFT_BOUNDARY}${KEYWORD}${KEYWORD_SEPARATOR}(?:v(?<${VERSION_GROUP.keywordPrefixed}>${DOTTED_VERSION}|${DOTLESS_SHORTHAND})|(?<${VERSION_GROUP.keywordBare}>${DOTTED_VERSION}))`;
@@ -57,7 +57,11 @@ const STANDALONE_FORM = String.raw`${STANDALONE_LEFT_BOUNDARY}v(?<${VERSION_GROU
 //      regeneration or refusal.
 //    - Pre-existing UI prose like `"version 1.0"` still matches (accepted).
 // 2. Standalone form (`STANDALONE_FORM`): `v`-prefixed dotted/underscored `0.9`/`1.0`, protected by
-//    `STANDALONE_LEFT_BOUNDARY` against preceding `.`, `$`, or `\w`.
+//    `STANDALONE_LEFT_BOUNDARY` against preceding `.`, `$`, `\w`, `/`, `=`, `?`, `&`, and letter-
+//    prefixed hyphens (`[a-zA-Z]-`), blocking URLs/paths/query params/CSS identifiers
+//    (`https://api.example.com/v1.0/orders`, `/v0.9/users`, `?version=v1.0`, `icon-v1.0`,
+//    `@a2ui/web_core/v0_9`) while still allowing digit-preceded hyphenated ranges (`v0.9-v1.0`,
+//    `version 0.9-v1.0`).
 // Both forms share `TRAILING_BOUNDARY`, which rejects trailing `\w` and `.\d` (blocking `0.95`,
 // `1.0.2`, `v0.9_foo`, `a2ui v10.5`, `a2ui v100`), while hyphenated descriptors (`v1.0-card`,
 // `version: 1.0-beta`, `a2ui v10-beta`) match and are accepted. Ranges with a bare second endpoint

@@ -43,6 +43,14 @@ export declare interface CustomInstructionsState {
   activePresetId: string | null;
 }
 
+/** Options accepted by `ChatPromptFactory.buildSystemPrompt`. */
+export interface BuildSystemPromptOptions {
+  readonly protocolVersion?: A2uiProtocolVersion;
+  readonly replacesDraft?: boolean;
+  readonly rendererSelected?: boolean;
+  readonly includeMultimodalGuidelines?: boolean;
+}
+
 /**
  * Constructs dynamic system prompts based on the active protocol version, catalog schemas, and MCP state.
  */
@@ -81,12 +89,8 @@ export class ChatPromptFactory {
    * Builds the system prompt for a specific protocol version and optional
    * draft-replacement / multimodal guidelines.
    */
-  buildSystemPrompt(options?: {
-    protocolVersion?: A2uiProtocolVersion;
-    replacesDraft?: boolean;
-    includeMultimodalGuidelines?: boolean;
-  }): string {
-    if (options?.protocolVersion || options?.replacesDraft) {
+  buildSystemPrompt(options?: BuildSystemPromptOptions): string {
+    if (options?.protocolVersion || options?.replacesDraft || options?.rendererSelected) {
       return this.composeSystemPrompt(options);
     }
     return options?.includeMultimodalGuidelines
@@ -94,11 +98,7 @@ export class ChatPromptFactory {
       : this.textOnlySystemPrompt();
   }
 
-  private composeSystemPrompt(options?: {
-    protocolVersion?: A2uiProtocolVersion;
-    replacesDraft?: boolean;
-    includeMultimodalGuidelines?: boolean;
-  }): string {
+  private composeSystemPrompt(options?: BuildSystemPromptOptions): string {
     const support = this.catalogManagement.protocolSupport();
     const version = options?.protocolVersion ?? support.defaultVersion;
     const {primary: effectivePrimary, catalogs: effectiveCatalogs} = selectCatalogsForVersion(
@@ -120,6 +120,7 @@ export class ChatPromptFactory {
       customInstructions: this.customInstructions(),
       includeMultimodalGuidelines: Boolean(options?.includeMultimodalGuidelines),
       replacesDraft: Boolean(options?.replacesDraft),
+      rendererSelected: Boolean(options?.rendererSelected),
     });
   }
 

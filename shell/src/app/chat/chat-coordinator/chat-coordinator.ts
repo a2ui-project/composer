@@ -179,6 +179,7 @@ export class ChatCoordinator {
   private buildSystemPromptFor(
     protocolVersion: A2uiProtocolVersion,
     replacesDraft: boolean,
+    rendererSelected = false,
   ): string {
     const hasImageAttachment = this.conversationalMessages().some(m =>
       m.attachments?.some(a => this.isImageAttachment(a)),
@@ -186,6 +187,7 @@ export class ChatCoordinator {
     return this.promptFactory.buildSystemPrompt({
       protocolVersion,
       replacesDraft,
+      rendererSelected,
       includeMultimodalGuidelines: hasImageAttachment,
     });
   }
@@ -288,6 +290,7 @@ export class ChatCoordinator {
     if (msg.role === MessageRole.MODEL) {
       return (
         Boolean(msg.isCancelled) ||
+        Boolean(msg.isRefusal) ||
         msg.content === STOPPED_RESPONSE_MESSAGE ||
         msg.content === RENDERER_CHANGED_NOTE ||
         Boolean(msg.parseError)
@@ -498,6 +501,7 @@ export class ChatCoordinator {
           role: MessageRole.MODEL,
           content: refusal,
           promptId: options?.promptId,
+          isRefusal: true,
         },
       ]);
       return;
@@ -819,13 +823,14 @@ export class ChatCoordinator {
         content: formatUnsupportedGenerationMessage(decision.requested, decision.supported),
         thinking: '',
         promptId: run.promptId,
+        isRefusal: true,
       });
       this.finalizeStream(PipelineStatus.IDLE);
       return null;
     }
     run.protocolVersion = decision.version;
     run.replacesDraft = decision.replacesDraft;
-    const dropLayoutSnapshots = replacesSample || run.replacesDraft;
+    const dropLayoutSnapshots = replacesSample;
 
     // Clear what the first request streamed before it asked to switch, so a next request
     // that fails doesn't leave it showing.
@@ -841,9 +846,7 @@ export class ChatCoordinator {
     const nextContext: LlmMessage[] = [
       {
         role: MessageRole.SYSTEM,
-        content:
-          this.buildSystemPromptFor(run.protocolVersion, run.replacesDraft) +
-          '\nThe renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a complete createSurface/updateComponents/updateDataModel sequence.',
+        content: this.buildSystemPromptFor(run.protocolVersion, run.replacesDraft, true),
       },
       ...run.context.filter(
         message =>

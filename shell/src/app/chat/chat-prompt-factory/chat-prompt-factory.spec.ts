@@ -878,5 +878,32 @@ describe('ChatPromptFactory', () => {
       expect(replacePrompt).toContain('createSurface');
       expect(replacePrompt).not.toContain('The user requested replacing');
     });
+
+    it('appends version-specific rendererSelected suffix without duplicating draft replacement instruction', () => {
+      activeCatalogSignal.set(v10Basic);
+      announcedCatalogsSignal.set([v10Basic, v09Composer]);
+      activeProtocolVersionSignal.set('v1.0');
+
+      const v09SwitchPrompt = service.buildSystemPrompt({
+        protocolVersion: 'v0.9',
+        replacesDraft: true,
+        rendererSelected: true,
+      });
+      expect(v09SwitchPrompt).toContain(
+        'The renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a complete createSurface/updateComponents/updateDataModel sequence.',
+      );
+      expect(v09SwitchPrompt).not.toContain('IMPORTANT: Replace the current UI');
+
+      const v10SwitchPrompt = service.buildSystemPrompt({
+        protocolVersion: 'v1.0',
+        replacesDraft: true,
+        rendererSelected: true,
+      });
+      expect(v10SwitchPrompt).toContain(
+        'The renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a single complete createSurface message with inline components and dataModel.',
+      );
+      expect(v10SwitchPrompt).not.toContain('createSurface/updateComponents/updateDataModel');
+      expect(v10SwitchPrompt).not.toContain('IMPORTANT: Replace the current UI');
+    });
   });
 });

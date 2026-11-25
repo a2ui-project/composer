@@ -34,6 +34,8 @@ export declare interface PromptStrategyOptions {
   includeMultimodalGuidelines?: boolean;
   /** Whether the model should replace the active draft rather than patch it. */
   replacesDraft?: boolean;
+  /** Whether the prompt follows a model-initiated switchRenderer tool call. */
+  rendererSelected?: boolean;
 }
 
 /**
@@ -51,6 +53,9 @@ export declare interface PromptProtocolStrategy {
   /** Protocol version supported by this strategy (e.g. 'v0.9' or 'v1.0'). */
   readonly protocolVersion: A2uiProtocolVersion;
 
+  /** Version-appropriate instruction appended after a model-initiated `switchRenderer` tool call. */
+  readonly rendererSelectedInstruction: string;
+
   /**
    * Constructs the full system prompt tailored to the protocol version, active catalog schemas,
    * available MCP tools, and optional multimodal guidelines.
@@ -59,6 +64,22 @@ export declare interface PromptProtocolStrategy {
    * @returns Complete system prompt string ready for LLM consumption.
    */
   buildSystemPrompt(options: PromptStrategyOptions): string;
+}
+
+/**
+ * Builds the trailing prompt suffix for either a model-initiated renderer switch or a
+ * standalone draft replacement, avoiding duplicated replacement instructions when both apply.
+ */
+export function buildPromptTrailingSuffix(
+  strategy: Pick<PromptProtocolStrategy, 'protocolVersion' | 'rendererSelectedInstruction'>,
+  options: Pick<PromptStrategyOptions, 'replacesDraft' | 'rendererSelected'>,
+): string {
+  if (options.rendererSelected) {
+    return `\n${strategy.rendererSelectedInstruction}`;
+  }
+  return options.replacesDraft
+    ? `\n\n${formatDraftReplacementInstruction(strategy.protocolVersion)}`
+    : '';
 }
 
 const FORBIDDEN_PROPERTIES = new Set(['returnType', '__proto__', 'constructor', 'prototype']);

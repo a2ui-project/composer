@@ -253,6 +253,11 @@ describe('generation-protocol-selector', () => {
       'subversion 1.0',
       'Style the spec-1.0-card',
       'Style the version-v10-button',
+      'Bind the form to https://api.example.com/v1.0/orders',
+      'GET /v0.9/users',
+      '?version=v1.0',
+      'icon-v1.0',
+      '@a2ui/web_core/v0_9',
     ])('ignores = and - keyword separators and compound/URL left boundaries: %j', input => {
       expect(requestedVersions(input)).toEqual([]);
     });

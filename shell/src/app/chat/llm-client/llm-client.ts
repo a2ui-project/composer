@@ -91,6 +91,9 @@ export declare interface LlmMessage {
   /** Indicates whether the model turn was stopped/cancelled by the user before completion. */
   readonly isCancelled?: boolean;
 
+  /** Indicates whether the model turn is a local refusal kept visible in chat but excluded from LLM context. */
+  readonly isRefusal?: boolean;
+
   /** The total count of recognized A2UI components contained in this message, or null/undefined if uncounted. */
   readonly componentCount?: number | null;
 }
