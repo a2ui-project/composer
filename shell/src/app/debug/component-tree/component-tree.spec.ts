@@ -141,6 +141,7 @@ describe('ComponentTree', () => {
     fixture.detectChanges();
 
     expect(await harness.getErrorMessage()).toContain('The A2UI JSON is invalid:');
+    expect(await harness.getTrees()).toEqual([]);
     expect(await harness.getRowIds()).toEqual([]);
   });
 
@@ -149,6 +150,7 @@ describe('ComponentTree', () => {
     fixture.detectChanges();
 
     expect(await harness.getMessages()).toEqual(['No surfaces.']);
+    expect(await harness.getTrees()).toEqual([]);
     expect(await harness.getRowIds()).toEqual([]);
   });
 
@@ -185,7 +187,13 @@ describe('ComponentTree', () => {
 
     expect(await harness.getMessages()).toEqual(['No root component.']);
     expect(await harness.hasUnreachableHeader()).toBe(true);
-    expect(await harness.getRowIds()).toEqual(['#orphan']);
+    expect(await harness.getTrees()).toEqual([
+      {
+        label: 'Surface s, not reachable from root',
+        rowIds: ['#orphan'],
+        tabStops: ['#orphan'],
+      },
+    ]);
   });
 
   it('collapses and re-expands child rows when toggling a branch node', async () => {
@@ -514,6 +522,82 @@ describe('ComponentTree', () => {
 
         await harness.pressKeyOnRow('#modal', TestKey.RIGHT_ARROW);
         expect(await harness.getFocusedRowId()).toBe('#open');
+      });
+
+      it('labels each surface and unreachable section as its own tree with independent tab stops', async () => {
+        activeDraft.set(
+          formatJson([
+            {
+              version: '1.0',
+              createSurface: {
+                surfaceId: 'first',
+                catalogId: 'primary-catalog',
+                components: [
+                  {id: 'root', component: 'Column', children: ['childA']},
+                  {id: 'childA', component: 'Text', text: 'A'},
+                  {id: 'orphan', component: 'Text', text: 'Orphan'},
+                ],
+              },
+            },
+            {
+              version: '1.0',
+              createSurface: {
+                surfaceId: 'second',
+                catalogId: 'primary-catalog',
+                components: [{id: 'root', component: 'Text', text: 'B'}],
+              },
+            },
+          ]),
+        );
+        fixture.detectChanges();
+
+        await harness.focusRow('#childA');
+
+        expect(await harness.getTrees()).toEqual([
+          {label: 'Surface first', rowIds: ['#root', '#childA'], tabStops: ['#childA']},
+          {
+            label: 'Surface first, not reachable from root',
+            rowIds: ['#orphan'],
+            tabStops: ['#orphan'],
+          },
+          {label: 'Surface second', rowIds: ['#root'], tabStops: ['#root']},
+        ]);
+      });
+
+      it('scopes ArrowDown and ArrowUp navigation to the active tree', async () => {
+        activeDraft.set(
+          formatJson([
+            {
+              version: '1.0',
+              createSurface: {
+                surfaceId: 'first',
+                catalogId: 'primary-catalog',
+                components: [
+                  {id: 'root', component: 'Text', text: 'A'},
+                  {id: 'orphan', component: 'Text', text: 'Orphan'},
+                ],
+              },
+            },
+            {
+              version: '1.0',
+              createSurface: {
+                surfaceId: 'second',
+                catalogId: 'primary-catalog',
+                components: [{id: 'root', component: 'Text', text: 'B'}],
+              },
+            },
+          ]),
+        );
+        fixture.detectChanges();
+
+        await harness.pressKeyOnRow('#root', TestKey.DOWN_ARROW, 0);
+        expect((await harness.getRows()).map(row => row.focused)).toEqual([true, false, false]);
+
+        await harness.pressKeyOnRow('#orphan', TestKey.UP_ARROW);
+        expect(await harness.getFocusedRowId()).toBe('#orphan');
+
+        await harness.pressKeyOnRow('#root', TestKey.UP_ARROW, 1);
+        expect((await harness.getRows()).map(row => row.focused)).toEqual([false, false, true]);
       });
     });
   });

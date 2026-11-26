@@ -14,7 +14,7 @@
  limitations under the License.
 -->
 
-<div class="component-tree-container" role="tree" aria-label="A2UI component tree">
+<div class="component-tree-container">
   @if (parseError(); as error) {
     <div class="tree-message error">The A2UI JSON is invalid: {{ error }}</div>
   } @else if (trees().length === 0) {
@@ -32,22 +32,29 @@
       </div>
 
       @if (tree.root; as root) {
-        <ng-container
-          [ngTemplateOutlet]="nodeTemplate"
-          [ngTemplateOutletContext]="{$implicit: root, surfaceId: tree.surfaceId, depth: 0}"
-        ></ng-container>
+        <div role="tree" [attr.aria-label]="'Surface ' + tree.surfaceId">
+          <ng-container
+            [ngTemplateOutlet]="nodeTemplate"
+            [ngTemplateOutletContext]="{$implicit: root, surfaceId: tree.surfaceId, depth: 0}"
+          ></ng-container>
+        </div>
       } @else {
         <div class="tree-message">No <code>root</code> component.</div>
       }
 
       @if (tree.unreachable.length > 0) {
         <div class="unreachable-header">Not reachable from <code>root</code></div>
-        @for (node of tree.unreachable; track node.key) {
-          <ng-container
-            [ngTemplateOutlet]="nodeTemplate"
-            [ngTemplateOutletContext]="{$implicit: node, surfaceId: tree.surfaceId, depth: 0}"
-          ></ng-container>
-        }
+        <div
+          role="tree"
+          [attr.aria-label]="'Surface ' + tree.surfaceId + ', not reachable from root'"
+        >
+          @for (node of tree.unreachable; track node.key) {
+            <ng-container
+              [ngTemplateOutlet]="nodeTemplate"
+              [ngTemplateOutletContext]="{$implicit: node, surfaceId: tree.surfaceId, depth: 0}"
+            ></ng-container>
+          }
+        </div>
       }
     </section>
   }
