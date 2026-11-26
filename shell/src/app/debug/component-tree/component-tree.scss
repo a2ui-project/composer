@@ -1,0 +1,127 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+}
+
+.component-tree-container {
+  padding: 4px 0;
+  font-family: Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 13px;
+  color: var(--mat-sys-on-surface);
+}
+
+code {
+  font-family: 'Roboto Mono', monospace;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.tree-message {
+  padding: 8px 12px;
+  color: var(--mat-sys-on-surface-variant);
+
+  &.error {
+    color: var(--mat-sys-error);
+  }
+}
+
+.surface + .surface {
+  margin-top: 8px;
+}
+
+.surface-header,
+.unreachable-header {
+  padding: 4px 12px;
+  font-weight: 500;
+}
+
+.unreachable-header {
+  margin-top: 8px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding-right: 12px;
+  cursor: default;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--mat-sys-surface-container-high);
+  }
+
+  &.missing .type,
+  &.cycle .type {
+    color: var(--mat-sys-error);
+  }
+}
+
+.toggle,
+.toggle-spacer {
+  flex: none;
+  width: 16px;
+}
+
+.toggle {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  line-height: 16px;
+}
+
+.via {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.type {
+  font-weight: 500;
+}
+
+.id {
+  color: var(--mat-sys-on-surface-variant);
+  font-family: 'Roboto Mono', monospace;
+}
+
+.badge {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  font-size: 11px;
+  line-height: 16px;
+
+  &.error {
+    background: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+  }
+
+  &.warn {
+    background: var(--mat-sys-tertiary-container);
+    color: var(--mat-sys-on-tertiary-container);
+  }
+}
