@@ -19,7 +19,7 @@ import {NgTemplateOutlet} from '@angular/common';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {tryParseJsonArray} from '../../utils/json';
+import {JsonParseResult, tryParseJsonArray} from '../../utils/json';
 import {
   ComponentTreeNode,
   SurfaceComponentTree,
@@ -42,7 +42,10 @@ import {
 export class ComponentTree {
   private readonly stateSync = inject(StateSync);
   private readonly catalogManagement = inject(CatalogManagement);
-  private readonly parsedDraft = computed(() => tryParseJsonArray(this.stateSync.activeDraft()));
+  private readonly parsedDraft = computed<JsonParseResult<unknown[]>>(() => {
+    const draft = this.stateSync.activeDraft();
+    return draft.trim() ? tryParseJsonArray(draft) : {success: true, data: []};
+  });
 
   /** Keys of collapsed nodes (nodes are expanded by default). */
   protected readonly collapsed = signal<ReadonlySet<string>>(new Set());

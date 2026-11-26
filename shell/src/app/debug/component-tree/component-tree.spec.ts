@@ -130,6 +130,21 @@ describe('ComponentTree', () => {
     expect(await harness.getRowIds()).toEqual([]);
   });
 
+  it.each([
+    {label: 'empty', draft: ''},
+    {label: 'whitespace-only', draft: '   \n\t  '},
+  ])(
+    'renders an empty-state message without a parse error when the draft is $label',
+    async ({draft}) => {
+      activeDraft.set(draft);
+      fixture.detectChanges();
+
+      expect(await harness.getErrorMessage()).toBeNull();
+      expect(await harness.getMessages()).toEqual(['No surfaces.']);
+      expect(await harness.getRowIds()).toEqual([]);
+    },
+  );
+
   it('renders a missing-root message and unreachable section when root is absent', async () => {
     activeCatalog.set(PRIMARY_CATALOG);
     activeDraft.set(
